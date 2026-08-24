@@ -1,0 +1,151 @@
+/**app.wxss**/
+page {
+  --cdms-primary: #0c9b6c;
+  --cdms-primary-soft: #e5f6ee;
+  --cdms-surface: #ffffff;
+  --cdms-text: #20352e;
+  --cdms-muted: #8a9a93;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+} 
+
+button {
+  background: initial;
+}
+
+button:focus{
+  outline: 0;
+}
+
+button::after{
+  border: none;
+}
+
+
+page {
+  background: #f6f6f6;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* 跨页面基础视觉：设备、搜索、历史等页面不能依赖首页 page.wxss。 */
+.page {
+  min-height: 100vh;
+  padding: 0 28rpx 48rpx;
+  box-sizing: border-box;
+  color: #20352e;
+}
+
+.card {
+  box-sizing: border-box;
+  border: 1rpx solid #e4eeea;
+  border-radius: 28rpx;
+  background: #fff;
+  box-shadow: 0 12rpx 30rpx rgba(33, 75, 59, .06);
+}
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  margin: 28rpx 4rpx 16rpx;
+  color: #29453b;
+  font-size: 29rpx;
+  line-height: 42rpx;
+  font-weight: 720;
+}
+
+.section-caption {
+  margin-left: 12rpx;
+  color: #91a099;
+  font-size: 21rpx;
+  font-weight: 400;
+}
+
+.chevron {
+  flex: none;
+  margin-left: 16rpx;
+  color: #a8b9b1;
+  font-size: 42rpx;
+  font-weight: 200;
+  line-height: 1;
+}
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 260rpx;
+  margin-top: 2rpx;
+  padding: 34rpx;
+  text-align: center;
+}
+
+.empty-title {
+  margin-top: 17rpx;
+  color: #426056;
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.empty-text {
+  margin-top: 7rpx;
+  color: #92a099;
+  font-size: 22rpx;
+  line-height: 1.55;
+}
+
+.primary-button {
+  min-width: 190rpx;
+  height: 70rpx;
+  margin: 22rpx 0 0;
+  padding: 0 30rpx;
+  border-radius: 999rpx;
+  background: #0c9b6c;
+  color: #fff;
+  font-size: 25rpx;
+  line-height: 70rpx;
+  box-shadow: 0 10rpx 22rpx rgba(12, 155, 108, .18);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  min-height: 96rpx;
+  padding: 18rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.cell + .cell {
+  border-top: 1rpx solid #edf0ee;
+}
+
+.cell-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.cell-title {
+  color: #29483d;
+  font-size: 27rpx;
+  font-weight: 650;
+}
+
+.cell-subtitle {
+  margin-top: 6rpx;
+  color: #8a9a93;
+  font-size: 21rpx;
+}
+
+.cell-value {
+  flex: none;
+  margin-left: 18rpx;
+  color: #52685e;
+  font-size: 23rpx;
+}

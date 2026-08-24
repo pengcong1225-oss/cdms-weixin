@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="brand">CDMS 慢阻肺管理</view>
+  <view class="subtitle">手机号 + 密码登录</view>
+  <input class="input" type="number" maxlength="11" placeholder="请输入手机号" value="{{phone}}" bindinput="onPhone" />
+  <input class="input" password placeholder="请输入密码" value="{{password}}" bindinput="onPassword" />
+  <button class="primary" loading="{{loading}}" bindtap="login">登录</button>
+  <view wx:if="{{roleSelectionRequired}}" class="roles">
+    <view class="role-title">请选择进入身份</view>
+    <button wx:for="{{roles}}" wx:key="roleType" data-role="{{item.roleType}}" bindtap="selectRole">{{item.displayName}}（{{item.roleType === 'DOCTOR' ? '医生' : '患者'}}）</button>
+  </view>
+  <view class="hint">首次微信登录仍需完成手机号、密码和实名校验，微信 code 只在服务端兑换。</view>
+</view>

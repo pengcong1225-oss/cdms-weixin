@@ -1,0 +1,10 @@
+<view class="page">
+  <view class="title">{{mode === 'PATIENT' ? '我的手环' : '患者手环同步'}}</view>
+  <view class="hint">{{status}}</view>
+  <button plain bindtap="scan" loading="{{scanning}}">搜索附近设备</button>
+  <view wx:for="{{devices}}" wx:key="deviceId" class="device" bindtap="selectDevice" data-id="{{item.deviceId}}">
+    <text>{{item.name || 'RWFit 设备'}}</text><text class="rssi">{{item.RSSI || ''}}</text>
+  </view>
+  <button type="primary" loading="{{syncing}}" bindtap="startSync">开始同步</button>
+  <button plain bindtap="retry" wx:if="{{queued}}">重试待上传数据（{{queued}}）</button>
+</view>

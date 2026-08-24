@@ -1,0 +1,89 @@
+const queueKey = 'cdms.iot.wearable.upload.queue'
+
+function queueStorageKey (scope) {
+  const safeScope = String(scope || 'anonymous').replace(/[^A-Za-z0-9_.-]/g, '_')
+  return `${queueKey}.${safeScope}`
+}
+
+function currentScope () {
+  try {
+    const app = typeof getApp === 'function' ? getApp() : null
+    return app?.globalData?.patientRef || app?.globalData?.mode || 'anonymous'
+  } catch (_) { return 'anonymous' }
+}
+
+function readQueue (scope = currentScope()) { return wx.getStorageSync(queueStorageKey(scope)) || [] }
+function writeQueue (queue, scope = currentScope()) { wx.setStorageSync(queueStorageKey(scope), queue.slice(-1000)) }
+
+function request (url, method, data, token) {
+  return new Promise((resolve, reject) => {
+    const header = token ? { Authorization: `Bearer ${token}` } : {}
+    wx.request({ url, method, data, header,
+      success: res => res.statusCode >= 200 && res.statusCode < 300 ? resolve(res.data) : reject(new Error(`HTTP ${res.statusCode}`)),
+      fail: reject })
+  })
+}
+
+function cdmsBaseUrl () {
+  try { return getApp()?.globalData?.cdmsBaseUrl || '' } catch (_) { return '' }
+}
+
+function cdmsRequest (path, method, data, token) {
+  const baseUrl = cdmsBaseUrl()
+  if (!baseUrl) return Promise.reject(new Error('未配置 CDMS 服务地址'))
+  return request(`${baseUrl}${path}`, method, data, token)
+}
+
+async function login (phone, password, wxCode) {
+  return cdmsRequest('/api/v1/miniapp/auth/login', 'POST', { phone, password, wxCode }, '')
+}
+
+async function logout () {
+  const app = getApp()
+  if (!app?.globalData?.accessToken) return null
+  return cdmsRequest('/api/v1/miniapp/auth/logout', 'POST', {}, app.globalData.accessToken)
+}
+
+async function switchRole (roleType) {
+  const app = getApp()
+  return cdmsRequest('/api/v1/miniapp/auth/switch-role', 'POST', { roleType }, app.globalData.accessToken)
+}
+
+async function createHandoff (targetPath) {
+  const app = getApp()
+  return cdmsRequest('/api/v1/miniapp/auth/handoff', 'POST', { targetPath }, app.globalData.accessToken)
+}
+
+async function redeemHandoff (code) {
+  return cdmsRequest('/api/v1/miniapp/auth/handoff/redeem', 'POST', { code }, '')
+}
+
+async function createPatientWearableSession (deviceRef, sessionId) {
+  const app = getApp()
+  return cdmsRequest('/api/v1/miniapp/iot/wearable-session', 'POST', { deviceRef, sessionId }, app.globalData.accessToken)
+}
+
+async function flushQueue ({ baseUrl, token, scope }) {
+  const queueScope = scope || currentScope()
+  const queue = readQueue(queueScope)
+  if (!queue.length) return { accepted: 0, duplicates: 0, rejected: 0 }
+  const batch = queue[0]
+  const result = await request(`${baseUrl}/v1/wearable-upload-batches`, 'POST', batch, token)
+  writeQueue(queue.slice(1), queueScope)
+  return result
+}
+
+async function exchangeHandoff ({ managerBaseUrl, handoffCode, deviceRef }) {
+  if (!managerBaseUrl || !handoffCode || !deviceRef) throw new Error('缺少小程序安全启动上下文')
+  const result = await request(`${managerBaseUrl}/iot/wearable-handoffs/${encodeURIComponent(handoffCode)}/exchange`, 'POST', { deviceRef }, '')
+  return result?.data || result
+}
+
+function enqueue (batch) {
+  const scope = batch?.patientRef || currentScope()
+  const queue = readQueue(scope)
+  queue.push(batch)
+  writeQueue(queue, scope)
+}
+
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession }

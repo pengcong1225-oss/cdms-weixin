@@ -1,0 +1,9 @@
+.page { min-height: 100vh; padding: 120rpx 56rpx; box-sizing: border-box; background: #f4f7f5; }
+.brand { color: #0c9b6c; font-size: 48rpx; font-weight: 700; margin-bottom: 18rpx; }
+.subtitle { color: #66736d; font-size: 28rpx; margin-bottom: 72rpx; }
+.input { height: 96rpx; background: #fff; border-radius: 18rpx; padding: 0 28rpx; margin-bottom: 24rpx; box-sizing: border-box; }
+.primary { color: #fff; background: #0c9b6c; border-radius: 18rpx; margin-top: 20rpx; }
+.roles { margin-top: 48rpx; background: #fff; border-radius: 18rpx; padding: 24rpx; }
+.role-title { color: #27332d; font-size: 30rpx; margin-bottom: 18rpx; }
+.roles button { margin: 14rpx 0; }
+.hint { color: #8a948f; font-size: 23rpx; margin-top: 48rpx; line-height: 1.6; }
