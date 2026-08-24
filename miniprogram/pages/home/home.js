@@ -174,7 +174,7 @@ Page({
       wx.reLaunch({ url: '/pages/auth/login' })
       return
     }
-    const targetPath = app.globalData.activeRole === 'DOCTOR' ? '/' : '/history'
+    const targetPath = app.globalData.activeRole === 'DOCTOR' ? '/h5/patients' : '/h5/followups'
     try {
       const response = await api.createHandoff(targetPath)
       const handoff = response?.data || response
@@ -214,7 +214,7 @@ Page({
     }
     this.workspaceOpening = true
     try {
-      const response = await api.createHandoff('/')
+      const response = await api.createHandoff('/h5/patients')
       const handoff = response?.data || response
       if (!handoff?.handoffUrl) throw new Error('未取得医生工作台地址')
       wx.redirectTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
