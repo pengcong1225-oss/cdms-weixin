@@ -12,14 +12,30 @@ function currentScope () {
   } catch (_) { return 'anonymous' }
 }
 
-function readQueue (scope = currentScope()) { return wx.getStorageSync(queueStorageKey(scope)) || [] }
+function readQueue (scope = currentScope()) {
+  const queue = wx.getStorageSync(queueStorageKey(scope)) || []
+  if (queue.length <= 1) return queue
+  const latest = queue.slice(-1)
+  writeQueue(latest, scope)
+  return latest
+}
 function writeQueue (queue, scope = currentScope()) { wx.setStorageSync(queueStorageKey(scope), queue.slice(-1000)) }
 
 function request (url, method, data, token) {
   return new Promise((resolve, reject) => {
     const header = token ? { Authorization: `Bearer ${token}` } : {}
     wx.request({ url, method, data, header,
-      success: res => res.statusCode >= 200 && res.statusCode < 300 ? resolve(res.data) : reject(new Error(`HTTP ${res.statusCode}`)),
+      success: res => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data)
+          return
+        }
+        const error = new Error(`HTTP ${res.statusCode}`)
+        error.statusCode = res.statusCode
+        error.response = res.data
+        if (res.data?.code) error.code = res.data.code
+        reject(error)
+      },
       fail: reject })
   })
 }
@@ -81,9 +97,7 @@ async function exchangeHandoff ({ managerBaseUrl, handoffCode, deviceRef }) {
 
 function enqueue (batch) {
   const scope = batch?.patientRef || currentScope()
-  const queue = readQueue(scope)
-  queue.push(batch)
-  writeQueue(queue, scope)
+  writeQueue([batch], scope)
 }
 
 module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession }

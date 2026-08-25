@@ -38,6 +38,42 @@ function updateContext (values) {
   return context
 }
 
+function clearWearableSession () {
+  const context = appContext()
+  context.wearableToken = ''
+  context.wearableSessionId = ''
+  context.wearableDeviceRef = ''
+  try {
+    wx.removeStorageSync('cdms.miniapp.wearable')
+  } catch (_) {
+    // Storage may be unavailable in unit tests; the in-memory context is already cleared.
+  }
+  return context
+}
+
+function canRenewPatientSession (context) {
+  return context.activeRole === 'PATIENT' &&
+    !!context.cdmsBaseUrl &&
+    !!context.accessToken &&
+    !!context.patientRef
+}
+
+async function renewPatientSession (deviceRef, sessionId) {
+  const context = appContext()
+  if (!canRenewPatientSession(context)) throw new Error('患者登录状态不完整，无法续期 IoT 会话')
+  clearWearableSession()
+  const response = await api.createPatientWearableSession(deviceRef, sessionId)
+  const session = response?.data || response
+  return updateContext({
+    iotBaseUrl: session.iotBaseUrl || context.iotBaseUrl,
+    wearableToken: session.uploadToken || session.token,
+    wearableSessionId: session.sessionId || sessionId,
+    patientRef: session.patientRef || context.patientRef,
+    deviceRef,
+    wearableDeviceRef: deviceRef
+  })
+}
+
 async function ensureIoTSession (deviceRef) {
   const context = appContext()
   const strategy = getSessionStrategy(context)
@@ -79,7 +115,17 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records }) {
     records
   })
   api.enqueue(batch)
-  return api.flushQueue({ baseUrl: context.iotBaseUrl, token: context.wearableToken, scope: context.patientRef })
+  try {
+    return await api.flushQueue({ baseUrl: context.iotBaseUrl, token: context.wearableToken, scope: context.patientRef })
+  } catch (error) {
+    if (error?.statusCode !== 401 || !canRenewPatientSession(context)) throw error
+    const renewed = await renewPatientSession(deviceRef, context.wearableSessionId)
+    api.enqueue(Object.assign({}, batch, {
+      sessionId: renewed.wearableSessionId,
+      patientRef: renewed.patientRef
+    }))
+    return api.flushQueue({ baseUrl: renewed.iotBaseUrl, token: renewed.wearableToken, scope: renewed.patientRef })
+  }
 }
 
 module.exports = { createUploadBatch, ensureIoTSession, enqueueAndFlush, updateContext }
