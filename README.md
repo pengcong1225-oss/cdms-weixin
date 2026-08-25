@@ -2,6 +2,8 @@
 
 本项目保留微信云开发的 `cloudfunctions/` 和环境配置，同时将 CDMS/RWFit 小程序代码放在 `miniprogram/`。患者端基于 RWFit 官方 Demo，负责手环扫描、绑定、历史同步和数据上传；医生端通过 `pages/wearable/sync/index` 负责一次性实时检测。
 
+发布边界：`D:\weixinProject\cdms-weixin` 是完整业务小程序的唯一发布工程；`cdms-iot/miniapp` 仅作为 IoT 登录与采集桥接参考，不单独发布，也不覆盖本项目的页面路由。
+
 ## 云开发环境
 
 - `project.config.json` 的 `miniprogramRoot` 为 `miniprogram/`，`cloudfunctionRoot` 为 `cloudfunctions/`。
@@ -12,7 +14,7 @@
 
 ## 运行链路
 
-1. 小程序使用 `cdmsBaseUrl` 调用 `cdms` 的手机号+密码登录；首次登录同时兑换微信 code，服务端返回患者/医生角色并支持个人中心切换。
+1. 小程序使用 `cdmsBaseUrl` 调用 `cdms` 的微信授权登录接口；用户填写已建档手机号，服务端兑换微信 code 后返回患者/医生角色并支持个人中心切换。小程序不保存或提交账户密码。
 2. 进入 H5 患者列表、患者360或随访前，由 `cdms` 生成一次性 handoff code；小程序只打开受控 H5 路由，不在 URL 中放 JWT。
 3. 小程序首页的“CDMS 业务工作台”通过 `cdms` 生成一次性 H5 handoff 地址，患者进入随访，医生进入患者列表；H5 只负责业务展示，不接触蓝牙。
 4. Manager/统一认证层仍可将 `iotBaseUrl`、`patientRef`、`mode` 等上下文传给小程序；设备会话必须由服务端签发。

@@ -2,21 +2,19 @@ const api = require('../../utils/api')
 const { getRoleEntry } = require('../../utils/role-entry')
 
 Page({
-  data: { phone: '', password: '', loading: false, roleSelectionRequired: false, roles: [] },
+  data: { phone: '', loading: false, roleSelectionRequired: false, roles: [] },
   onLoad (query) {
     const app = getApp()
     if (query?.cdmsBaseUrl) app.globalData.cdmsBaseUrl = query.cdmsBaseUrl
   },
   onPhone (e) { this.setData({ phone: e.detail.value }) },
-  onPassword (e) { this.setData({ password: e.detail.value }) },
   async login () {
-    if (!/^1\d{10}$/.test(this.data.phone) || !this.data.password) {
-      wx.showToast({ title: '请输入手机号和密码', icon: 'none' }); return
+    if (!/^1\d{10}$/.test(this.data.phone)) {
+      wx.showToast({ title: '请输入已建档的 11 位手机号', icon: 'none' }); return
     }
     this.setData({ loading: true })
     try {
-      const wxCode = await new Promise((resolve, reject) => wx.login({ success: r => resolve(r.code), fail: reject }))
-      const response = await api.login(this.data.phone, this.data.password, wxCode)
+      const response = await api.loginWithWechat({ phone: this.data.phone })
       const session = response?.data || response
       const app = getApp()
       app.saveAuth(session)

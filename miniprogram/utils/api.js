@@ -54,6 +54,29 @@ async function login (phone, password, wxCode) {
   return cdmsRequest('/api/v1/miniapp/auth/login', 'POST', { phone, password, wxCode }, '')
 }
 
+function loginWithWechat ({ baseUrl, phone }) {
+  return new Promise((resolve, reject) => {
+    const targetBaseUrl = baseUrl || cdmsBaseUrl()
+    if (!targetBaseUrl || !/^1\d{10}$/.test(String(phone || ''))) {
+      reject(new Error('请输入已建档的 11 位手机号'))
+      return
+    }
+    wx.login({
+      success: loginResult => {
+        if (!loginResult?.code) {
+          reject(new Error('微信授权凭证获取失败'))
+          return
+        }
+        request(`${targetBaseUrl}/api/v1/miniapp/auth/login`, 'POST', {
+          phone: String(phone).trim(),
+          wxCode: loginResult.code
+        }, '').then(resolve).catch(reject)
+      },
+      fail: reject
+    })
+  })
+}
+
 async function logout () {
   const app = getApp()
   if (!app?.globalData?.accessToken) return null
@@ -106,4 +129,4 @@ function enqueue (batch) {
   writeQueue([batch], scope)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession }
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession }
