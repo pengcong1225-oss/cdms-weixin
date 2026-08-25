@@ -79,6 +79,12 @@ async function createPatientWearableSession (deviceRef, sessionId) {
   return cdmsRequest('/api/v1/miniapp/iot/wearable-session', 'POST', { deviceRef, sessionId }, app.globalData.accessToken)
 }
 
+async function releasePatientWearableSession (deviceRef) {
+  const app = getApp()
+  const encodedDeviceRef = encodeURIComponent(String(deviceRef || ''))
+  return cdmsRequest(`/api/v1/miniapp/iot/wearable-session?deviceRef=${encodedDeviceRef}`, 'DELETE', null, app.globalData.accessToken)
+}
+
 async function flushQueue ({ baseUrl, token, scope }) {
   const queueScope = scope || currentScope()
   const queue = readQueue(queueScope)
@@ -100,4 +106,4 @@ function enqueue (batch) {
   writeQueue([batch], scope)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession }
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession }

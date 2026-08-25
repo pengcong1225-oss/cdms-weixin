@@ -410,6 +410,12 @@ class BleManager {
   async unbind() {
     const previous = this.state.boundDevice;
     await this.disconnect();
+    try {
+      await cdmsBridge.releaseWearableSession(previous && previous.deviceId);
+    } catch (error) {
+      // 本地解绑必须完成；服务端释放失败会被记录，后续重新绑定时由会话校验再次修复。
+      this.log(`服务端设备解绑未完成：${error && error.message ? error.message : "请求失败"}`);
+    }
     storage.clearBoundDevice();
     if (previous) storage.clearDeviceHealthRecords(previous.deviceId);
     this.activeDeviceId = "";

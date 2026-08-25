@@ -43,6 +43,7 @@ function clearWearableSession () {
   context.wearableToken = ''
   context.wearableSessionId = ''
   context.wearableDeviceRef = ''
+  context.deviceRef = ''
   try {
     wx.removeStorageSync('cdms.miniapp.wearable')
   } catch (_) {
@@ -76,9 +77,15 @@ async function renewPatientSession (deviceRef, sessionId) {
 
 async function ensureIoTSession (deviceRef) {
   const context = appContext()
-  const strategy = getSessionStrategy(context)
+  let strategy = getSessionStrategy(context)
   if (strategy === 'EXISTING') {
-    return updateContext({ deviceRef, wearableDeviceRef: deviceRef })
+    const cachedDeviceRef = context.wearableDeviceRef || context.deviceRef || ''
+    if (cachedDeviceRef && cachedDeviceRef !== deviceRef) {
+      clearWearableSession()
+      strategy = getSessionStrategy(context)
+    } else {
+      return updateContext({ deviceRef, wearableDeviceRef: deviceRef })
+    }
   }
   let session
   if (strategy === 'CDMS_PATIENT') {
@@ -100,6 +107,17 @@ async function ensureIoTSession (deviceRef) {
     deviceRef,
     wearableDeviceRef: deviceRef
   })
+}
+
+async function releaseWearableSession (deviceRef) {
+  const context = appContext()
+  try {
+    if (deviceRef && canRenewPatientSession(context)) {
+      await api.releasePatientWearableSession(deviceRef)
+    }
+  } finally {
+    clearWearableSession()
+  }
 }
 
 async function enqueueAndFlush ({ deviceRef, recordsByType, records }) {
@@ -128,4 +146,4 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records }) {
   }
 }
 
-module.exports = { createUploadBatch, ensureIoTSession, enqueueAndFlush, updateContext }
+module.exports = { createUploadBatch, ensureIoTSession, enqueueAndFlush, updateContext, clearWearableSession, releaseWearableSession }
