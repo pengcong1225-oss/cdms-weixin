@@ -1,11 +1,32 @@
 <view class="page">
-  <view class="brand">CDMS 慢阻肺管理</view>
-  <view class="subtitle">微信授权登录</view>
-  <input class="input" type="number" maxlength="11" placeholder="请输入已建档手机号" value="{{phone}}" bindinput="onPhone" />
-  <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">微信授权登录</button>
+  <view class="brand-block">
+    <view class="brand-mark">CDMS</view>
+    <view class="brand">慢阻肺管理平台</view>
+    <view class="subtitle">医生工作台与患者服务</view>
+  </view>
+  <view class="login-card">
+    <view class="mode-tabs">
+      <view class="mode-tab {{mode === 'doctor' ? 'active' : ''}}" data-mode="doctor" bindtap="selectMode">医生登录</view>
+      <view class="mode-tab {{mode === 'patient' ? 'active' : ''}}" data-mode="patient" bindtap="selectMode">患者登录</view>
+    </view>
+    <block wx:if="{{mode === 'doctor'}}">
+      <view class="field-label">CDMS 账号</view>
+      <input class="input" type="text" maxlength="64" placeholder="请输入医生账号" value="{{username}}" bindinput="onUsername" />
+      <view class="field-label">密码</view>
+      <input class="input" type="password" maxlength="64" placeholder="请输入密码" value="{{password}}" bindinput="onPassword" />
+      <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">进入医生工作台</button>
+      <view class="form-hint">使用现有 CDMS 账号密码登录，登录后进入医生随访工作台。</view>
+    </block>
+    <block wx:else>
+      <view class="field-label">患者手机号</view>
+      <input class="input" type="number" maxlength="11" placeholder="请输入已建档手机号" value="{{phone}}" bindinput="onPhone" />
+      <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">微信授权登录</button>
+      <view class="form-hint">手机号用于匹配患者档案，微信授权凭证只在服务端兑换。</view>
+    </block>
+  </view>
   <view wx:if="{{roleSelectionRequired}}" class="roles">
     <view class="role-title">请选择进入身份</view>
     <button wx:for="{{roles}}" wx:key="roleType" data-role="{{item.roleType}}" bindtap="selectRole">{{item.displayName}}（{{item.roleType === 'DOCTOR' ? '医生' : '患者'}}）</button>
   </view>
-  <view class="hint">微信登录不会保存密码。手机号用于匹配 CDMS 中的患者档案，微信授权凭证只在服务端兑换。</view>
+  <view class="hint">登录遇到问题，请联系所属机构管理员。</view>
 </view>

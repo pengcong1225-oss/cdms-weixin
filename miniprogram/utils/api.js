@@ -54,6 +54,18 @@ async function login (phone, password, wxCode) {
   return cdmsRequest('/api/v1/miniapp/auth/login', 'POST', { phone, password, wxCode }, '')
 }
 
+function loginDoctor ({ baseUrl, username, password }) {
+  const targetBaseUrl = baseUrl || cdmsBaseUrl()
+  const account = String(username || '').trim()
+  if (!targetBaseUrl || !account || !String(password || '')) {
+    return Promise.reject(new Error('请输入医生账号和密码'))
+  }
+  return request(`${targetBaseUrl}/api/v1/miniapp/auth/doctor-login`, 'POST', {
+    username: account,
+    password: String(password)
+  }, '')
+}
+
 function loginWithWechat ({ baseUrl, phone }) {
   return new Promise((resolve, reject) => {
     const targetBaseUrl = baseUrl || cdmsBaseUrl()
@@ -108,6 +120,21 @@ async function releasePatientWearableSession (deviceRef) {
   return cdmsRequest(`/api/v1/miniapp/iot/wearable-session?deviceRef=${encodedDeviceRef}`, 'DELETE', null, app.globalData.accessToken)
 }
 
+async function listDoctorPatients ({ page = 1, pageSize = 100 } = {}) {
+  const app = getApp()
+  return cdmsRequest(`/api/v1/patients?page=${page}&pageSize=${pageSize}`, 'GET', null, app.globalData.accessToken)
+}
+
+async function getDoctorPatient (patientId) {
+  const app = getApp()
+  return cdmsRequest(`/api/v1/patients/${encodeURIComponent(String(patientId))}`, 'GET', null, app.globalData.accessToken)
+}
+
+async function submitScaleMeasurement (payload) {
+  const app = getApp()
+  return cdmsRequest('/api/v1/miniapp/iot/scale/measurements', 'POST', payload, app.globalData.accessToken)
+}
+
 async function flushQueue ({ baseUrl, token, scope }) {
   const queueScope = scope || currentScope()
   const queue = readQueue(queueScope)
@@ -129,4 +156,4 @@ function enqueue (batch) {
   writeQueue([batch], scope)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession }
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement }

@@ -2,19 +2,27 @@ const api = require('../../utils/api')
 const { getRoleEntry } = require('../../utils/role-entry')
 
 Page({
-  data: { phone: '', loading: false, roleSelectionRequired: false, roles: [] },
+  data: { mode: 'doctor', username: '', password: '', phone: '', loading: false, roleSelectionRequired: false, roles: [] },
   onLoad (query) {
     const app = getApp()
     if (query?.cdmsBaseUrl) app.globalData.cdmsBaseUrl = query.cdmsBaseUrl
   },
+  selectMode (event) { this.setData({ mode: event.currentTarget.dataset.mode, roleSelectionRequired: false, roles: [] }) },
+  onUsername (e) { this.setData({ username: e.detail.value }) },
+  onPassword (e) { this.setData({ password: e.detail.value }) },
   onPhone (e) { this.setData({ phone: e.detail.value }) },
   async login () {
-    if (!/^1\d{10}$/.test(this.data.phone)) {
+    if (this.data.mode === 'doctor' && (!this.data.username.trim() || !this.data.password)) {
+      wx.showToast({ title: '请输入医生账号和密码', icon: 'none' }); return
+    }
+    if (this.data.mode === 'patient' && !/^1\d{10}$/.test(this.data.phone)) {
       wx.showToast({ title: '请输入已建档的 11 位手机号', icon: 'none' }); return
     }
     this.setData({ loading: true })
     try {
-      const response = await api.loginWithWechat({ phone: this.data.phone })
+      const response = this.data.mode === 'doctor'
+        ? await api.loginDoctor({ username: this.data.username, password: this.data.password })
+        : await api.loginWithWechat({ phone: this.data.phone })
       const session = response?.data || response
       const app = getApp()
       app.saveAuth(session)
