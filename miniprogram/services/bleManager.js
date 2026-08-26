@@ -417,7 +417,6 @@ class BleManager {
       this.log(`服务端设备解绑未完成：${error && error.message ? error.message : "请求失败"}`);
     }
     storage.clearBoundDevice();
-    if (previous) storage.clearDeviceHealthRecords(previous.deviceId);
     this.activeDeviceId = "";
     this.patch({
       boundDevice: null,

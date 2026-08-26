@@ -2,6 +2,30 @@ const BOUND_DEVICE_KEY = "rwsdk.boundDevice.v1";
 const HEALTH_RECORDS_KEY = "rwsdk.healthRecords.v1";
 const DEVICE_ADDRESS_MAP_KEY = "rwsdk.deviceAddressMap.v1";
 
+function getCurrentPatientRef() {
+  try {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return String(app && app.globalData && app.globalData.patientRef || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
+function getHealthScopeKey(deviceId) {
+  const patientRef = getCurrentPatientRef();
+  return patientRef ? `${patientRef}::${deviceId}` : deviceId;
+}
+
+function getDeviceHealthRecords(all, deviceId) {
+  const scopeKey = getHealthScopeKey(deviceId);
+  if (scopeKey !== deviceId && !all[scopeKey] && all[deviceId]) {
+    all[scopeKey] = all[deviceId];
+    delete all[deviceId];
+    wx.setStorageSync(HEALTH_RECORDS_KEY, all);
+  }
+  return { scopeKey, records: all[scopeKey] || {} };
+}
+
 function getBoundDevice() {
   return wx.getStorageSync(BOUND_DEVICE_KEY) || null;
 }
@@ -30,7 +54,7 @@ function saveDeviceAddress(deviceId, macAddress) {
 
 function getHealthRecords(deviceId, type) {
   const all = wx.getStorageSync(HEALTH_RECORDS_KEY) || {};
-  const deviceRecords = all[deviceId] || {};
+  const deviceRecords = getDeviceHealthRecords(all, deviceId).records;
   return (deviceRecords[type] || []).slice();
 }
 
@@ -41,7 +65,8 @@ function getLastHealthRecord(deviceId, type) {
 
 function saveHealthRecord(deviceId, type, record) {
   const all = wx.getStorageSync(HEALTH_RECORDS_KEY) || {};
-  const deviceRecords = all[deviceId] || {};
+  const scoped = getDeviceHealthRecords(all, deviceId);
+  const deviceRecords = scoped.records;
   const records = deviceRecords[type] || [];
   const normalized = Object.assign(
     {
@@ -53,14 +78,15 @@ function saveHealthRecord(deviceId, type, record) {
     record,
   );
   deviceRecords[type] = [normalized, ...records].slice(0, 500);
-  all[deviceId] = deviceRecords;
+  all[scoped.scopeKey] = deviceRecords;
   wx.setStorageSync(HEALTH_RECORDS_KEY, all);
   return normalized;
 }
 
 function saveHealthRecords(deviceId, type, incomingRecords) {
   const all = wx.getStorageSync(HEALTH_RECORDS_KEY) || {};
-  const deviceRecords = all[deviceId] || {};
+  const scoped = getDeviceHealthRecords(all, deviceId);
+  const deviceRecords = scoped.records;
   const recordsById = new Map();
   (deviceRecords[type] || []).forEach((record) => {
     recordsById.set(record.id || `${type}-${record.measuredAt}`, record);
@@ -81,14 +107,14 @@ function saveHealthRecords(deviceId, type, incomingRecords) {
     .sort((first, second) => second.measuredAt - first.measuredAt)
     .slice(0, 1000);
   deviceRecords[type] = merged;
-  all[deviceId] = deviceRecords;
+  all[scoped.scopeKey] = deviceRecords;
   wx.setStorageSync(HEALTH_RECORDS_KEY, all);
   return merged;
 }
 
 function clearDeviceHealthRecords(deviceId) {
   const all = wx.getStorageSync(HEALTH_RECORDS_KEY) || {};
-  delete all[deviceId];
+  delete all[getHealthScopeKey(deviceId)];
   wx.setStorageSync(HEALTH_RECORDS_KEY, all);
 }
 
