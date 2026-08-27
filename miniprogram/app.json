@@ -4,7 +4,6 @@
     "pages/h5/index",
     "pages/home/home",
     "pages/device/device",
-    "pages/device-scale/index",
     "pages/search/search",
     "pages/history/history",
     "pages/workout/workout",

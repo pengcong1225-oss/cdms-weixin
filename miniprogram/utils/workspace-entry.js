@@ -1,8 +1,7 @@
 function getWorkspaceEntries (activeRole) {
   if (activeRole === 'DOCTOR') {
     return [
-      { key: 'patients', title: '患者工作台', subtitle: '进入医生 H5 患者列表', type: 'H5', targetPath: '/h5/patients' },
-      { key: 'device', title: '设备中心', subtitle: '在小程序中查看设备与同步状态', type: 'NATIVE', url: '/pages/device/device' }
+      { key: 'patients', title: '患者工作台', subtitle: '进入医生 H5 患者列表', type: 'H5', targetPath: '/h5/patients' }
     ]
   }
   if (activeRole === 'PATIENT') {
