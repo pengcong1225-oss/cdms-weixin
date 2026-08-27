@@ -175,7 +175,7 @@ Page({
   unbind() {
     wx.showModal({
       title: "解除绑定",
-      content: "解除后将同时清除该设备保存在 Demo 中的健康记录。",
+      content: "解除绑定只会断开当前设备，不会删除该患者已有的健康记录。之后可重新搜索并绑定设备。",
       confirmText: "解除",
       confirmColor: "#d84b4b",
       success: async (result) => {

@@ -57,12 +57,38 @@ App({
     const auth = wx.getStorageSync('cdms.miniapp.auth') || {}
     Object.assign(this.globalData, auth)
     const wearable = wx.getStorageSync('cdms.miniapp.wearable') || {}
-    Object.assign(this.globalData, wearable)
+    const authPatientRef = String(auth.patientRef || '').trim()
+    const wearablePatientRef = String(wearable.patientRef || '').trim()
+    const hasAuth = !!String(auth.accessToken || '').trim()
+    const samePatient = authPatientRef && wearablePatientRef && authPatientRef === wearablePatientRef
+    const wearableUsable = !hasAuth || (auth.activeRole === 'PATIENT' && samePatient)
+    if (wearableUsable) {
+      Object.assign(this.globalData, wearable)
+      if (authPatientRef) this.globalData.patientRef = authPatientRef
+    } else {
+      // 会话只允许在同一患者范围内复用，避免旧账号的 IoT token 污染当前患者。
+      wx.removeStorageSync('cdms.miniapp.wearable')
+      this.globalData.wearableToken = ''
+      this.globalData.wearableSessionId = ''
+      this.globalData.wearableDeviceRef = ''
+      if (authPatientRef) this.globalData.patientRef = authPatientRef
+    }
   },
 
   saveAuth (session) {
     const activeRole = session.activeRole || ''
     const selectedRole = (session.roles || []).find(role => role.roleType === activeRole)
+    const nextPatientRef = activeRole === 'PATIENT'
+      ? String(selectedRole?.patientId || selectedRole?.principalId || '')
+      : ''
+    const identityChanged = this.globalData.identityId
+      && (String(this.globalData.identityId) !== String(session.identityId || '')
+        || this.globalData.activeRole !== activeRole
+        || String(this.globalData.patientRef || '') !== nextPatientRef)
+    if (identityChanged) {
+      // 角色或患者切换时释放旧的设备会话，避免新患者复用旧患者的 IoT token。
+      bleManager.unbind().catch(error => console.warn('[CDMS BLE] identity switch cleanup failed', error))
+    }
     const auth = {
       cdmsBaseUrl: this.globalData.cdmsBaseUrl,
       accessToken: session.token || '',
@@ -70,9 +96,7 @@ App({
       identityId: session.identityId || '',
       activeRole,
       roles: session.roles || [],
-      patientRef: activeRole === 'PATIENT'
-        ? String(selectedRole?.patientId || selectedRole?.principalId || '')
-        : ''
+      patientRef: nextPatientRef
     }
     Object.assign(this.globalData, auth)
     wx.setStorageSync('cdms.miniapp.auth', auth)

@@ -1,4 +1,5 @@
 const queueKey = 'cdms.iot.wearable.upload.queue'
+let refreshPromise = null
 
 function queueStorageKey (scope) {
   const safeScope = String(scope || 'anonymous').replace(/[^A-Za-z0-9_.-]/g, '_')
@@ -26,7 +27,7 @@ function request (url, method, data, token) {
     const header = token ? { Authorization: `Bearer ${token}` } : {}
     wx.request({ url, method, data, header,
       success: res => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (res.statusCode >= 200 && res.statusCode < 300 && res.data?.code !== 401) {
           resolve(res.data)
           return
         }
@@ -45,9 +46,45 @@ function cdmsBaseUrl () {
 }
 
 function cdmsRequest (path, method, data, token) {
+  return cdmsRequestWithRetry(path, method, data, token, true)
+}
+
+async function cdmsRequestWithRetry (path, method, data, token, allowRefresh) {
   const baseUrl = cdmsBaseUrl()
   if (!baseUrl) return Promise.reject(new Error('未配置 CDMS 服务地址'))
-  return request(`${baseUrl}${path}`, method, data, token)
+  try {
+    return await request(`${baseUrl}${path}`, method, data, token)
+  } catch (error) {
+    const app = getApp()
+    const isAuthEndpoint = path.includes('/auth/login') || path.includes('/auth/refresh')
+      || path.includes('/handoff/redeem')
+    if (!allowRefresh || !token || error?.statusCode !== 401 || isAuthEndpoint
+      || !app?.globalData?.refreshToken) throw error
+    try {
+      const nextToken = await refreshAccessToken()
+      return request(`${baseUrl}${path}`, method, data, nextToken)
+    } catch (refreshError) {
+      if (typeof app.clearAuth === 'function') app.clearAuth()
+      throw refreshError
+    }
+  }
+}
+
+function refreshAccessToken () {
+  const app = getApp()
+  if (!app?.globalData?.refreshToken) return Promise.reject(new Error('Refresh Token 缺失'))
+  if (!refreshPromise) {
+    const baseUrl = cdmsBaseUrl()
+    refreshPromise = request(`${baseUrl}/api/v1/miniapp/auth/refresh`, 'POST', {
+      refreshToken: app.globalData.refreshToken
+    }, '').then(response => {
+      const session = response?.data || response
+      if (!session?.token || !session?.refreshToken) throw new Error('Refresh Token 响应无效')
+      if (typeof app.saveAuth === 'function') app.saveAuth(session)
+      return session.token
+    }).finally(() => { refreshPromise = null })
+  }
+  return refreshPromise
 }
 
 async function login (phone, password, wxCode) {
@@ -156,4 +193,4 @@ function enqueue (batch) {
   writeQueue([batch], scope)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement }
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
