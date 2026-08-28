@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "患者档案",
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "form-section": "/components/form-section/form-section",
+    "status-tag": "/components/status-tag/status-tag",
+    "bottom-action-bar": "/components/bottom-action-bar/bottom-action-bar",
+    "state-panel": "/components/state-panel/state-panel"
+  }
+}

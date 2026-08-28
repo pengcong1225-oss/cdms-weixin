@@ -1,0 +1,43 @@
+page {
+  background: var(--cdms-background);
+}
+
+.patient-360-page {
+  padding-bottom: 72rpx;
+}
+
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.info-row {
+  display: flex;
+  gap: 20rpx;
+  justify-content: space-between;
+  min-height: 72rpx;
+  padding: 16rpx 4rpx;
+  border-bottom: 1rpx solid #edf0ee;
+  box-sizing: border-box;
+}
+
+.info-row text:first-child {
+  flex: none;
+  color: var(--cdms-muted);
+  font-size: 23rpx;
+}
+
+.info-row text:last-child {
+  min-width: 0;
+  color: var(--cdms-text);
+  font-size: 24rpx;
+  text-align: right;
+  word-break: break-word;
+}
+
+.empty-inline {
+  padding: 22rpx 4rpx;
+  color: var(--cdms-caption);
+  font-size: 23rpx;
+}

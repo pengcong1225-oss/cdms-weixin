@@ -9,7 +9,7 @@ Page({
       { key: 'followups', title: '随访', value: '--', caption: '后续原生页面接入', tone: 'neutral' }
     ],
     entries: [
-      { key: 'patients', title: '患者管理', subtitle: '原生患者列表将在下一任务接入', icon: '患', disabled: true },
+      { key: 'patients', title: '患者管理', subtitle: '查看患者列表、新增档案和患者360', icon: '患', disabled: false },
       { key: 'followups', title: '随访工作', subtitle: '继续使用服务端权限，后续迁移原生表单', icon: '访', disabled: true },
       { key: 'devices', title: '设备工作站', subtitle: '体脂秤、MFA-1 和 Sunvou 后续开放', icon: '设', disabled: true }
     ]
@@ -29,7 +29,12 @@ Page({
     } catch (_) {}
   },
 
-  onEntrySelect () {
+  onEntrySelect (event) {
+    const entry = this.data.entries[event.currentTarget.dataset.index]
+    if (entry?.key === 'patients' && !entry.disabled) {
+      wx.navigateTo({ url: '/pages/patient-list/index' })
+      return
+    }
     wx.showToast({ title: '功能准备中', icon: 'none' })
   },
 

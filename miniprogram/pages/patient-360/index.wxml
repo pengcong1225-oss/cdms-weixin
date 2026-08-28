@@ -1,0 +1,26 @@
+<view class="page patient-360-page">
+  <app-header title="患者360" subtitle="展示服务端聚合结果，不在端上重算临床结论" showBack="{{true}}" bindback="backDetail" />
+
+  <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
+
+  <view wx:else class="section-stack">
+    <form-section title="{{sections.basicInfo.title}}">
+      <view wx:for="{{sections.basicInfo.items}}" wx:key="label" class="info-row"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+    </form-section>
+    <form-section title="{{sections.copd.title}}">
+      <view wx:for="{{sections.copd.items}}" wx:key="label" class="info-row"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+    </form-section>
+    <form-section title="{{sections.latestFollowup.title}}">
+      <view wx:if="{{!sections.latestFollowup.items.length}}" class="empty-inline">暂无随访记录</view>
+      <view wx:for="{{sections.latestFollowup.items}}" wx:key="label" class="info-row"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+    </form-section>
+    <form-section title="{{sections.deviceMetrics.title}}">
+      <view wx:if="{{!sections.deviceMetrics.items.length}}" class="empty-inline">暂无设备指标</view>
+      <view wx:for="{{sections.deviceMetrics.items}}" wx:key="label" class="info-row"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+    </form-section>
+    <form-section title="{{sections.riskTips.title}}">
+      <view wx:if="{{!sections.riskTips.items.length}}" class="empty-inline">暂无风险提示</view>
+      <view wx:for="{{sections.riskTips.items}}" wx:key="label" class="info-row"><text>{{item.label}}</text><text>{{item.value}}</text></view>
+    </form-section>
+  </view>
+</view>

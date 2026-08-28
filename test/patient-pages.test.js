@@ -1,0 +1,265 @@
+const assert = require('assert')
+const fs = require('fs')
+const path = require('path')
+const test = require('node:test')
+
+const root = path.resolve(__dirname, '..')
+
+function read (relativePath) {
+  return fs.readFileSync(path.join(root, relativePath), 'utf8')
+}
+
+function readJson (relativePath) {
+  return JSON.parse(read(relativePath))
+}
+
+function installPageTestEnv ({ patientApi, session, wxOverrides } = {}) {
+  const pages = []
+  const navigations = []
+  const toasts = []
+  global.Page = config => {
+    config.data = JSON.parse(JSON.stringify(config.data || {}))
+    config.setData = values => { config.data = Object.assign({}, config.data, values) }
+    pages.push(config)
+  }
+  global.getApp = () => ({
+    globalData: Object.assign({
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      activeRole: 'DOCTOR',
+      orgId: 'client-org-should-not-filter'
+    }, session)
+  })
+  global.wx = Object.assign({
+    getStorageSync: () => null,
+    setStorageSync: () => {},
+    removeStorageSync: () => {},
+    onBluetoothAdapterStateChange: () => {},
+    openBluetoothAdapter: options => options && options.success && options.success({}),
+    navigateTo: options => navigations.push(options),
+    switchTab: options => navigations.push(options),
+    reLaunch: options => navigations.push(options),
+    showToast: options => toasts.push(options),
+    stopPullDownRefresh: () => {}
+  }, wxOverrides)
+
+  const apiPath = path.join(root, 'miniprogram/utils/patient-api.js')
+  const guardPath = path.join(root, 'miniprogram/utils/auth-guard.js')
+  delete require.cache[apiPath]
+  delete require.cache[guardPath]
+  require.cache[apiPath] = {
+    id: apiPath,
+    filename: apiPath,
+    loaded: true,
+    exports: patientApi || {}
+  }
+  require.cache[guardPath] = {
+    id: guardPath,
+    filename: guardPath,
+    loaded: true,
+    exports: { ensureSession: async () => global.getApp().globalData }
+  }
+  return { pages, navigations, toasts }
+}
+
+function loadPage (relativePath) {
+  const fullPath = path.join(root, relativePath)
+  delete require.cache[fullPath]
+  require(fullPath)
+}
+
+test('patient routes are registered and use native shared components', () => {
+  const appConfig = readJson('miniprogram/app.json')
+  ;['pages/patient-list/index', 'pages/patient-detail/index', 'pages/patient-360/index'].forEach(route => {
+    assert.ok(appConfig.pages.includes(route), `${route} must be registered`)
+  })
+
+  const listJson = readJson('miniprogram/pages/patient-list/index.json')
+  const detailJson = readJson('miniprogram/pages/patient-detail/index.json')
+  const patient360Json = readJson('miniprogram/pages/patient-360/index.json')
+  ;['app-header', 'patient-card', 'state-panel'].forEach(name => assert.ok(listJson.usingComponents[name]))
+  ;['app-header', 'form-section', 'status-tag', 'bottom-action-bar', 'state-panel'].forEach(name => assert.ok(detailJson.usingComponents[name]))
+  ;['app-header', 'form-section', 'status-tag', 'state-panel'].forEach(name => assert.ok(patient360Json.usingComponents[name]))
+})
+
+test('doctor workspace opens the native patient list', async () => {
+  const env = installPageTestEnv()
+  loadPage('miniprogram/pages/doctor/workspace/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  page.onEntrySelect({ currentTarget: { dataset: { index: 0 } } })
+
+  assert.equal(page.data.entries[0].disabled, false)
+  assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-list/index' }])
+})
+
+test('patient list keeps fixed state, paginates server results, and does not client-filter org scope', async () => {
+  const calls = []
+  const env = installPageTestEnv({
+    patientApi: {
+      listPatients: async params => {
+        calls.push(params)
+        return calls.length === 1
+          ? { list: [{ id: '768495013408443', name: '测试患者2', orgName: 'server-org' }], page: 1, pageSize: 1, total: 2 }
+          : { list: [{ id: '768495013408445', name: '测试患者', orgName: 'other-server-org' }], page: 2, pageSize: 1, total: 2 }
+      }
+    }
+  })
+  loadPage('miniprogram/pages/patient-list/index.js')
+  const page = env.pages[0]
+
+  assert.deepStrictEqual(Object.keys(page.data).filter(key => ['loading', 'refreshing', 'keyword', 'patients', 'page', 'hasMore', 'error', 'empty'].includes(key)).sort(),
+    ['empty', 'error', 'hasMore', 'keyword', 'loading', 'page', 'patients', 'refreshing'].sort())
+
+  await page.onLoad()
+  await page.onReachBottom()
+  page.onPatientSelect({ currentTarget: { dataset: { id: '768495013408443' } } })
+
+  assert.deepStrictEqual(calls, [
+    { page: 1, pageSize: 20, keyword: '' },
+    { page: 2, pageSize: 20, keyword: '' }
+  ])
+  assert.equal(page.data.patients.length, 2)
+  assert.equal(page.data.patients[1].id, '768495013408445')
+  assert.equal(page.data.patients[1].orgName, 'othe***')
+  assert.equal(page.data.hasMore, false)
+  assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-detail/index?id=768495013408443' }])
+})
+
+test('patient list shows permission errors and retry reloads first page', async () => {
+  let calls = 0
+  const forbidden = new Error('HTTP 403')
+  forbidden.statusCode = 403
+  const env = installPageTestEnv({
+    patientApi: {
+      listPatients: async () => {
+        calls += 1
+        if (calls === 1) throw forbidden
+        return { list: [], page: 1, pageSize: 20, total: 0 }
+      }
+    }
+  })
+  loadPage('miniprogram/pages/patient-list/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  assert.equal(page.data.error, '无权访问患者列表')
+  assert.equal(page.data.empty, false)
+
+  await page.retry()
+  assert.equal(page.data.error, '')
+  assert.equal(page.data.empty, true)
+})
+
+test('patient detail masks sensitive display values and saves PatientSaveDTO body', async () => {
+  const calls = []
+  const env = installPageTestEnv({
+    patientApi: {
+      getPatient: async id => {
+        calls.push(['get', id])
+        return {
+          id,
+          basicInfo: { name: '测试患者', phone: '18696144935', idCard: '429004199102162952', gender: 1, age: 35 },
+          orgInfo: { orgId: '1972545374712086529', orgName: '沌阳街', serveOrgId: '1972545374712086529' },
+          smokeInfo: {},
+          lungFunction: {},
+          copdInfo: {},
+          allergies: [],
+          dustExposures: []
+        }
+      },
+      checkDuplicate: async (basicInfo, excludeId) => {
+        calls.push(['duplicate', basicInfo.phone, basicInfo.idCard, excludeId])
+        return { idCardConflict: false, phoneConflict: false }
+      },
+      updatePatient: async (id, payload) => {
+        calls.push(['update', id, payload])
+        return { id, basicInfo: payload.basicInfo }
+      }
+    }
+  })
+  loadPage('miniprogram/pages/patient-detail/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad({ id: '768495013408443' })
+  assert.equal(page.data.summary.phoneMasked, '186****4935')
+  assert.equal(page.data.summary.idCardMasked, '429004********2952')
+
+  page.edit()
+  page.updateBasicField({ currentTarget: { dataset: { field: 'phone' } }, detail: { value: '18696144936' } })
+  await page.save()
+
+  const update = calls.find(call => call[0] === 'update')
+  assert.equal(update[1], '768495013408443')
+  assert.deepStrictEqual(Object.keys(update[2]).sort(), ['allergies', 'basicInfo', 'copdInfo', 'dustExposures', 'lungFunction', 'smokeInfo'].sort())
+  assert.equal(update[2].basicInfo.phone, '18696144936')
+  assert.equal(update[2].basicInfo.orgId, '1972545374712086529')
+})
+
+test('patient detail handles save permission errors without logging raw identity values', async () => {
+  const logs = []
+  const forbidden = new Error('HTTP 403')
+  forbidden.statusCode = 403
+  const originalWarn = console.warn
+  const originalError = console.error
+  const env = installPageTestEnv({
+    patientApi: {
+      checkDuplicate: async () => ({ idCardConflict: false, phoneConflict: false }),
+      createPatient: async () => { throw forbidden }
+    },
+    wxOverrides: {
+      showToast: () => {}
+    }
+  })
+  console.warn = (...args) => logs.push(args.join(' '))
+  console.error = (...args) => logs.push(args.join(' '))
+  try {
+    loadPage('miniprogram/pages/patient-detail/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad({})
+    page.updateBasicField({ currentTarget: { dataset: { field: 'name' } }, detail: { value: '测试患者' } })
+    page.updateBasicField({ currentTarget: { dataset: { field: 'phone' } }, detail: { value: '18696144935' } })
+    page.updateBasicField({ currentTarget: { dataset: { field: 'idCard' } }, detail: { value: '429004199102162952' } })
+    await page.save()
+
+    assert.equal(page.data.error, '无权保存患者档案')
+    assert.equal(logs.join('\n').includes('18696144935'), false)
+    assert.equal(logs.join('\n').includes('429004199102162952'), false)
+  } finally {
+    console.warn = originalWarn
+    console.error = originalError
+  }
+})
+
+test('patient 360 renders server clinical sections without recomputing risk', async () => {
+  const env = installPageTestEnv({
+    patientApi: {
+      getPatient360: async patientId => ({
+        patientId,
+        detail: {
+          basicInfo: { name: '测试患者2', genderText: '男', age: 35 },
+          orgInfo: { orgName: '沌阳街' },
+          lungFunction: { catScore: 31, goldGradeText: 'II级' },
+          copdInfo: { symptom: '活动后气短' },
+          monitoringSummary: { dataStatus: 'ACTIVE', lastMeasurementAt: '2026-08-26T13:05:22' }
+        },
+        followups: { list: [{ id: 'f1', visitDate: '2026-08-20', patientStatusText: '稳定' }], total: 1 },
+        deviceMetrics: [{ type: 'HEART_RATE', value: 72, unit: 'bpm', measuredAt: '2026-08-26T13:05:22' }],
+        riskTips: [{ levelText: '服务端重点关注', message: '服务端结论' }]
+      })
+    }
+  })
+  loadPage('miniprogram/pages/patient-360/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad({ patientId: '768495013408443' })
+
+  assert.equal(page.data.sections.basicInfo.title, '基本信息')
+  assert.equal(page.data.sections.copd.title, 'COPD 专档')
+  assert.equal(page.data.sections.latestFollowup.items[0].value, '稳定')
+  assert.equal(page.data.sections.deviceMetrics.items[0].value, '72 bpm')
+  assert.equal(page.data.sections.riskTips.items[0].value, '服务端结论')
+  assert.equal(JSON.stringify(page.data.sections).includes('极高危'), false)
+})

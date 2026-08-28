@@ -9,6 +9,7 @@
   <workspace-card
     wx:for="{{entries}}"
     wx:key="key"
+    data-index="{{index}}"
     title="{{item.title}}"
     subtitle="{{item.subtitle}}"
     icon="{{item.icon}}"
@@ -16,5 +17,5 @@
     bindselect="onEntrySelect"
   />
 
-  <state-panel state="empty" title="原生业务页面准备中" message="当前任务只建立视觉组件和角色路由壳，患者列表、随访和设备业务将在后续任务接入。" />
+  <state-panel state="empty" title="后续业务分批接入" message="患者管理已原生化，随访、报告和设备入口将在后续任务开放。" />
 </view>

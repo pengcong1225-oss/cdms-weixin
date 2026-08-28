@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "患者管理",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "patient-card": "/components/patient-card/patient-card",
+    "state-panel": "/components/state-panel/state-panel"
+  }
+}

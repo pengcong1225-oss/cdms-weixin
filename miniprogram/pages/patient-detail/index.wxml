@@ -1,0 +1,59 @@
+<view class="page patient-detail-page">
+  <app-header title="患者档案" subtitle="{{editMode ? '受保护表单提交，机构范围由服务端校验' : '脱敏摘要与原生入口'}}" showBack="{{true}}" bindback="backList" />
+
+  <state-panel wx:if="{{error}}" state="error" title="操作失败" message="{{error}}" />
+
+  <view wx:if="{{!editMode}}" class="summary-card card">
+    <view class="summary-name">{{summary.name}}</view>
+    <view class="summary-meta">{{summary.genderAge}} · {{summary.orgMasked}}</view>
+    <view class="summary-tags">
+      <status-tag text="{{summary.statusMasked}}" tone="success" />
+      <status-tag text="GOLD {{summary.gold}}" tone="warning" />
+    </view>
+    <view class="info-grid">
+      <view class="info-item"><text>手机号</text><text>{{summary.phoneMasked}}</text></view>
+      <view class="info-item"><text>证件号</text><text>{{summary.idCardMasked}}</text></view>
+      <view class="info-item"><text>CAT</text><text>{{summary.cat}}</text></view>
+      <view class="info-item"><text>最近随访</text><text>{{summary.lastVisitDate}}</text></view>
+    </view>
+  </view>
+
+  <view class="action-grid">
+    <button wx:for="{{actions}}" wx:key="key" data-key="{{item.key}}" class="action-button {{item.enabled ? '' : 'disabled'}}" bindtap="onAction">{{item.text}}</button>
+  </view>
+
+  <view wx:if="{{editMode}}" class="form-stack">
+    <form-section title="基本信息" caption="覆盖 PatientSaveDTO.basicInfo">
+      <input class="form-input" value="{{form.basicInfo.name}}" data-field="name" placeholder="姓名" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.phone}}" data-field="phone" placeholder="手机号" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.idCard}}" data-field="idCard" placeholder="证件号" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.gender}}" data-field="gender" placeholder="性别 0女 / 1男" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.age}}" data-field="age" placeholder="年龄" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.birthday}}" data-field="birthday" placeholder="出生日期 YYYY-MM-DD" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.height}}" data-field="height" placeholder="身高 cm" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.weight}}" data-field="weight" placeholder="体重 kg" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.orgId}}" data-field="orgId" placeholder="归属机构 ID" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.serveOrgId}}" data-field="serveOrgId" placeholder="服务机构 ID" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.createOrgId}}" data-field="createOrgId" placeholder="建档机构 ID" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.buildDate}}" data-field="buildDate" placeholder="建档日期 YYYY-MM-DD" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.doctorName}}" data-field="doctorName" placeholder="责任医生" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.contactName}}" data-field="contactName" placeholder="联系人" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.contactPhone}}" data-field="contactPhone" placeholder="联系人电话" bindinput="updateBasicField" />
+      <input class="form-input" value="{{form.basicInfo.address}}" data-field="address" placeholder="地址" bindinput="updateBasicField" />
+    </form-section>
+
+    <form-section title="COPD 专档" caption="覆盖 smokeInfo、lungFunction、copdInfo">
+      <input class="form-input" value="{{form.smokeInfo.smokeStatus}}" data-field="smokeStatus" placeholder="吸烟状态" bindinput="updateSmokeField" />
+      <input class="form-input" value="{{form.smokeInfo.smokeDetail}}" data-field="smokeDetail" placeholder="吸烟情况" bindinput="updateSmokeField" />
+      <input class="form-input" value="{{form.lungFunction.copdConfirmed}}" data-field="copdConfirmed" placeholder="确诊状态" bindinput="updateLungField" />
+      <input class="form-input" value="{{form.lungFunction.goldGrade}}" data-field="goldGrade" placeholder="GOLD 分级" bindinput="updateLungField" />
+      <input class="form-input" value="{{form.lungFunction.catScore}}" data-field="catScore" placeholder="CAT 评分" bindinput="updateLungField" />
+      <input class="form-input" value="{{form.lungFunction.mmrcGrade}}" data-field="mmrcGrade" placeholder="mMRC 分级" bindinput="updateLungField" />
+      <input class="form-input" value="{{form.lungFunction.fev1Percent}}" data-field="fev1Percent" placeholder="FEV1%" bindinput="updateLungField" />
+      <textarea class="form-textarea" value="{{form.copdInfo.symptom}}" data-field="symptom" placeholder="症状描述" bindinput="updateCopdField" />
+      <textarea class="form-textarea" value="{{form.copdInfo.otherRemark}}" data-field="otherRemark" placeholder="备注" bindinput="updateCopdField" />
+    </form-section>
+  </view>
+
+  <bottom-action-bar wx:if="{{editMode}}" primaryText="保存档案" secondaryText="取消" loading="{{saving}}" bindprimary="save" bindsecondary="backList" />
+</view>

@@ -1,0 +1,19 @@
+<view class="page patient-list-page">
+  <app-header title="患者管理" subtitle="服务端按当前医生机构范围返回患者" showBack="{{true}}" bindback="backWorkspace" />
+
+  <view class="search-card card">
+    <input class="search-input" value="{{keyword}}" placeholder="搜索患者姓名、手机号或证件号" bindinput="onKeywordInput" confirm-type="search" bindconfirm="onSearch" />
+    <button class="search-button" bindtap="onSearch">搜索</button>
+  </view>
+
+  <button class="primary-button create-button" bindtap="createPatient">新增档案</button>
+
+  <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
+  <state-panel wx:elif="{{empty}}" state="empty" title="暂无患者" message="当前服务端范围内没有匹配患者。" actionText="新增档案" bindaction="createPatient" />
+
+  <view wx:else class="patient-stack">
+    <patient-card wx:for="{{patients}}" wx:key="id" data-id="{{item.id}}" patient="{{item}}" masked="{{true}}" bindselect="onPatientSelect" />
+    <view wx:if="{{loading}}" class="list-hint">加载中...</view>
+    <view wx:elif="{{!hasMore}}" class="list-hint">已显示全部</view>
+  </view>
+</view>

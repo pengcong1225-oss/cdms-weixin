@@ -1,0 +1,55 @@
+page {
+  background: var(--cdms-background);
+}
+
+.patient-list-page {
+  padding-bottom: 72rpx;
+}
+
+.search-card {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin: 8rpx 0 18rpx;
+  padding: 18rpx;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 68rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: #f6faf8;
+  color: var(--cdms-text);
+  font-size: 25rpx;
+}
+
+.search-button {
+  flex: none;
+  min-width: 120rpx;
+  height: 68rpx;
+  border-radius: 999rpx;
+  background: var(--cdms-primary);
+  color: #fff;
+  font-size: 24rpx;
+  line-height: 68rpx;
+}
+
+.create-button {
+  width: 100%;
+  margin-bottom: 22rpx;
+}
+
+.patient-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.list-hint {
+  padding: 26rpx 0;
+  color: var(--cdms-caption);
+  font-size: 22rpx;
+  text-align: center;
+}
