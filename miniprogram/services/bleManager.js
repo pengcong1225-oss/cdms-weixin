@@ -407,6 +407,11 @@ class BleManager {
     this.patch({ connectionState: "disconnected" });
   }
 
+  // 退出登录只断开本地连接，保留患者的设备绑定；主动“解除绑定”仍走 unbind()。
+  async disconnectForLogout() {
+    await this.disconnect();
+  }
+
   async unbind() {
     const previous = this.state.boundDevice;
     await this.disconnect();

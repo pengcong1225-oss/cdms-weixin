@@ -135,7 +135,7 @@ Page({
           console.warn('[CDMS] logout request failed', error)
         }
         try {
-          await bleManager.unbind()
+          await bleManager.disconnectForLogout()
         } catch (error) {
           console.warn('[CDMS BLE] disconnect on logout failed', error)
         }
