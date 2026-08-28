@@ -132,7 +132,7 @@ Page({
   async onLoad (query = {}) {
     const patientId = String(query.patientId || query.id || '')
     this.setData({ patientId })
-    await ensureSession({})
+    await ensureSession({ role: 'DOCTOR' })
     await this.load360()
   },
 

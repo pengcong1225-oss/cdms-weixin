@@ -79,8 +79,8 @@ function maskOrgName (value) {
   return text.length <= 4 ? `${text.slice(0, 1)}***` : `${text.slice(0, 4)}***`
 }
 
-function statusLabel (detail) {
-  return detail?.riskInfo?.diseaseStatusText || detail?.riskInfo?.riskLevelText || detail?.lungFunction?.goldGradeText || '状态已脱敏'
+function statusLabel () {
+  return '状态已脱敏'
 }
 
 function buildSummary (detail) {

@@ -21,8 +21,7 @@ function normalizePatient (patient) {
     id,
     orgName: maskOrgName(patient?.serveOrgName || patient?.orgName || patient?.createOrgName),
     statusText: '状态已脱敏',
-    statusTone: patient?.attentionLevel === 2 || patient?.riskLevel === 2 ? 'danger'
-      : patient?.attentionLevel === 1 || patient?.riskLevel === 1 ? 'warning' : 'success'
+    statusTone: 'neutral'
   })
 }
 
