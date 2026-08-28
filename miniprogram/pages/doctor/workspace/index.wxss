@@ -1,0 +1,14 @@
+page {
+  background: var(--cdms-background);
+}
+
+.workspace-page {
+  padding-bottom: 56rpx;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18rpx;
+  margin-bottom: 28rpx;
+}

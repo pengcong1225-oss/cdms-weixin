@@ -1,0 +1,8 @@
+<view class="workspace-card {{disabled ? 'disabled' : ''}}" bindtap="select">
+  <view class="workspace-icon">{{icon}}</view>
+  <view class="workspace-copy">
+    <view class="workspace-title">{{title}}</view>
+    <view class="workspace-subtitle">{{subtitle}}</view>
+  </view>
+  <text class="workspace-arrow">{{disabled ? '待' : '›'}}</text>
+</view>

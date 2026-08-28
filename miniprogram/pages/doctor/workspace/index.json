@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "医生工作台",
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "workspace-card": "/components/workspace-card/workspace-card",
+    "stat-card": "/components/stat-card/stat-card",
+    "state-panel": "/components/state-panel/state-panel"
+  }
+}

@@ -1,0 +1,47 @@
+.app-header {
+  display: flex;
+  align-items: flex-start;
+  padding: 42rpx 4rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.header-action {
+  width: 58rpx;
+  height: 58rpx;
+  margin-right: 14rpx;
+  border-radius: 50%;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 44rpx;
+  line-height: 54rpx;
+  text-align: center;
+}
+
+.header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.header-title {
+  color: var(--cdms-text);
+  font-size: 42rpx;
+  line-height: 58rpx;
+  font-weight: 750;
+}
+
+.header-subtitle {
+  margin-top: 6rpx;
+  color: var(--cdms-muted);
+  font-size: 24rpx;
+  line-height: 34rpx;
+}
+
+.header-logout {
+  flex: none;
+  margin-left: 18rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 22rpx;
+}

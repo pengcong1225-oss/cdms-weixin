@@ -1,0 +1,20 @@
+<view class="page workspace-page">
+  <app-header title="医生工作台" subtitle="患者管理、随访和设备入口已切换为原生壳" showBack="{{true}}" showLogout="{{true}}" bindback="backHome" bindlogout="logout" />
+
+  <view class="stats-grid">
+    <stat-card wx:for="{{stats}}" wx:key="key" title="{{item.title}}" value="{{item.value}}" caption="{{item.caption}}" tone="{{item.tone}}" />
+  </view>
+
+  <view class="section-title">工作入口</view>
+  <workspace-card
+    wx:for="{{entries}}"
+    wx:key="key"
+    title="{{item.title}}"
+    subtitle="{{item.subtitle}}"
+    icon="{{item.icon}}"
+    disabled="{{item.disabled}}"
+    bindselect="onEntrySelect"
+  />
+
+  <state-panel state="empty" title="原生业务页面准备中" message="当前任务只建立视觉组件和角色路由壳，患者列表、随访和设备业务将在后续任务接入。" />
+</view>

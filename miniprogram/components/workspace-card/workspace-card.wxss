@@ -1,0 +1,56 @@
+.workspace-card {
+  display: flex;
+  align-items: center;
+  min-height: 124rpx;
+  margin-bottom: 22rpx;
+  padding: 22rpx 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}
+
+.workspace-card.disabled {
+  opacity: .58;
+}
+
+.workspace-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62rpx;
+  height: 62rpx;
+  flex: none;
+  border-radius: 20rpx;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.workspace-copy {
+  min-width: 0;
+  flex: 1;
+  margin-left: 18rpx;
+}
+
+.workspace-title {
+  color: var(--cdms-text);
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.workspace-subtitle {
+  margin-top: 7rpx;
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.workspace-arrow {
+  margin-left: 16rpx;
+  color: var(--cdms-chevron);
+  font-size: 36rpx;
+  font-weight: 200;
+}

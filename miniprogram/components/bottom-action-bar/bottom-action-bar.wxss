@@ -1,0 +1,31 @@
+.bottom-action-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 18rpx;
+  padding: 18rpx 0 calc(18rpx + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(243, 247, 245, 0), var(--cdms-background) 28rpx);
+}
+
+.bar-primary,
+.bar-secondary {
+  height: 78rpx;
+  margin: 0;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  line-height: 78rpx;
+}
+
+.bar-primary {
+  flex: 1;
+  background: var(--cdms-primary);
+  color: #fff;
+  box-shadow: 0 10rpx 22rpx rgba(12, 155, 108, .18);
+}
+
+.bar-secondary {
+  flex: none;
+  min-width: 190rpx;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+}

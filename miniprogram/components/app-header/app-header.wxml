@@ -1,0 +1,8 @@
+<view class="app-header">
+  <view wx:if="{{showBack}}" class="header-action" bindtap="back">‹</view>
+  <view class="header-copy">
+    <view class="header-title">{{title}}</view>
+    <view wx:if="{{subtitle}}" class="header-subtitle">{{subtitle}}</view>
+  </view>
+  <view wx:if="{{showLogout}}" class="header-logout" bindtap="logout">退出</view>
+</view>

@@ -1,0 +1,25 @@
+.choice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.choice-tile {
+  padding: 20rpx 22rpx;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: 20rpx;
+  background: #fbfdfc;
+}
+
+.choice-title {
+  color: var(--cdms-text);
+  font-size: 26rpx;
+  font-weight: 650;
+}
+
+.choice-caption {
+  margin-top: 6rpx;
+  color: var(--cdms-muted);
+  font-size: 21rpx;
+  line-height: 30rpx;
+}

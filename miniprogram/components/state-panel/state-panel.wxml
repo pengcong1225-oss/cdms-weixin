@@ -1,0 +1,6 @@
+<view class="state-panel {{state}}">
+  <view class="state-mark">{{state === 'error' ? '!' : state === 'loading' ? '…' : '⌁'}}</view>
+  <view class="state-title">{{title}}</view>
+  <view wx:if="{{message}}" class="state-message">{{message}}</view>
+  <button wx:if="{{actionText}}" class="state-action" bindtap="action">{{actionText}}</button>
+</view>

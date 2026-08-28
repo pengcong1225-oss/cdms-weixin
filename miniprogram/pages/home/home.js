@@ -3,11 +3,18 @@ const { getHealthCards } = require("../../utils/capabilities");
 const { formatTime } = require("../../utils/format");
 const api = require("../../utils/api");
 const { ensureSession } = require("../../utils/auth-guard");
-const { getRoleEntry } = require("../../utils/role-entry");
 const { getWorkspaceEntries } = require("../../utils/workspace-entry");
 
+function openNativeUrl (url) {
+  const tabPages = ['/pages/home/home', '/pages/device/device']
+  if (tabPages.includes(url)) {
+    wx.switchTab({ url })
+    return
+  }
+  wx.navigateTo({ url })
+}
+
 Page({
-  workspaceOpening: false,
   data: {
     boundDevice: null,
     connectionState: "disconnected",
@@ -28,10 +35,6 @@ Page({
     if (!session) return
     const activeRole = app.globalData.activeRole || ''
     this.setData({ activeRole, workspaceEntries: getWorkspaceEntries(activeRole) })
-    if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
-      this.redirectDoctorWorkspace()
-      return
-    }
     this.unsubscribe = bleManager.subscribe((state) => {
       this.setData({
         boundDevice: state.boundDevice,
@@ -54,10 +57,6 @@ Page({
     const app = getApp()
     const session = await this.ensureRestoredSession()
     if (!session) return
-    if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
-      this.redirectDoctorWorkspace()
-      return
-    }
     const state = bleManager.snapshot();
     this.setData({ healthCards: getHealthCards(state.boundDevice, state.realtimeHealth) });
   },
@@ -167,82 +166,35 @@ Page({
         const response = await api.switchRole(role.roleType)
         const session = response?.data || response
         app.saveAuth(session)
-        if (getRoleEntry(session.activeRole).type === 'H5') {
-          await this.redirectDoctorWorkspace()
-          return
-        }
+        const entries = getWorkspaceEntries(app.globalData.activeRole)
         this.setData({
           activeRole: app.globalData.activeRole,
-          workspaceEntries: getWorkspaceEntries(app.globalData.activeRole)
+          workspaceEntries: entries
         })
+        const nativeEntry = entries.find(item => item.type === 'NATIVE' && item.url)
+        if (session.activeRole === 'DOCTOR' && nativeEntry) {
+          wx.reLaunch({ url: nativeEntry.url })
+          return
+        }
         wx.showToast({ title: '身份已切换', icon: 'success' })
       } catch (error) { wx.showToast({ title: error.message || '切换失败', icon: 'none' }) }
     }})
   },
 
-  async openCdmsWorkspace () {
-    const app = getApp()
-    const session = await this.ensureRestoredSession()
-    if (!session) return
-    if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) {
-      wx.reLaunch({ url: '/pages/auth/login' })
-      return
-    }
-    const targetPath = app.globalData.activeRole === 'DOCTOR' ? '/h5/patients' : '/h5/followups'
-    try {
-      const response = await api.createHandoff(targetPath)
-      const handoff = response?.data || response
-      if (!handoff?.handoffUrl) throw new Error('未取得 H5 安全地址')
-      wx.navigateTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
-    } catch (error) {
-      wx.showToast({ title: error.message || '打开业务工作台失败', icon: 'none' })
-    }
-  },
   async openWorkspaceEntry (event) {
     const entry = (this.data.workspaceEntries || []).find(item => item.key === event.currentTarget.dataset.key)
     if (!entry) return
     if (entry.type === 'NATIVE') {
-      wx.switchTab({ url: entry.url })
+      openNativeUrl(entry.url)
       return
     }
-    const app = getApp()
-    const session = await this.ensureRestoredSession()
-    if (!session) return
-    if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) {
-      wx.reLaunch({ url: '/pages/auth/login' })
+    if (entry.type === 'COPY' && entry.copyText) {
+      wx.setClipboardData({
+        data: entry.copyText,
+        success: () => wx.showToast({ title: '问卷地址已复制', icon: 'success' })
+      })
       return
     }
-    try {
-      const response = await api.createHandoff(entry.targetPath)
-      const handoff = response?.data || response
-      if (!handoff?.handoffUrl) throw new Error('未取得 H5 安全地址')
-      wx.navigateTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
-    } catch (error) {
-      wx.showToast({ title: error.message || '打开业务入口失败', icon: 'none' })
-    }
-  },
-  async redirectDoctorWorkspace () {
-    if (this.workspaceOpening) return
-    this.workspaceOpening = true
-    const app = getApp()
-    const session = await this.ensureRestoredSession()
-    if (!session) {
-      this.workspaceOpening = false
-      return
-    }
-    if (!app.globalData.accessToken || !app.globalData.cdmsBaseUrl) {
-      this.workspaceOpening = false
-      wx.reLaunch({ url: '/pages/auth/login' })
-      return
-    }
-    try {
-      const response = await api.createHandoff('/h5/patients')
-      const handoff = response?.data || response
-      if (!handoff?.handoffUrl) throw new Error('未取得医生工作台地址')
-      wx.redirectTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
-    } catch (error) {
-      this.workspaceOpening = false
-      wx.showToast({ title: error.message || '打开医生工作台失败', icon: 'none' })
-    }
+    wx.showToast({ title: '功能准备中', icon: 'none' })
   }
 });

@@ -62,11 +62,8 @@ Page({
       wx.reLaunch({ url: '/pages/auth/login' })
       return
     }
-    if (entry.type === 'H5') {
-      const response = await api.createHandoff(entry.targetPath)
-      const handoff = response?.data || response
-      if (!handoff?.handoffUrl) throw new Error('未取得医生工作台地址')
-      wx.redirectTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
+    if (entry.type === 'NATIVE') {
+      wx.reLaunch({ url: entry.url })
       return
     }
     if (entry.type === 'HOME') {

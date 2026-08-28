@@ -1,0 +1,72 @@
+const assert = require('assert')
+const fs = require('fs')
+const path = require('path')
+const test = require('node:test')
+
+const root = path.resolve(__dirname, '..')
+
+function read (relativePath) {
+  return fs.readFileSync(path.join(root, relativePath), 'utf8')
+}
+
+function readJson (relativePath) {
+  return JSON.parse(read(relativePath))
+}
+
+function assertComponentContract (name, properties, events) {
+  const dir = `miniprogram/components/${name}`
+  const js = read(`${dir}/${name}.js`)
+  const wxml = read(`${dir}/${name}.wxml`)
+  const json = readJson(`${dir}/${name}.json`)
+  assert.equal(json.component, true, `${name} must be a component`)
+  properties.forEach(property => {
+    assert.match(js, new RegExp(`${property}\\s*:`), `${name} must declare ${property}`)
+  })
+  events.forEach(eventName => {
+    assert.match(js, new RegExp(`triggerEvent\\(['"]${eventName}['"]`), `${name} must emit ${eventName}`)
+    assert.match(wxml, new RegExp(`bindtap="${eventName}|catchtap="${eventName}|data-event="${eventName}`), `${name} should expose ${eventName} interaction`)
+  })
+  assert.doesNotMatch(js, /h5|web-view|handoff|targetPath/i, `${name} must not accept H5 destinations`)
+}
+
+test('app visual tokens preserve current patient workbench values', () => {
+  const wxss = read('miniprogram/app.wxss')
+  const requiredTokens = [
+    '--cdms-primary: #0c9b6c',
+    '--cdms-primary-soft: #e5f6ee',
+    '--cdms-background: #f3f7f5',
+    '--cdms-surface: #ffffff',
+    '--cdms-text: #20352e',
+    '--cdms-muted: #8a9a93',
+    '--cdms-radius-card: 28rpx',
+    '--cdms-shadow-card:',
+    '--cdms-status-success:',
+    '--cdms-status-warning:',
+    '--cdms-status-danger:',
+    '--cdms-status-neutral:'
+  ]
+  requiredTokens.forEach(token => assert.ok(wxss.includes(token), `missing ${token}`))
+})
+
+test('shared native components declare serializable properties and named events', () => {
+  assertComponentContract('app-header', ['title', 'subtitle', 'showBack', 'showLogout'], ['back', 'logout'])
+  assertComponentContract('workspace-card', ['title', 'subtitle', 'icon', 'disabled'], ['select'])
+  assertComponentContract('patient-card', ['patient', 'masked'], ['select'])
+  assertComponentContract('stat-card', ['title', 'value', 'caption', 'tone'], [])
+  assertComponentContract('status-tag', ['text', 'tone'], [])
+  assertComponentContract('form-section', ['title', 'caption'], [])
+  assertComponentContract('choice-tile', ['options', 'value', 'multiple'], ['change'])
+  assertComponentContract('state-panel', ['state', 'title', 'message', 'actionText'], ['action'])
+  assertComponentContract('bottom-action-bar', ['primaryText', 'secondaryText', 'loading'], ['primary', 'secondary'])
+})
+
+test('doctor and patient workspace pages share native visual components', () => {
+  const doctor = readJson('miniprogram/pages/doctor/workspace/index.json')
+  const patient = readJson('miniprogram/pages/patient/workspace/index.json')
+  ;['app-header', 'workspace-card', 'stat-card', 'state-panel'].forEach(name => {
+    assert.ok(doctor.usingComponents[name], `doctor workspace uses ${name}`)
+  })
+  ;['app-header', 'workspace-card', 'stat-card', 'state-panel'].forEach(name => {
+    assert.ok(patient.usingComponents[name], `patient workspace uses ${name}`)
+  })
+})

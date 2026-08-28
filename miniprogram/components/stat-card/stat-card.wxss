@@ -1,0 +1,43 @@
+.stat-card {
+  min-height: 148rpx;
+  padding: 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}
+
+.stat-title {
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+}
+
+.stat-value {
+  overflow: hidden;
+  margin-top: 10rpx;
+  color: var(--cdms-text);
+  font-size: 38rpx;
+  line-height: 48rpx;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-caption {
+  margin-top: 8rpx;
+  color: var(--cdms-caption);
+  font-size: 21rpx;
+}
+
+.stat-card.success .stat-value {
+  color: var(--cdms-status-success);
+}
+
+.stat-card.warning .stat-value {
+  color: var(--cdms-status-warning);
+}
+
+.stat-card.danger .stat-value {
+  color: var(--cdms-status-danger);
+}

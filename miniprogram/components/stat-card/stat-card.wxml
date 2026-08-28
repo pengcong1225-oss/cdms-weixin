@@ -1,0 +1,5 @@
+<view class="stat-card {{tone}}">
+  <view class="stat-title">{{title}}</view>
+  <view class="stat-value">{{value}}</view>
+  <view wx:if="{{caption}}" class="stat-caption">{{caption}}</view>
+</view>

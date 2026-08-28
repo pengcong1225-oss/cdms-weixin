@@ -250,7 +250,7 @@ test('login page enters restored patient session after silent refresh', async ()
 
   assert.equal(requests.length, 1)
   assert.equal(globalData.accessToken, 'access-2')
-  assert.deepStrictEqual(redirects, [{ url: '/pages/home/home' }])
+  assert.deepStrictEqual(redirects, [{ url: '/pages/patient/workspace/index' }])
 })
 
 test('home page waits for silent restore before login redirect', async () => {
@@ -303,7 +303,7 @@ test('home page waits for silent restore before login redirect', async () => {
   assert.equal(pageConfig.data.activeRole, 'PATIENT')
 })
 
-test('doctor home lifecycle shares one handoff after delayed restore', async () => {
+test('doctor home lifecycle keeps delayed restore without handoff', async () => {
   const redirects = []
   const requests = []
   const globalData = {
@@ -328,15 +328,11 @@ test('doctor home lifecycle shares one handoff after delayed restore', async () 
     getStorageSync: () => null,
     setStorageSync: () => {},
     removeStorageSync: () => {},
-    redirectTo: options => redirects.push(options),
+    navigateTo: options => redirects.push(options),
     reLaunch: options => redirects.push(options),
     showToast: () => {},
     request: options => {
       requests.push(options)
-      if (options.url.endsWith('/api/v1/miniapp/auth/handoff')) {
-        options.success({ statusCode: 200, data: { data: { handoffUrl: 'https://cdms.example.com/h5/patients' } } })
-        return
-      }
       options.fail(new Error(`unexpected request: ${options.url}`))
     }
   }
@@ -361,9 +357,7 @@ test('doctor home lifecycle shares one handoff after delayed restore', async () 
   await Promise.all([load, show])
   await new Promise(resolve => setImmediate(resolve))
 
-  assert.equal(requests.filter(item => item.url.endsWith('/api/v1/miniapp/auth/handoff')).length, 1)
-  assert.equal(redirects.length, 1)
-  assert.deepStrictEqual(redirects[0], {
-    url: '/pages/h5/index?url=https%3A%2F%2Fcdms.example.com%2Fh5%2Fpatients'
-  })
+  assert.deepStrictEqual(requests, [])
+  assert.deepStrictEqual(redirects, [])
+  assert.equal(pageConfig.data.activeRole, 'DOCTOR')
 })

@@ -1,0 +1,28 @@
+.form-section {
+  margin-bottom: 24rpx;
+}
+
+.form-heading {
+  margin: 28rpx 4rpx 16rpx;
+}
+
+.form-title {
+  color: var(--cdms-heading);
+  font-size: 29rpx;
+  line-height: 42rpx;
+  font-weight: 720;
+}
+
+.form-caption {
+  margin-top: 4rpx;
+  color: var(--cdms-caption);
+  font-size: 21rpx;
+}
+
+.form-body {
+  padding: 24rpx;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}

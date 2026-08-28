@@ -1,0 +1,33 @@
+<view class="page workspace-page">
+  <app-header title="患者工作台" subtitle="随访、报告、设备和建档问卷已切换到原生入口" showBack="{{true}}" showLogout="{{true}}" bindback="backHome" bindlogout="logout" />
+
+  <view class="stats-grid">
+    <stat-card wx:for="{{stats}}" wx:key="key" title="{{item.title}}" value="{{item.value}}" caption="{{item.caption}}" tone="{{item.tone}}" />
+  </view>
+
+  <view class="section-title">健康服务</view>
+  <workspace-card
+    wx:for="{{entries}}"
+    wx:key="key"
+    data-index="{{index}}"
+    title="{{item.title}}"
+    subtitle="{{item.subtitle}}"
+    icon="{{item.icon}}"
+    disabled="{{item.disabled}}"
+    bindselect="onEntrySelect"
+  />
+
+  <state-panel
+    wx:if="{{!hasPatientRef}}"
+    state="empty"
+    title="未关联患者档案"
+    message="请先完成公开建档问卷，提交后返回小程序重新登录。"
+    actionText="复制问卷地址"
+    bindaction="copyQuestionnaire"
+  />
+  <view wx:else class="question-card">
+    <view class="question-title">公开建档问卷</view>
+    <view class="question-url">{{publicScreeningUrl}}</view>
+    <button class="question-copy" bindtap="copyQuestionnaire">复制问卷地址</button>
+  </view>
+</view>

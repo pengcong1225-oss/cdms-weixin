@@ -1,0 +1,29 @@
+.patient-card {
+  display: flex;
+  align-items: center;
+  min-height: 118rpx;
+  padding: 22rpx 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}
+
+.patient-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.patient-name {
+  color: var(--cdms-text);
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.patient-meta {
+  margin-top: 8rpx;
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+  line-height: 32rpx;
+}

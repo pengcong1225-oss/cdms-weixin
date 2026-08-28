@@ -1,0 +1,7 @@
+<view class="patient-card" bindtap="select">
+  <view class="patient-main">
+    <view class="patient-name">{{displayName}}</view>
+    <view class="patient-meta">{{patient.gender || '性别未填'}} · {{patient.age || '--'}}岁 · {{patient.orgName || '机构未填'}}</view>
+  </view>
+  <status-tag text="{{patient.statusText || '在管'}}" tone="{{patient.statusTone || 'success'}}" />
+</view>

@@ -2,12 +2,13 @@ const assert = require('assert')
 const { getRoleEntry } = require('../miniprogram/utils/role-entry')
 
 assert.deepStrictEqual(getRoleEntry('DOCTOR'), {
-  type: 'H5',
-  targetPath: '/h5/patients'
+  type: 'NATIVE',
+  url: '/pages/doctor/workspace/index'
 })
 
 assert.deepStrictEqual(getRoleEntry('PATIENT'), {
-  type: 'HOME'
+  type: 'NATIVE',
+  url: '/pages/patient/workspace/index'
 })
 
 assert.deepStrictEqual(getRoleEntry(''), {

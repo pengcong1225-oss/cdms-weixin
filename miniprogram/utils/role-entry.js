@@ -1,6 +1,6 @@
 function getRoleEntry (activeRole) {
-  if (activeRole === 'DOCTOR') return { type: 'H5', targetPath: '/h5/patients' }
-  if (activeRole === 'PATIENT') return { type: 'HOME' }
+  if (activeRole === 'DOCTOR') return { type: 'NATIVE', url: '/pages/doctor/workspace/index' }
+  if (activeRole === 'PATIENT') return { type: 'NATIVE', url: '/pages/patient/workspace/index' }
   return { type: 'LOGIN' }
 }
 

@@ -158,11 +158,6 @@ async function switchRole (roleType) {
   return cdmsRequest('/api/v1/miniapp/auth/switch-role', 'POST', { roleType }, app.globalData.accessToken)
 }
 
-async function createHandoff (targetPath) {
-  const app = getApp()
-  return cdmsRequest('/api/v1/miniapp/auth/handoff', 'POST', { targetPath }, app.globalData.accessToken)
-}
-
 async function redeemHandoff (code) {
   return cdmsRequest('/api/v1/miniapp/auth/handoff/redeem', 'POST', { code }, '')
 }
@@ -214,4 +209,4 @@ function enqueue (batch) {
   writeQueue([batch], scope)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, cdmsRequest, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, cdmsRequest, login, loginDoctor, loginWithWechat, logout, switchRole, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
