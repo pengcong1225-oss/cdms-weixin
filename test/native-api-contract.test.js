@@ -41,6 +41,7 @@ test('documents required miniapp and iot contract baselines plus server gaps', (
     'POST /api/v1/miniapp/auth/logout',
     'GET /api/v1/miniapp/auth/me',
     'GET /api/v1/patients',
+    'GET /api/v1/patients/{id}',
     'POST /api/v1/patients',
     'PUT /api/v1/patients/{id}',
     'DELETE /api/v1/patients/{id}',
@@ -82,6 +83,11 @@ test('documents required miniapp and iot contract baselines plus server gaps', (
     'POST /v1/acquisition-sessions',
     'GET /v1/acquisition-sessions/{sessionId}',
     'GET /v1/reports',
+    'GET /api/v1/screening/h5/questions',
+    'GET /api/v1/screening/h5/organizations',
+    'POST /api/v1/screening/h5/submit',
+    'cdmsManager',
+    'ScreeningController.java',
     'POST /api/v1/checkins?patientId=...',
     '不满足扫码后由令牌派生患者身份的要求',
     '受保护的 /api/v1/miniapp/scale/stations* 契约缺口',
@@ -90,7 +96,7 @@ test('documents required miniapp and iot contract baselines plus server gaps', (
   ].forEach(item => expectIncludes(matrix, item))
 })
 
-test('locks string ids, redaction rules, screening rules and report URL lifecycle', () => {
+test('locks string ids, auth session semantics, screening rules and report URL lifecycle', () => {
   const payload = { patientId: '768495013408443', orgId: '1972545374712086529', reportId: '9001', sessionId: 'session-1' }
   assert.equal(typeof payload.patientId, 'string')
   assert.equal(typeof payload.orgId, 'string')
@@ -105,10 +111,19 @@ test('locks string ids, redaction rules, screening rules and report URL lifecycl
     '脱敏',
     '403',
     '400',
+    'Refresh Token survives network, timeout and 5xx',
+    'concurrent 401 uses one single-flight refresh',
+    'each request retries once',
+    'role switch preserves account session while clearing role/device context',
+    'POST /api/v1/miniapp/auth/refresh',
+    'POST /api/v1/miniapp/auth/switch-role',
     '7 题 COPD-SQ',
     'totalScore >= 16',
     '启用机构选择',
     '提交时机构状态校验',
+    'GET /api/v1/screening/h5/questions',
+    'GET /api/v1/screening/h5/organizations',
+    'POST /api/v1/screening/h5/submit',
     'expiresInSeconds',
     '1-300 秒',
     '短时地址只在当前内存中使用',

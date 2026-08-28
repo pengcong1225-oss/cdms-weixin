@@ -5,7 +5,8 @@
 - Task 1 output for `feature/full-native-miniapp`.
 - Consumers: `patient-api.js`, `followup-api.js`, `monitoring-api.js`, `report-api.js`, `station-api.js`.
 - Evidence base: inspected `cdms/backend/src/main/java/com/cdms/followup/controller/*` and `cdms-iot/core/src/main/java/com/cdms/iot/core/*`.
-- Exception kept explicit: public screening routes are preserved from the brief/plan baseline because the current inspected `cdms` controller tree did not expose `/api/v1/screening/h5/*` source files.
+- Public screening route distinction is explicit: `/api/v1/screening/h5/*` belongs to `cdmsManager`, not `cdms` followup.
+- Evidence base for screening routes: inspected `cdmsManager/backend/src/main/java/com/cdms/manager/controller/ScreeningController.java` including `h5Questions`, `h5Organizations`, and `h5Submit`.
 
 ## H5 To Native Replacement
 
@@ -30,6 +31,24 @@
 - Report/file short URLs are transient only: `expiresInSeconds` is clamped to `1-300 秒`, and the short URL response must be treated as memory-only.
 - 短时地址只在当前内存中使用，不得写入 URL、Storage、日志、埋点或剪贴板。
 
+## Auth Session Semantics Locked For Later Tasks
+
+- Task 1 only documents these semantics; it does not implement production auth code.
+- `Refresh Token survives network, timeout and 5xx`.
+- `concurrent 401 uses one single-flight refresh`.
+- `each request retries once`.
+- `role switch preserves account session while clearing role/device context`.
+- Route anchors for these semantics remain the already documented auth surface:
+  - `POST /api/v1/miniapp/auth/refresh`
+  - `POST /api/v1/miniapp/auth/switch-role`
+  - `POST /api/v1/miniapp/auth/logout`
+  - `GET /api/v1/miniapp/auth/me`
+- Required client behavior for later tasks:
+  - network, timeout, and `5xx` must not clear stored refresh credentials;
+  - a burst of `401` responses must share one refresh promise;
+  - each original request may retry at most once after a successful refresh;
+  - role switch keeps account session primitives such as `refreshToken`, `identityId`, and `roles`, while clearing role-scoped patient/task/device context.
+
 ## Exact Route Inventory
 
 - `POST /api/v1/miniapp/auth/login`
@@ -39,6 +58,7 @@
 - `POST /api/v1/miniapp/auth/logout`
 - `GET /api/v1/miniapp/auth/me`
 - `GET /api/v1/patients`
+- `GET /api/v1/patients/{id}`
 - `POST /api/v1/patients`
 - `PUT /api/v1/patients/{id}`
 - `DELETE /api/v1/patients/{id}`
@@ -80,6 +100,9 @@
 - `POST /v1/acquisition-sessions`
 - `GET /v1/acquisition-sessions/{sessionId}`
 - `GET /v1/reports`
+- `GET /api/v1/screening/h5/questions`
+- `GET /api/v1/screening/h5/organizations`
+- `POST /api/v1/screening/h5/submit`
 
 ## Matrix
 
@@ -91,6 +114,8 @@
 | Auth | token refresh | POST | `/api/v1/miniapp/auth/refresh` | `refreshToken` | same `MiniappSessionVO` | refresh token owner only | `400`, `401` | No |
 | Auth | logout | POST | `/api/v1/miniapp/auth/logout` | none | success envelope | authenticated identity only | `401` | No |
 | Auth | session bootstrap | GET | `/api/v1/miniapp/auth/me` | none | `identityId`, `activeRole`, `principalId`, `patientId`, `orgId` | authenticated identity only | `401` | No |
+| Auth | client-side policy lock only | POST | `/api/v1/miniapp/auth/refresh` | no new payload in Task 1 | existing `MiniappSessionVO` contract only | Task 1 documentation only; no production auth change here | `401`, `5xx` | No |
+| Auth | client-side policy lock only | POST | `/api/v1/miniapp/auth/switch-role` | no new payload in Task 1 | existing `MiniappSessionVO` contract only | Task 1 documentation only; role switch keeps account session and clears role/device context later in client code | `400`, `401`, `403` | No |
 | Patient | doctor workspace list | GET | `/api/v1/patients` | query DTO; later adapter should use String IDs in params such as `orgId`, keyword, page fields | `PageResult<PatientListVO>` | doctor/org scope only; patient role blocked | `400`, `403` | No |
 | Patient | patient detail page | GET | `/api/v1/patients/{id}` | `{id}` as String client path param | `PatientDetailVO` | patient can only read self; doctor scoped by service | `403`, `404` | No |
 | Patient | doctor archive create | POST | `/api/v1/patients` | `PatientSaveDTO` with nested `basicInfo`, `smokeInfo`, `lungFunction`, `copdInfo`, `allergies`, `dustExposures`; client sends `basicInfo.orgId`, `serveOrgId`, `createOrgId` as String | created data contains `id`, `message` | doctor only | `400`, `403` | No |
@@ -148,8 +173,10 @@
 
 ## Public Screening Contract To Preserve
 
-- Preserved baseline routes from the brief: `GET /api/v1/screening/h5/questions`, `GET /api/v1/screening/h5/organizations`, `POST /api/v1/screening/h5/submit`.
-- Current source inspection note: these route implementations were not located in the inspected `cdms` controller tree, so this section is treated as a required compatibility contract to re-verify when the service work is touched.
+- Real public route owner is `cdmsManager`, not `cdms` followup.
+- Verified source: `D:\aiProject\workspace-opc\cdmsManager\backend\src\main\java\com\cdms\manager\controller\ScreeningController.java`.
+- Verified public routes: `GET /api/v1/screening/h5/questions`, `GET /api/v1/screening/h5/organizations`, `POST /api/v1/screening/h5/submit`.
+- Related manager-only routes such as `/api/v1/screening/h5/context` and `/api/v1/screening/h5/token` exist in the same controller, but Task 1 only freezes the three public routes required by the brief.
 - Questionnaire invariant: `7 题 COPD-SQ`.
 - Server scoring invariant: `totalScore >= 16` means high risk.
 - Organization selection invariant: `启用机构选择`.
