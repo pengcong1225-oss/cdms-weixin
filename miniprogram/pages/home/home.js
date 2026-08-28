@@ -223,14 +223,18 @@ Page({
   },
   async redirectDoctorWorkspace () {
     if (this.workspaceOpening) return
+    this.workspaceOpening = true
     const app = getApp()
     const session = await this.ensureRestoredSession()
-    if (!session) return
+    if (!session) {
+      this.workspaceOpening = false
+      return
+    }
     if (!app.globalData.accessToken || !app.globalData.cdmsBaseUrl) {
+      this.workspaceOpening = false
       wx.reLaunch({ url: '/pages/auth/login' })
       return
     }
-    this.workspaceOpening = true
     try {
       const response = await api.createHandoff('/h5/patients')
       const handoff = response?.data || response
