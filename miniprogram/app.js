@@ -1,5 +1,6 @@
 const bleManager = require('./services/bleManager')
 const runtimeConfig = require('./config/runtime')
+const sessionStore = require('./utils/session-store')
 
 let configuredCloudEnv = ''
 try {
@@ -31,8 +32,13 @@ App({
     bleManager
   },
   onLaunch (options) {
-    this.restoreAuth()
+    const snapshot = sessionStore.readAuth()
+    this.restoreAuth(snapshot)
     this.applyBridgeQuery(options?.query)
+    this.restoreSessionInBackground()
+    this.initNativeServices()
+  },
+  initNativeServices () {
     if (wx.cloud) {
       const cloudOptions = { traceUser: true }
       if (this.globalData.cloudEnv) cloudOptions.env = this.globalData.cloudEnv
@@ -40,7 +46,14 @@ App({
     } else {
       console.warn('[CDMS Cloud] wx.cloud unavailable; continuing with IoT API mode')
     }
-    bleManager.init().catch(error => console.warn('[CDMS BLE] adapter init failed', error))
+    try {
+      const bleInit = bleManager.init()
+      if (bleInit && typeof bleInit.catch === 'function') {
+        bleInit.catch(error => console.warn('[CDMS BLE] adapter init failed', error))
+      }
+    } catch (error) {
+      console.warn('[CDMS BLE] adapter init failed', error)
+    }
   },
   onShow (options) {
     this.applyBridgeQuery(options?.query)
@@ -53,13 +66,13 @@ App({
     if (query.patientId && !this.globalData.patientRef) this.globalData.patientRef = query.patientId
   },
 
-  restoreAuth () {
-    const auth = wx.getStorageSync('cdms.miniapp.auth') || {}
+  restoreAuth (snapshot) {
+    const auth = snapshot || sessionStore.readAuth() || {}
     Object.assign(this.globalData, auth)
     const wearable = wx.getStorageSync('cdms.miniapp.wearable') || {}
     const authPatientRef = String(auth.patientRef || '').trim()
     const wearablePatientRef = String(wearable.patientRef || '').trim()
-    const hasAuth = !!String(auth.accessToken || '').trim()
+    const hasAuth = !!String(auth.refreshToken || '').trim()
     const samePatient = authPatientRef && wearablePatientRef && authPatientRef === wearablePatientRef
     const wearableUsable = !hasAuth || (auth.activeRole === 'PATIENT' && samePatient)
     if (wearableUsable) {
@@ -73,6 +86,21 @@ App({
       this.globalData.wearableDeviceRef = ''
       if (authPatientRef) this.globalData.patientRef = authPatientRef
     }
+    return sessionStore.normalizeAuth(auth)
+  },
+
+  restoreSessionInBackground () {
+    if (!this.globalData.refreshToken || !this.globalData.cdmsBaseUrl) return Promise.resolve(null)
+    const api = require('./utils/api')
+    return api.refreshAccessToken().catch(error => {
+      if (error && error.reauthRequired) {
+        this.clearAuth()
+        wx.reLaunch({ url: '/pages/auth/login' })
+      } else {
+        console.warn('[CDMS Auth] silent refresh failed; keeping persisted session', error)
+      }
+      return null
+    })
   },
 
   saveAuth (session) {
@@ -88,10 +116,10 @@ App({
     if (identityChanged) {
       // 角色或患者切换时释放旧的设备会话，避免新患者复用旧患者的 IoT token。
       bleManager.unbind().catch(error => console.warn('[CDMS BLE] identity switch cleanup failed', error))
+      this.clearRoleContext()
     }
     const auth = {
       cdmsBaseUrl: this.globalData.cdmsBaseUrl,
-      accessToken: session.token || '',
       refreshToken: session.refreshToken || '',
       identityId: session.identityId || '',
       activeRole,
@@ -99,20 +127,27 @@ App({
       patientRef: nextPatientRef
     }
     Object.assign(this.globalData, auth)
-    wx.setStorageSync('cdms.miniapp.auth', auth)
+    this.globalData.accessToken = session.token || ''
+    sessionStore.writeAuth(auth)
+  },
+
+  clearRoleContext () {
+    wx.removeStorageSync('cdms.miniapp.wearable')
+    this.globalData.patientRef = ''
+    this.globalData.taskId = ''
+    this.globalData.wearableToken = ''
+    this.globalData.wearableSessionId = ''
+    this.globalData.wearableDeviceRef = ''
+    this.globalData.deviceRef = ''
   },
 
   clearAuth () {
-    wx.removeStorageSync('cdms.miniapp.auth')
-    wx.removeStorageSync('cdms.miniapp.wearable')
+    sessionStore.clearAuth()
+    this.clearRoleContext()
     this.globalData.accessToken = ''
     this.globalData.refreshToken = ''
     this.globalData.identityId = ''
     this.globalData.activeRole = ''
     this.globalData.roles = []
-    this.globalData.wearableToken = ''
-    this.globalData.wearableSessionId = ''
-    this.globalData.wearableDeviceRef = ''
-    this.globalData.patientRef = ''
   }
 })

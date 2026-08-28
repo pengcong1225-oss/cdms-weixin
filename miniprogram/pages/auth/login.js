@@ -1,11 +1,23 @@
 const api = require('../../utils/api')
-const { getRoleEntry } = require('../../utils/role-entry')
+const { getRoleEntry, canEnterRole } = require('../../utils/role-entry')
 
 Page({
   data: { mode: 'doctor', username: '', password: '', phone: '', loading: false, roleSelectionRequired: false, roles: [] },
-  onLoad (query) {
+  async onLoad (query) {
     const app = getApp()
     if (query?.cdmsBaseUrl) app.globalData.cdmsBaseUrl = query.cdmsBaseUrl
+    if (app.globalData.accessToken && app.globalData.refreshToken) {
+      await this.enterRole(app.globalData)
+      return
+    }
+    if (app.globalData.refreshToken && app.globalData.cdmsBaseUrl) {
+      try {
+        await api.refreshAccessToken()
+        await this.enterRole(app.globalData)
+      } catch (error) {
+        if (error && error.reauthRequired && typeof app.clearAuth === 'function') app.clearAuth()
+      }
+    }
   },
   selectMode (event) { this.setData({ mode: event.currentTarget.dataset.mode, roleSelectionRequired: false, roles: [] }) },
   onUsername (e) { this.setData({ username: e.detail.value }) },
@@ -46,6 +58,10 @@ Page({
   },
   async enterRole (session) {
     const entry = getRoleEntry(session?.activeRole)
+    if (!canEnterRole(session)) {
+      wx.reLaunch({ url: '/pages/auth/login' })
+      return
+    }
     if (entry.type === 'H5') {
       const response = await api.createHandoff(entry.targetPath)
       const handoff = response?.data || response

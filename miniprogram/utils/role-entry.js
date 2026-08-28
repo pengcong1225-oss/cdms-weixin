@@ -4,4 +4,12 @@ function getRoleEntry (activeRole) {
   return { type: 'LOGIN' }
 }
 
-module.exports = { getRoleEntry }
+function canEnterRole (session) {
+  const activeRole = session?.activeRole
+  if (activeRole !== 'DOCTOR' && activeRole !== 'PATIENT') return false
+  const roles = Array.isArray(session.roles) ? session.roles : []
+  if (!roles.length) return true
+  return roles.some(role => role && role.roleType === activeRole)
+}
+
+module.exports = { getRoleEntry, canEnterRole }

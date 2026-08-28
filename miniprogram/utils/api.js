@@ -1,5 +1,6 @@
 const queueKey = 'cdms.iot.wearable.upload.queue'
 let refreshPromise = null
+const authRevocationCodes = ['TOKEN_REVOKED', 'ACCOUNT_DISABLED', 'ROLE_REVOKED', 'CREDENTIAL_CHANGED']
 
 function queueStorageKey (scope) {
   const safeScope = String(scope || 'anonymous').replace(/[^A-Za-z0-9_.-]/g, '_')
@@ -34,11 +35,20 @@ function request (url, method, data, token) {
         const error = new Error(`HTTP ${res.statusCode}`)
         error.statusCode = res.statusCode
         error.response = res.data
-        if (res.data?.code) error.code = res.data.code
+        if (res.data?.code && res.data.code !== 401) error.code = res.data.code
         reject(error)
       },
-      fail: reject })
+      fail: error => {
+        const requestError = error instanceof Error ? error : new Error(error?.errMsg || '网络请求失败')
+        if (/timeout/i.test(requestError.message || requestError.errMsg || '')) requestError.kind = 'TIMEOUT'
+        else requestError.kind = 'NETWORK'
+        reject(requestError)
+      } })
   })
+}
+
+function shouldClearAuth (error) {
+  return error && error.statusCode === 401 && authRevocationCodes.includes(error.code)
 }
 
 function cdmsBaseUrl () {
@@ -64,7 +74,7 @@ async function cdmsRequestWithRetry (path, method, data, token, allowRefresh) {
       const nextToken = await refreshAccessToken()
       return request(`${baseUrl}${path}`, method, data, nextToken)
     } catch (refreshError) {
-      if (typeof app.clearAuth === 'function') app.clearAuth()
+      if (shouldClearAuth(refreshError) && typeof app.clearAuth === 'function') app.clearAuth()
       throw refreshError
     }
   }
@@ -82,6 +92,9 @@ function refreshAccessToken () {
       if (!session?.token || !session?.refreshToken) throw new Error('Refresh Token 响应无效')
       if (typeof app.saveAuth === 'function') app.saveAuth(session)
       return session.token
+    }).catch(error => {
+      if (shouldClearAuth(error)) error.reauthRequired = true
+      throw error
     }).finally(() => { refreshPromise = null })
   }
   return refreshPromise
@@ -128,8 +141,10 @@ function loginWithWechat ({ baseUrl, phone }) {
 
 async function logout () {
   const app = getApp()
-  if (!app?.globalData?.accessToken) return null
-  return cdmsRequest('/api/v1/miniapp/auth/logout', 'POST', {}, app.globalData.accessToken)
+  const token = app?.globalData?.accessToken || ''
+  if (typeof app?.clearAuth === 'function') app.clearAuth()
+  if (!token) return null
+  return cdmsRequest('/api/v1/miniapp/auth/logout', 'POST', {}, token)
 }
 
 async function switchRole (roleType) {
@@ -193,4 +208,4 @@ function enqueue (batch) {
   writeQueue([batch], scope)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
+module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, cdmsRequest, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
