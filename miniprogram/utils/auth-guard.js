@@ -6,6 +6,10 @@ async function ensureSession ({ role, redirect = true } = {}) {
   const app = getApp()
   const auth = app?.globalData || {}
   if (hasUsableSession(auth, role)) return auth
+  if (app?.restoreSessionPromise) {
+    await app.restoreSessionPromise
+    if (hasUsableSession(auth, role)) return auth
+  }
   if (!String(auth.accessToken || '').trim() && String(auth.refreshToken || '').trim()) {
     try {
       const api = require('./api')

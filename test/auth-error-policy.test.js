@@ -118,6 +118,50 @@ test('server-confirmed refresh revocation clears persisted auth', async () => {
   assert.equal(storage.has('cdms.miniapp.auth'), false)
 })
 
+test('original protected request role revocation clears auth without refresh', async () => {
+  const requests = []
+  const redirects = []
+  const cleared = []
+  global.getApp = () => ({
+    globalData: {
+      cdmsBaseUrl: 'https://cdms.example.com',
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1'
+    },
+    clearAuth: () => cleared.push('clearAuth')
+  })
+  global.wx = {
+    reLaunch: options => redirects.push(options),
+    request (options) {
+      requests.push(options)
+      if (options.url.endsWith('/api/v1/patients')) {
+        options.success({ statusCode: 401, data: { code: 'ROLE_REVOKED', message: 'role revoked' } })
+        return
+      }
+      if (options.url.endsWith('/api/v1/miniapp/auth/refresh')) {
+        options.success({ statusCode: 200, data: { data: {
+          token: 'access-2',
+          refreshToken: 'refresh-2',
+          activeRole: 'PATIENT'
+        } } })
+        return
+      }
+      options.fail(new Error(`unexpected request: ${options.url}`))
+    }
+  }
+
+  delete require.cache[require.resolve('../miniprogram/utils/api')]
+  const api = require('../miniprogram/utils/api')
+
+  await assert.rejects(
+    () => api.cdmsRequest('/api/v1/patients', 'GET', null, 'access-1'),
+    /HTTP 401/
+  )
+  assert.equal(requests.length, 1)
+  assert.deepStrictEqual(cleared, ['clearAuth'])
+  assert.deepStrictEqual(redirects, [{ url: '/pages/auth/login' }])
+})
+
 test('explicit logout clears local auth before best-effort server logout', async () => {
   const sequence = []
   global.getApp = () => ({

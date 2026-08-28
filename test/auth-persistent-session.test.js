@@ -73,6 +73,44 @@ test('restart restores from refresh token without login form', async () => {
   assert.deepStrictEqual(result.redirects, [])
 })
 
+test('restart refresh-token-only storage uses runtime default cdms base url', async () => {
+  const requests = []
+  const redirects = []
+  const { storage, wx } = createWxStorage({
+    'cdms.miniapp.auth': { refreshToken: 'refresh-1' }
+  })
+  wx.reLaunch = options => redirects.push(options)
+  wx.request = options => {
+    requests.push(options)
+    options.success({ statusCode: 200, data: { data: {
+      token: 'access-2',
+      refreshToken: 'refresh-2',
+      identityId: 'identity-1',
+      activeRole: 'PATIENT',
+      roles: [{ roleType: 'PATIENT', patientId: 'patient-1' }]
+    } } })
+  }
+
+  global.wx = wx
+  let appConfig
+  global.App = config => { appConfig = config }
+  global.getApp = () => appConfig
+
+  delete require.cache[require.resolve('../miniprogram/utils/session-store')]
+  delete require.cache[require.resolve('../miniprogram/utils/api')]
+  delete require.cache[require.resolve('../miniprogram/app.js')]
+  require('../miniprogram/app.js')
+
+  appConfig.onLaunch({})
+  await appConfig.restoreSessionPromise
+
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, 'https://jq.mockr.com.cn/cdmsapi/api/v1/miniapp/auth/refresh')
+  assert.equal(appConfig.globalData.cdmsBaseUrl, 'https://jq.mockr.com.cn/cdmsapi')
+  assert.equal(storage.get('cdms.miniapp.auth').cdmsBaseUrl, 'https://jq.mockr.com.cn/cdmsapi')
+  assert.deepStrictEqual(redirects, [])
+})
+
 test('saveAuth persists refresh snapshot without access token', () => {
   const { storage, wx } = createWxStorage()
   global.wx = wx
@@ -213,4 +251,54 @@ test('login page enters restored patient session after silent refresh', async ()
   assert.equal(requests.length, 1)
   assert.equal(globalData.accessToken, 'access-2')
   assert.deepStrictEqual(redirects, [{ url: '/pages/home/home' }])
+})
+
+test('home page waits for silent restore before login redirect', async () => {
+  const redirects = []
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms.example.com',
+    accessToken: '',
+    refreshToken: 'refresh-1',
+    activeRole: 'PATIENT',
+    roles: [{ roleType: 'PATIENT', patientId: 'patient-1' }],
+    patientRef: 'patient-1'
+  }
+  let resolveRestore
+  const restoreSessionPromise = new Promise(resolve => {
+    resolveRestore = () => {
+      globalData.accessToken = 'access-2'
+      globalData.refreshToken = 'refresh-2'
+      resolve(globalData)
+    }
+  })
+  const app = { globalData, restoreSessionPromise }
+
+  global.getApp = () => app
+  global.wx = {
+    getStorageSync: () => null,
+    setStorageSync: () => {},
+    removeStorageSync: () => {},
+    reLaunch: options => redirects.push(options),
+    showToast: () => {}
+  }
+  let pageConfig
+  global.Page = config => { pageConfig = config }
+
+  delete require.cache[require.resolve('../miniprogram/services/bleManager')]
+  delete require.cache[require.resolve('../miniprogram/utils/storage')]
+  delete require.cache[require.resolve('../miniprogram/utils/api')]
+  delete require.cache[require.resolve('../miniprogram/utils/auth-guard')]
+  delete require.cache[require.resolve('../miniprogram/pages/home/home.js')]
+  require('../miniprogram/pages/home/home.js')
+  pageConfig.setData = values => { pageConfig.data = Object.assign({}, pageConfig.data, values) }
+
+  const onLoad = pageConfig.onLoad()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepStrictEqual(redirects, [])
+
+  resolveRestore()
+  await onLoad
+
+  assert.deepStrictEqual(redirects, [])
+  assert.equal(pageConfig.data.activeRole, 'PATIENT')
 })

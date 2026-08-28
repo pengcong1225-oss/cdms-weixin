@@ -2,6 +2,7 @@ const bleManager = require("../../services/bleManager");
 const { getHealthCards } = require("../../utils/capabilities");
 const { formatTime } = require("../../utils/format");
 const api = require("../../utils/api");
+const { ensureSession } = require("../../utils/auth-guard");
 const { getRoleEntry } = require("../../utils/role-entry");
 const { getWorkspaceEntries } = require("../../utils/workspace-entry");
 
@@ -21,16 +22,14 @@ Page({
     workspaceEntries: []
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp()
+    const session = await this.ensureRestoredSession()
+    if (!session) return
     const activeRole = app.globalData.activeRole || ''
     this.setData({ activeRole, workspaceEntries: getWorkspaceEntries(activeRole) })
     if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
       this.redirectDoctorWorkspace()
-      return
-    }
-    if (app.globalData.cdmsBaseUrl && !app.globalData.accessToken) {
-      wx.reLaunch({ url: '/pages/auth/login' })
       return
     }
     this.unsubscribe = bleManager.subscribe((state) => {
@@ -51,18 +50,31 @@ Page({
     });
   },
 
-  onShow() {
+  async onShow() {
     const app = getApp()
+    const session = await this.ensureRestoredSession()
+    if (!session) return
     if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
       this.redirectDoctorWorkspace()
       return
     }
-    if (app.globalData.cdmsBaseUrl && !app.globalData.accessToken) {
-      wx.reLaunch({ url: '/pages/auth/login' })
-      return
-    }
     const state = bleManager.snapshot();
     this.setData({ healthCards: getHealthCards(state.boundDevice, state.realtimeHealth) });
+  },
+
+  async ensureRestoredSession() {
+    const app = getApp()
+    if (!app.globalData.cdmsBaseUrl) return app.globalData
+    try {
+      return await ensureSession({ redirect: false })
+    } catch (error) {
+      if (error?.reauthRequired || !app.globalData.refreshToken) {
+        wx.reLaunch({ url: '/pages/auth/login' })
+      } else {
+        wx.showToast({ title: error.message || '登录状态恢复失败', icon: 'none' })
+      }
+      return null
+    }
   },
 
   onUnload() {
@@ -170,6 +182,8 @@ Page({
 
   async openCdmsWorkspace () {
     const app = getApp()
+    const session = await this.ensureRestoredSession()
+    if (!session) return
     if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) {
       wx.reLaunch({ url: '/pages/auth/login' })
       return
@@ -192,6 +206,8 @@ Page({
       return
     }
     const app = getApp()
+    const session = await this.ensureRestoredSession()
+    if (!session) return
     if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) {
       wx.reLaunch({ url: '/pages/auth/login' })
       return
@@ -208,6 +224,8 @@ Page({
   async redirectDoctorWorkspace () {
     if (this.workspaceOpening) return
     const app = getApp()
+    const session = await this.ensureRestoredSession()
+    if (!session) return
     if (!app.globalData.accessToken || !app.globalData.cdmsBaseUrl) {
       wx.reLaunch({ url: '/pages/auth/login' })
       return

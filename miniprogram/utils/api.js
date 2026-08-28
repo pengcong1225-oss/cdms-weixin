@@ -1,6 +1,7 @@
 const queueKey = 'cdms.iot.wearable.upload.queue'
 let refreshPromise = null
 const authRevocationCodes = ['TOKEN_REVOKED', 'ACCOUNT_DISABLED', 'ROLE_REVOKED', 'CREDENTIAL_CHANGED']
+const runtimeConfig = require('../config/runtime')
 
 function queueStorageKey (scope) {
   const safeScope = String(scope || 'anonymous').replace(/[^A-Za-z0-9_.-]/g, '_')
@@ -52,7 +53,7 @@ function shouldClearAuth (error) {
 }
 
 function cdmsBaseUrl () {
-  try { return getApp()?.globalData?.cdmsBaseUrl || '' } catch (_) { return '' }
+  try { return getApp()?.globalData?.cdmsBaseUrl || runtimeConfig.cdmsBaseUrl || '' } catch (_) { return runtimeConfig.cdmsBaseUrl || '' }
 }
 
 function cdmsRequest (path, method, data, token) {
@@ -68,6 +69,11 @@ async function cdmsRequestWithRetry (path, method, data, token, allowRefresh) {
     const app = getApp()
     const isAuthEndpoint = path.includes('/auth/login') || path.includes('/auth/refresh')
       || path.includes('/handoff/redeem')
+    if (!isAuthEndpoint && shouldClearAuth(error)) {
+      if (typeof app.clearAuth === 'function') app.clearAuth()
+      wx.reLaunch({ url: '/pages/auth/login' })
+      throw error
+    }
     if (!allowRefresh || !token || error?.statusCode !== 401 || isAuthEndpoint
       || !app?.globalData?.refreshToken) throw error
     try {

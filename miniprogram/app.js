@@ -35,7 +35,7 @@ App({
     const snapshot = sessionStore.readAuth()
     this.restoreAuth(snapshot)
     this.applyBridgeQuery(options?.query)
-    this.restoreSessionInBackground()
+    this.restoreSessionPromise = this.restoreSessionInBackground()
     this.initNativeServices()
   },
   initNativeServices () {
@@ -68,6 +68,7 @@ App({
 
   restoreAuth (snapshot) {
     const auth = snapshot || sessionStore.readAuth() || {}
+    if (auth.refreshToken && !auth.cdmsBaseUrl) auth.cdmsBaseUrl = this.globalData.cdmsBaseUrl
     Object.assign(this.globalData, auth)
     const wearable = wx.getStorageSync('cdms.miniapp.wearable') || {}
     const authPatientRef = String(auth.patientRef || '').trim()
@@ -119,7 +120,7 @@ App({
       this.clearRoleContext()
     }
     const auth = {
-      cdmsBaseUrl: this.globalData.cdmsBaseUrl,
+      cdmsBaseUrl: session.cdmsBaseUrl || this.globalData.cdmsBaseUrl || runtimeConfig.cdmsBaseUrl,
       refreshToken: session.refreshToken || '',
       identityId: session.identityId || '',
       activeRole,
