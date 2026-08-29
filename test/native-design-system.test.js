@@ -4,6 +4,7 @@ const path = require('path')
 const test = require('node:test')
 
 const root = path.resolve(__dirname, '..')
+const choiceTilePath = path.join(root, 'miniprogram/components/choice-tile/choice-tile.js')
 
 function read (relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8')
@@ -55,9 +56,32 @@ test('shared native components declare serializable properties and named events'
   assertComponentContract('stat-card', ['title', 'value', 'caption', 'tone'], [])
   assertComponentContract('status-tag', ['text', 'tone'], [])
   assertComponentContract('form-section', ['title', 'caption'], [])
-  assertComponentContract('choice-tile', ['options', 'value', 'multiple'], ['change'])
+  assertComponentContract('choice-tile', ['options', 'value', 'multiple', 'disabled'], ['change'])
   assertComponentContract('state-panel', ['state', 'title', 'message', 'actionText'], ['action'])
   assertComponentContract('bottom-action-bar', ['primaryText', 'secondaryText', 'loading'], ['primary', 'secondary'])
+})
+
+test('choice-tile ignores taps while disabled', () => {
+  const previousComponent = global.Component
+  let captured
+  global.Component = config => {
+    captured = config
+    captured.data = {}
+    captured.triggerEvent = (name, detail) => {
+      captured.events.push({ name, detail })
+    }
+    captured.events = []
+  }
+  delete require.cache[choiceTilePath]
+  try {
+    require(choiceTilePath)
+    captured.data = { value: '0', multiple: false, disabled: true }
+    captured.methods.change.call(captured, { currentTarget: { dataset: { value: '1' } } })
+    assert.deepStrictEqual(captured.events, [])
+  } finally {
+    global.Component = previousComponent
+    delete require.cache[choiceTilePath]
+  }
 })
 
 test('doctor and patient workspace pages share native visual components', () => {

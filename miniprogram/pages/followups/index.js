@@ -65,6 +65,14 @@ Page({
         ? '医生在患者上下文中查看和新建随访'
         : '患者仅查看自己的随访历史'
     })
+    if (scope === 'DOCTOR' && !patientId) {
+      this.setData({
+        loading: false,
+        empty: false,
+        error: '请选择患者后再查看随访'
+      })
+      return
+    }
     await this.loadFollowups(true)
   },
 

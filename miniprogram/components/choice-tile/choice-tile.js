@@ -6,10 +6,12 @@ Component({
   properties: {
     options: { type: Array, value: [] },
     value: { type: null, value: '' },
-    multiple: { type: Boolean, value: false }
+    multiple: { type: Boolean, value: false },
+    disabled: { type: Boolean, value: false }
   },
   methods: {
     change (event) {
+      if (this.data.disabled) return
       const selected = event.currentTarget.dataset.value
       if (this.data.multiple) {
         const current = Array.isArray(this.data.value) ? this.data.value.slice() : []

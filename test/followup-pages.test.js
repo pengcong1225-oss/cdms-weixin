@@ -3,10 +3,12 @@ const path = require('path')
 const test = require('node:test')
 
 const root = path.resolve(__dirname, '..')
+const fs = require('fs')
 const authGuardPath = path.join(root, 'miniprogram/utils/auth-guard.js')
 const followupApiPath = path.join(root, 'miniprogram/utils/followup-api.js')
 const messageApiPath = path.join(root, 'miniprogram/utils/message-api.js')
 const statsApiPath = path.join(root, 'miniprogram/utils/stats-api.js')
+const followupDetailWxmlPath = path.join(root, 'miniprogram/pages/followups/detail.wxml')
 
 function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
   const pages = []
@@ -171,6 +173,41 @@ test('followup list switches between patient and doctor scope and opens detail p
   }
 })
 
+test('doctor followup list without patient context blocks personal fallback', async () => {
+  const doctorCalls = []
+  const doctorEnv = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        listMyFollowups: async () => {
+          throw new Error('patient scope should not be used for doctor without patient context')
+        },
+        listPatientFollowups: async (patientId, params) => {
+          doctorCalls.push({ patientId, params })
+          return { list: [], total: 0, page: 1, pageSize: 20 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/index.js')
+    const page = doctorEnv.pages[0]
+
+    await page.onLoad()
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '')
+    assert.strictEqual(page.data.error, '请选择患者后再查看随访')
+    assert.strictEqual(page.data.followups.length, 0)
+    assert.deepStrictEqual(doctorCalls, [])
+  } finally {
+    doctorEnv.cleanup()
+  }
+})
+
 test('followup detail blocks invalid submit, saves drafts, and uploads photos', async () => {
   const calls = []
   let allowSubmit = false
@@ -316,6 +353,39 @@ test('messages page marks one message read and refreshes unread count', async ()
   }
 })
 
+test('messages page normalizes records and items response shapes before rendering', async () => {
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '768495013408443' })
+      },
+      [messageApiPath]: {
+        listMessages: async () => ({
+          records: [
+            { id: 1002, patientId: 768495013408443, alertId: 2002, title: '复诊短信', content: '请查看记录', read: true, createTime: '2026-08-28T10:00:00' }
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 20
+        }),
+        getUnreadCount: async () => ({ count: 0 })
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/messages/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+
+    assert.strictEqual(page.data.messages[0].id, '1002')
+    assert.strictEqual(page.data.messages[0].patientId, '768495013408443')
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('statistics page loads patient and doctor scopes using the selected time range', async () => {
   const patientCalls = []
   const patientEnv = installPageEnv({
@@ -393,6 +463,7 @@ test('statistics page loads patient and doctor scopes using the selected time ra
     assert.strictEqual(doctorCalls[1][1].orgId, '1972545374712086529')
     assert.strictEqual(doctorCalls[1][1].month, '2026-08')
     assert.strictEqual(page.data.summaryCards[0].value, '12')
+    assert.strictEqual(page.data.highlightRows[0].caption, '')
   } finally {
     doctorEnv.cleanup()
   }
@@ -429,4 +500,12 @@ test('patient workspace without patientRef only shows the masked prompt and fixe
   } finally {
     env.cleanup()
   }
+})
+
+test('followup detail wxml keeps choice-tile read-only bindings when canEdit is false', () => {
+  const wxml = fs.readFileSync(followupDetailWxmlPath, 'utf8')
+  assert.ok(wxml.includes('<choice-tile options="{{visitTypeOptions}}" value="{{form.visitType}}" disabled="{{!canEdit}}" bindchange="onChoiceChange" data-field="visitType" />'))
+  assert.ok(wxml.includes('<choice-tile options="{{patientStatusOptions}}" value="{{form.patientStatus}}" disabled="{{!canEdit}}" bindchange="onChoiceChange" data-field="patientStatus" />'))
+  assert.ok(wxml.includes('<choice-tile options="{{catOptions}}" value="{{form.catAnswers[index]}}" disabled="{{!canEdit}}" bindchange="onCatChange" data-index="{{index}}" />'))
+  assert.ok(wxml.includes('<choice-tile options="{{mmrcOptions}}" value="{{form.mmrcOption}}" disabled="{{!canEdit}}" bindchange="onChoiceChange" data-field="mmrcOption" />'))
 })

@@ -11,6 +11,10 @@
   background: #fbfdfc;
 }
 
+.choice-tile--disabled {
+  opacity: 0.6;
+}
+
 .choice-title {
   color: var(--cdms-text);
   font-size: 26rpx;

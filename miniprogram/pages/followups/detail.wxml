@@ -18,23 +18,23 @@
       <input class="form-input" value="{{form.visitDate}}" disabled="{{!canEdit}}" placeholder="随访日期时间" bindinput="updateField" data-field="visitDate" />
       <view class="choice-block">
         <view class="choice-title">随访类型</view>
-        <choice-tile options="{{visitTypeOptions}}" value="{{form.visitType}}" bindchange="onChoiceChange" data-field="visitType" />
+        <choice-tile options="{{visitTypeOptions}}" value="{{form.visitType}}" disabled="{{!canEdit}}" bindchange="onChoiceChange" data-field="visitType" />
       </view>
       <view class="choice-block">
         <view class="choice-title">患者状态</view>
-        <choice-tile options="{{patientStatusOptions}}" value="{{form.patientStatus}}" bindchange="onChoiceChange" data-field="patientStatus" />
+        <choice-tile options="{{patientStatusOptions}}" value="{{form.patientStatus}}" disabled="{{!canEdit}}" bindchange="onChoiceChange" data-field="patientStatus" />
       </view>
     </form-section>
 
     <form-section title="CAT 评估" caption="8 项原始答案全部由服务端计算 CAT">
       <view wx:for="{{catQuestions}}" wx:key="index" class="cat-item">
         <view class="cat-label">{{index + 1}}. {{item}}</view>
-        <choice-tile options="{{catOptions}}" value="{{form.catAnswers[index]}}" bindchange="onCatChange" data-index="{{index}}" />
+        <choice-tile options="{{catOptions}}" value="{{form.catAnswers[index]}}" disabled="{{!canEdit}}" bindchange="onCatChange" data-index="{{index}}" />
       </view>
     </form-section>
 
     <form-section title="mMRC" caption="呼吸困难分级">
-      <choice-tile options="{{mmrcOptions}}" value="{{form.mmrcOption}}" bindchange="onChoiceChange" data-field="mmrcOption" />
+      <choice-tile options="{{mmrcOptions}}" value="{{form.mmrcOption}}" disabled="{{!canEdit}}" bindchange="onChoiceChange" data-field="mmrcOption" />
     </form-section>
 
     <form-section title="主诉与用药" caption="原生表单仅做信息采集">

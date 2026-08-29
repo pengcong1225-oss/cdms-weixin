@@ -30,6 +30,13 @@ function friendlyError (error) {
   return '消息加载失败'
 }
 
+function normalizeList (result) {
+  if (Array.isArray(result?.list)) return result.list
+  if (Array.isArray(result?.records)) return result.records
+  if (Array.isArray(result?.items)) return result.items
+  return []
+}
+
 Page({
   data: {
     loading: false,
@@ -57,7 +64,7 @@ Page({
         messageApi.listMessages({ page, pageSize }),
         messageApi.getUnreadCount()
       ])
-      const list = Array.isArray(messagesResult?.list) ? messagesResult.list : []
+      const list = normalizeList(messagesResult)
       const messages = list.map(formatMessage)
       const total = Number(messagesResult?.total || messages.length || 0)
       const unreadCount = Number(unreadResult?.count ?? unreadResult ?? 0)

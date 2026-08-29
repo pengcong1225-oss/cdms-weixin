@@ -67,7 +67,7 @@ function buildHighlightRows (items) {
   return (Array.isArray(items) ? items : []).map(item => ({
     label: valueText(item?.name || item?.riskLevelText || item?.levelText, '重点患者'),
     value: [valueText(item?.catScore, '-'), valueText(item?.age, '-'), valueText(item?.riskLevelText || item?.riskLevel, '-')].join(' · '),
-    caption: item?.patientId ? `患者ID ${item.patientId}` : ''
+    caption: ''
   }))
 }
 
