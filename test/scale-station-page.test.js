@@ -227,19 +227,15 @@ test('station page saves a draft, confirms it, and closes only after discard is 
             currentQueueItem: {
               id: queueItemId,
               status: 'COMPLETED',
-              draftId,
+              draftId: null,
               draftStatus: 'CONFIRMED',
               patientSummary: { maskedName: '测试患者2', gender: 1, age: 68, height: 172 }
             },
-            currentDraft: {
-              id: draftId,
-              status: 'CONFIRMED',
-              queueItemId
-            },
+            currentDraft: null,
             queue: [{
               id: queueItemId,
               status: 'COMPLETED',
-              draftId,
+              draftId: null,
               draftStatus: 'CONFIRMED',
               patientSummary: { maskedName: '测试患者2', gender: 1, age: 68, height: 172 }
             }]
@@ -271,6 +267,7 @@ test('station page saves a draft, confirms it, and closes only after discard is 
       metrics: [{ name: 'weight', value: 65.2, unit: 'kg' }]
     })
     await page.confirmMeasurement()
+    assert.strictEqual(page.data.currentDraft, null)
     await page.closeStation()
 
     assert.strictEqual(calls[0][0], 'draft')
@@ -280,7 +277,7 @@ test('station page saves a draft, confirms it, and closes only after discard is 
     assert.strictEqual(calls[1][0], 'confirm')
     assert.strictEqual(calls[1][3], 'draft-1')
     assert.strictEqual(calls[2][0], 'close')
-    assert.deepStrictEqual(calls[2][2], { idempotencyKey: calls[2][2].idempotencyKey, discardDraftIds: ['draft-1'] })
+    assert.deepStrictEqual(calls[2][2], { idempotencyKey: calls[2][2].idempotencyKey, discardDraftIds: [] })
   } finally {
     env.cleanup()
   }

@@ -47,7 +47,7 @@ function createActionKey (prefix) {
 
 function currentDraftFromQueueItem (item) {
   if (!item) return null
-  if (!item.draftId && !item.draftStatus) return null
+  if (!item.draftId) return null
   return {
     id: valueText(item.draftId),
     status: valueText(item.draftStatus, 'RESULT_PENDING')

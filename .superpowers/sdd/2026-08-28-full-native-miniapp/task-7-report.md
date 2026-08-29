@@ -36,3 +36,23 @@ Files touched in this miniapp pass:
 Concerns:
 
 - None remaining in the miniapp scope for Task 7.
+
+## Fix round 1 evidence
+
+Date: 2026-08-29
+
+Scope:
+
+- Required the station draft flow to stay bound to the active called/measuring patient.
+- Cleared the confirmed draft marker in the miniapp station flow so close does not carry a discardable draft forward after confirmation.
+
+Verification:
+
+- `node --test test/station-api.test.js test/scale-station-page.test.js` — PASS
+- `node --test` — PASS
+  - Result: 84 tests passed, 0 failed.
+- `node --check 'miniprogram/pages/device-scale/station/index.js'; node --check 'test/scale-station-page.test.js'; node --check 'miniprogram/utils/station-api.js'; git diff --check` — PASS
+
+Notes:
+
+- The confirmed station draft now clears before close, so multi-patient sessions can close without carrying historical confirmed drafts into the discard gate.
