@@ -2,6 +2,11 @@ const bleManager = require("../../services/bleManager");
 const { getSettings } = require("../../utils/capabilities");
 const { SensorRawControl } = require("../../sdk/rw-ble-sdk.min.js");
 
+const doctorEntries = [
+  { key: "mfa1", title: "MFA-1 会话工作站", subtitle: "创建采集会话、签发 WSS 令牌", icon: "采", disabled: false },
+  { key: "sunvou", title: "Sunvou 报告工作站", subtitle: "查询标准报告和短时访问地址", icon: "报", disabled: false },
+];
+
 function choose(itemList) {
   return new Promise((resolve) => {
     wx.showActionSheet({
@@ -87,11 +92,14 @@ Page({
     settings: [],
     firmwareText: "--",
     modelText: "--",
-    powerText: "--"
+    powerText: "--",
+    activeRole: "PATIENT",
+    doctorEntries: [],
   },
 
   onLoad() {
     this.settingValues = {};
+    this.syncRoleState();
     this.unsubscribe = bleManager.subscribe((state) => {
       this.applyState(state);
       this.bindDeviceEvent();
@@ -99,6 +107,7 @@ Page({
   },
 
   onShow() {
+    this.syncRoleState();
     this.applyState(bleManager.snapshot());
   },
 
@@ -121,6 +130,15 @@ Page({
       if (event.type !== "sensorStopped") return;
       console.log("device stopped sensor", event.reason);
       this.updateSettingValue("sensorRawPPG", "采集完成");
+    });
+  },
+
+  syncRoleState() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const activeRole = app?.globalData?.activeRole === "DOCTOR" ? "DOCTOR" : "PATIENT";
+    this.setData({
+      activeRole,
+      doctorEntries: activeRole === "DOCTOR" ? doctorEntries : [],
     });
   },
 
@@ -151,6 +169,18 @@ Page({
 
   openFirmwareUpgrade() {
     wx.navigateTo({ url: "/pages/firmware-upgrade/firmware-upgrade" });
+  },
+
+  onDoctorEntrySelect(event) {
+    const entry = this.data.doctorEntries[event.currentTarget.dataset.index];
+    if (!entry || entry.disabled) return;
+    if (entry.key === "mfa1") {
+      wx.navigateTo({ url: "/pages/device-mfa1/index" });
+      return;
+    }
+    if (entry.key === "sunvou") {
+      wx.navigateTo({ url: "/pages/device-sunvou/index" });
+    }
   },
 
   async reconnect() {

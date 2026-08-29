@@ -1,0 +1,47 @@
+.device-mfa1-page .workspace-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20rpx;
+}
+
+.field-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: #f7faf8;
+}
+
+.field-label,
+.status-line {
+  font-size: 28rpx;
+  color: #46525d;
+}
+
+.field-input {
+  min-height: 80rpx;
+  padding: 0 24rpx;
+  border-radius: 18rpx;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.status-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}

@@ -35,6 +35,8 @@ test('native workspace routes are registered and h5 webview route is removed', (
   const appConfig = JSON.parse(fs.readFileSync(path.join(root, 'miniprogram/app.json'), 'utf8'))
   assert.ok(appConfig.pages.includes('pages/doctor/workspace/index'))
   assert.ok(appConfig.pages.includes('pages/patient/workspace/index'))
+  assert.ok(appConfig.pages.includes('pages/device-mfa1/index'))
+  assert.ok(appConfig.pages.includes('pages/device-sunvou/index'))
   assert.equal(appConfig.pages.some(page => page.includes('pages/h5')), false)
 })
 

@@ -3,7 +3,7 @@
 ## Scope
 
 - Task 1 output for `feature/full-native-miniapp`.
-- Consumers: `patient-api.js`, `followup-api.js`, `monitoring-api.js`, `report-api.js`, `station-api.js`.
+- Consumers: `patient-api.js`, `followup-api.js`, `monitoring-api.js`, `report-api.js`, `station-api.js`, `acquisition-api.js`, `sunvou-api.js`.
 - Evidence base: inspected `cdms/backend/src/main/java/com/cdms/followup/controller/*` and `cdms-iot/core/src/main/java/com/cdms/iot/core/*`.
 - Public screening route distinction is explicit: `/api/v1/screening/h5/*` belongs to `cdmsManager`, not `cdms` followup.
 - Evidence base for screening routes: inspected `cdmsManager/backend/src/main/java/com/cdms/manager/controller/ScreeningController.java` including `h5Questions`, `h5Organizations`, and `h5Submit`.
@@ -19,6 +19,9 @@
 - `Statistics -> /pages/statistics/index`
 - `History/Reports -> /pages/reports/index`
 - `体脂秤工作站 -> /pages/device-scale/station/index`
+- `MFA-1 会话工作站 -> /pages/device-mfa1/index`
+- `Sunvou 报告工作站 -> /pages/device-sunvou/index`
+- `医生设备工作站 -> /pages/device/device`
 
 ## Cross-Cutting Contract Rules
 
@@ -99,6 +102,8 @@
 - `GET /v1/measurements`
 - `POST /v1/acquisition-sessions`
 - `GET /v1/acquisition-sessions/{sessionId}`
+- `POST /v1/acquisition-sessions/{sessionId}/wss-token`
+- `POST /v1/acquisition-sessions/{sessionId}/cancel`
 - `GET /v1/reports`
 - `GET /api/v1/screening/h5/questions`
 - `GET /api/v1/screening/h5/organizations`
@@ -158,6 +163,8 @@
 | IoT data | protected measurement query | GET | `/v1/measurements` | `patientRef`, optional `orgId`, `types`, `from`, `to`, `limit` | `latest`, `trend`, `daily` | `wearable`, `reports`, or `admin` scope | `400`, `401`, `403` | No |
 | IoT acquisition | session create | POST | `/v1/acquisition-sessions` | signed body with `businessSessionId`, `orgId`, `patientRef`, `deviceType`, `sourceChannel`, `traceId`, optional `expiresInSeconds` | `AcquisitionSessionResponse` | `acquisition` or `admin` scope | `400`, `401`, `403` | No |
 | IoT acquisition | session lookup | GET | `/v1/acquisition-sessions/{sessionId}` | `{sessionId}` as String | `AcquisitionSessionResponse` | `acquisition` or `admin` scope | `401`, `403`, `404` | No |
+| IoT acquisition | wss token | POST | `/v1/acquisition-sessions/{sessionId}/wss-token` | `{sessionId}` as String | `WssTokenResponse` | `wss` or `admin` scope | `401`, `403`, `404`, `409` | No |
+| IoT acquisition | cancel | POST | `/v1/acquisition-sessions/{sessionId}/cancel` | `{sessionId}` as String; optional `reason` | `AcquisitionSessionResponse` | `acquisition` or `admin` scope | `401`, `403`, `404`, `409` | No |
 | IoT reports | protected report list | GET | `/v1/reports` | `patientId` or `orgId`, `category`, `cursor`, `limit` | `items`, `nextCursor` | `reports` scope; unscoped callers also need `reports:global` | `400`, `401`, `403` | No |
 
 ## Protected Station-Contract Gap

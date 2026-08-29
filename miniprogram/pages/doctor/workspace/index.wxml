@@ -17,5 +17,5 @@
     bindselect="onEntrySelect"
   />
 
-  <state-panel state="empty" title="后续业务分批接入" message="患者管理已原生化，随访、报告和设备入口将在后续任务开放。" />
+  <state-panel state="empty" title="后续业务分批接入" message="患者管理已原生化，随访与报告继续按任务推进，设备工作站可进入指环、MFA-1 和 Sunvou 原生入口。" />
 </view>

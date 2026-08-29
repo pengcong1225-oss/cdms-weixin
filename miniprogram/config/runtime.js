@@ -3,5 +3,7 @@
 module.exports = {
   cdmsBaseUrl: 'https://jq.mockr.com.cn/cdmsapi',
   managerBaseUrl: 'https://jq.mockr.com.cn/cdmsmanagerapi/api/v1',
-  iotBaseUrl: 'https://jq.mockr.com.cn/cdmsiotapi'
+  iotBaseUrl: 'https://jq.mockr.com.cn/cdmsiotapi',
+  acquisitionClientId: 'cdms-miniapp',
+  acquisitionClientSecret: ''
 }

@@ -27,7 +27,10 @@ test('documents H5 to native replacement routes', () => {
     'Messages -> /pages/messages/index',
     'Statistics -> /pages/statistics/index',
     'History/Reports -> /pages/reports/index',
-    '体脂秤工作站 -> /pages/device-scale/station/index'
+    '体脂秤工作站 -> /pages/device-scale/station/index',
+    'MFA-1 会话工作站 -> /pages/device-mfa1/index',
+    'Sunvou 报告工作站 -> /pages/device-sunvou/index',
+    '医生设备工作站 -> /pages/device/device'
   ].forEach(item => expectIncludes(matrix, item))
 })
 
@@ -82,6 +85,8 @@ test('documents required miniapp and iot contract baselines plus server gaps', (
     'GET /v1/measurements',
     'POST /v1/acquisition-sessions',
     'GET /v1/acquisition-sessions/{sessionId}',
+    'POST /v1/acquisition-sessions/{sessionId}/wss-token',
+    'POST /v1/acquisition-sessions/{sessionId}/cancel',
     'GET /v1/reports',
     'GET /api/v1/screening/h5/questions',
     'GET /api/v1/screening/h5/organizations',

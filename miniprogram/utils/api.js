@@ -24,9 +24,9 @@ function readQueue (scope = currentScope()) {
 }
 function writeQueue (queue, scope = currentScope()) { wx.setStorageSync(queueStorageKey(scope), queue.slice(-1000)) }
 
-function request (url, method, data, token) {
+function request (url, method, data, token, extraHeaders) {
   return new Promise((resolve, reject) => {
-    const header = token ? { Authorization: `Bearer ${token}` } : {}
+    const header = Object.assign({}, extraHeaders || {}, token ? { Authorization: `Bearer ${token}` } : {})
     wx.request({ url, method, data, header,
       success: res => {
         if (res.statusCode >= 200 && res.statusCode < 300 && res.data?.code !== 401) {

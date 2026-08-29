@@ -71,4 +71,20 @@
     <view class="empty-text">绑定后这里会根据功能配置表展示设备支持的全部设置。</view>
     <button class="primary-button" bindtap="openSearch">搜索设备</button>
   </view>
+
+  <block wx:if="{{activeRole === 'DOCTOR' && doctorEntries.length}}">
+    <view class="section-title">医生设备工作站<text class="section-caption">MFA-1 与 Sunvou 原生入口</text></view>
+    <view class="card">
+      <workspace-card
+        wx:for="{{doctorEntries}}"
+        wx:key="key"
+        data-index="{{index}}"
+        title="{{item.title}}"
+        subtitle="{{item.subtitle}}"
+        icon="{{item.icon}}"
+        disabled="{{item.disabled}}"
+        bindselect="onDoctorEntrySelect"
+      />
+    </view>
+  </block>
 </view>
