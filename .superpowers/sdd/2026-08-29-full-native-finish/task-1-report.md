@@ -627,3 +627,76 @@ Observed result: exit `1`, no matches. The intended final dirty set contains onl
 - Follow-up detail navigation now preserves the record identifier as `followupId`, avoiding generic `id` query construction.
 - Monitoring, reports, and follow-ups now prefer transient global patient context over legacy inbound query fallback where compatibility remains.
 - The source-level production route assertion forbids `patientId` and generic `id` query construction in `patient-list`, `patient-detail`, `patient-360`, `followups`, `monitoring`, and `reports`, while preserving `reportId` and `followupId`.
+
+## Final blocker closure: transient patient context fixture alignment
+
+### Scope
+
+- Date: 2026-08-30
+- Baseline under test: `cb78862`
+- Production files changed: none
+- Test file changed: `test/monitoring-report-pages.test.js`
+- Report update: this file only
+
+### Root cause
+
+- `cb78862` already enforces the transient doctor patient-context contract in production.
+- Five remaining doctor-path tests in `test/monitoring-report-pages.test.js` still encoded the pre-closure fixture assumptions:
+  - three positive doctor-context flows omitted `app.globalData.currentPatientId`
+  - two forged-query / no-context tests incorrectly seeded `app.globalData.currentPatientId`
+- That mismatch caused the focused suite to fail even though the production routing behavior matched the latest review.
+
+### Fixture alignment applied
+
+- Seeded `currentPatientId` for the doctor monitoring refresh flow.
+- Removed `currentPatientId` from the forged-query monitoring no-context case.
+- Removed `currentPatientId` from the forged-query reports no-context case.
+- Seeded `currentPatientId` for the doctor reports transient-context case.
+- Seeded `currentPatientId` for the patient-360 shortcut navigation case.
+- Patient-role fixtures were left unchanged.
+
+### Verification evidence
+
+Required focused suite:
+
+```powershell
+node --test test/monitoring-report-pages.test.js test/patient-pages.test.js test/followup-pages.test.js test/native-route-contract.test.js
+```
+
+Observed result:
+
+```text
+tests 46
+pass 46
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 189.9716
+```
+
+Full suite:
+
+```powershell
+node --test
+```
+
+Observed result:
+
+```text
+tests 117
+pass 117
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 778.4613
+```
+
+Whitespace gate:
+
+```powershell
+git diff --check
+```
+
+Observed result: exit `0`. Git printed only the existing LF-to-CRLF working-tree warning for `test/monitoring-report-pages.test.js`; no whitespace errors were reported.

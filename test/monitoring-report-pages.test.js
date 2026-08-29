@@ -135,7 +135,7 @@ test('monitoring page renders server data and refreshes after alert acknowledgem
   const calls = []
   let acknowledged = false
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -246,7 +246,7 @@ test('monitoring page consumes transient doctor patient context and clears the s
 test('monitoring page rejects forged query patient context without transient handoff', async () => {
   const calls = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -444,7 +444,7 @@ test('doctor report detail ignores route patient id and consumes transient conte
 test('reports page rejects forged query patient context without transient handoff', async () => {
   const listCalls = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -552,7 +552,7 @@ test('doctor patient ai report navigation uses transient patient context and det
 test('reports page consumes transient doctor patient context and clears the shared handoff', async () => {
   const listCalls = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -745,7 +745,7 @@ test('reports detail retries ai load and confirms with minimal body', async () =
 test('patient 360 exposes followups, monitoring and report shortcuts through transient context and clean routes', async () => {
   const backs = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     wxOverrides: {
       navigateBack: options => backs.push(options)
     },
