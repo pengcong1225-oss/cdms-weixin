@@ -225,7 +225,7 @@ Page({
 
   async openAttachment () {
     if (!this.data.reportItem) return
-    const fileId = this.data.reportItem.fileId || this.data.reportItem.reportId || this.data.reportItem.fileObjectKey
+    const fileId = String(this.data.reportItem.fileId || '').trim()
     if (!fileId) {
       wx.showToast({ title: '暂无附件', icon: 'none' })
       return

@@ -23,7 +23,7 @@
           </view>
           <view class="report-actions">
             <button class="secondary-button" bindtap="openReport">查看报告</button>
-            <button wx:if="{{reportItem.fileId || reportItem.fileObjectKey}}" class="secondary-button" bindtap="openAttachment">打开附件</button>
+            <button wx:if="{{reportItem.fileId}}" class="secondary-button" bindtap="openAttachment">打开附件</button>
           </view>
         </view>
       </view>
@@ -51,4 +51,3 @@
     </form-section>
   </view>
 </view>
-

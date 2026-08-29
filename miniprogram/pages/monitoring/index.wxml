@@ -26,7 +26,7 @@
       <view wx:for="{{trendSections}}" wx:key="key" class="trend-block">
         <view class="trend-title">{{item.title}}</view>
         <view wx:if="{{!item.points.length}}" class="empty-inline">暂无 {{item.title}} 数据</view>
-        <view wx:for="{{item.points}}" wx:key="dateText" class="trend-row">
+        <view wx:for="{{item.points}}" wx:for-item="point" wx:key="dateText" class="trend-row">
           <text class="trend-date">{{point.dateText}}</text>
           <text class="trend-value">{{point.value}}</text>
           <text class="trend-caption">{{point.caption}}</text>
@@ -49,4 +49,3 @@
     </form-section>
   </view>
 </view>
-

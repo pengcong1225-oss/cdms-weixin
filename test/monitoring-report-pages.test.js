@@ -181,6 +181,14 @@ test('monitoring page renders server data and refreshes after alert acknowledgem
   }
 })
 
+test('monitoring trend rows bind the point item explicitly in WXML', () => {
+  const wxml = fs.readFileSync(path.join(root, 'miniprogram/pages/monitoring/index.wxml'), 'utf8')
+  assert.match(wxml, /wx:for="\{\{item\.points\}\}"\s+wx:for-item="point"/)
+  assert.match(wxml, /{{point\.dateText}}/)
+  assert.match(wxml, /{{point\.value}}/)
+  assert.match(wxml, /{{point\.caption}}/)
+})
+
 test('reports pages keep short-lived access urls in memory only', async () => {
   const listCalls = []
   const env = installPageEnv({
@@ -199,6 +207,7 @@ test('reports pages keep short-lived access urls in memory only', async () => {
                 patientId,
                 reportNo: 'RPT-9001',
                 category: 'RING',
+                fileId: 'file-9001',
                 fileStatus: 'STORED',
                 fileBucket: 'oss',
                 fileObjectKey: 'reports/ring/9001.pdf',
@@ -246,6 +255,59 @@ test('reports pages keep short-lived access urls in memory only', async () => {
     assert.strictEqual(env.openDocuments[0].filePath, '/tmp/report.pdf')
     assert.strictEqual(env.openDocuments[1].filePath, '/tmp/report.pdf')
     assert.strictEqual(listCalls.some(call => String(call[2]?.accessUrl || '').length), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('reports detail only shows attachment action for valid file ids', async () => {
+  const calls = []
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '768495013408443' })
+      },
+      [reportApiPath]: {
+        listPatientReports: async patientId => ({
+          items: [
+            {
+              reportId: 9001,
+              patientId,
+              reportNo: 'RPT-9001',
+              category: 'RING',
+              fileObjectKey: 'reports/ring/9001.pdf',
+              createdAt: '2026-08-29T10:00:00',
+              downloadAvailable: true
+            }
+          ],
+          list: [],
+          records: [],
+          page: 1,
+          pageSize: 20
+        }),
+        getFileAccessUrl: async (patientId, fileId) => {
+          calls.push(['file-url', patientId, fileId])
+          return { url: 'https://short.example/file-9001.pdf', expiresInSeconds: 300 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ patientId: '768495013408443', reportId: '9001' })
+    assert.strictEqual(page.data.reportItem.fileId, '')
+    await page.openAttachment()
+
+    assert.deepStrictEqual(calls, [])
+    assert.strictEqual(env.toasts.at(-1)?.title, '暂无附件')
+
+    const wxml = fs.readFileSync(path.join(root, 'miniprogram/pages/reports/detail.wxml'), 'utf8')
+    assert.match(wxml, /wx:if="\{\{reportItem\.fileId\}\}"/)
+    assert.strictEqual(wxml.includes('reportItem.fileObjectKey'), false)
+    assert.strictEqual(wxml.includes('reportItem.reportId'), false)
   } finally {
     env.cleanup()
   }
