@@ -112,7 +112,11 @@ Page({
   onPatientSelect (event) {
     const id = String(event.currentTarget.dataset.id || '')
     if (!id) return
-    wx.navigateTo({ url: `/pages/patient-detail/index?id=${encodeURIComponent(id)}` })
+    const app = typeof getApp === 'function' ? getApp() : null
+    if (app?.globalData) {
+      app.globalData.currentPatientId = id
+    }
+    wx.navigateTo({ url: '/pages/patient-detail/index' })
   },
 
   createPatient () {

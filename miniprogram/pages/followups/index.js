@@ -42,7 +42,7 @@ function consumeDoctorPatientId (query = {}) {
   if (app?.globalData) {
     delete app.globalData.currentPatientId
   }
-  return queryPatientId || transientPatientId
+  return transientPatientId || queryPatientId
 }
 
 function persistDoctorPatientId (patientId) {
@@ -151,7 +151,7 @@ Page({
   onFollowupSelect (event) {
     const id = String(event.currentTarget.dataset.id || '')
     if (!id) return
-    wx.navigateTo({ url: `/pages/followups/detail?id=${encodeURIComponent(id)}` })
+    wx.navigateTo({ url: `/pages/followups/detail?followupId=${encodeURIComponent(id)}` })
   },
 
   createFollowup () {

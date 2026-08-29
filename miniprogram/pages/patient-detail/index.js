@@ -147,6 +147,26 @@ function friendlyError (error) {
   return '患者档案保存失败，请稍后重试'
 }
 
+function consumeDoctorPatientId () {
+  const app = typeof getApp === 'function' ? getApp() : null
+  const patientId = String(app?.globalData?.currentPatientId || '').trim()
+  if (app?.globalData) {
+    delete app.globalData.currentPatientId
+  }
+  return patientId
+}
+
+function persistDoctorPatientId (patientId) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  if (!app?.globalData) return
+  const nextPatientId = String(patientId || '').trim()
+  if (nextPatientId) {
+    app.globalData.currentPatientId = nextPatientId
+    return
+  }
+  delete app.globalData.currentPatientId
+}
+
 Page({
   data: {
     patientId: '',
@@ -167,9 +187,9 @@ Page({
     ]
   },
 
-  async onLoad (query = {}) {
+  async onLoad () {
     await ensureSession({ role: 'DOCTOR' })
-    const patientId = String(query.id || query.patientId || '')
+    const patientId = consumeDoctorPatientId()
     this.setData({ patientId, editMode: !patientId })
     if (patientId) await this.loadPatient(patientId)
   },
@@ -255,7 +275,8 @@ Page({
       return
     }
     if (key === 'patient360' && this.data.patientId) {
-      wx.navigateTo({ url: `/pages/patient-360/index?patientId=${encodeURIComponent(this.data.patientId)}` })
+      persistDoctorPatientId(this.data.patientId)
+      wx.navigateTo({ url: '/pages/patient-360/index' })
       return
     }
     wx.showToast({ title: '后续任务接入', icon: 'none' })

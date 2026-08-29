@@ -117,7 +117,7 @@ function consumeDoctorPatientId (query = {}) {
   if (app?.globalData) {
     delete app.globalData.currentPatientId
   }
-  return queryPatientId || transientPatientId
+  return transientPatientId || queryPatientId
 }
 
 Page({

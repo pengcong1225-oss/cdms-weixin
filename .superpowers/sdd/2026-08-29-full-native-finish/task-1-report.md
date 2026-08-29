@@ -278,3 +278,352 @@ Observed result:
 ℹ pass 102
 ℹ fail 0
 ```
+
+## Fix round 3: remove remaining patient ids from native route queries
+
+### Scope
+
+- Baseline: `946a6f2233b453167071e29c4c7ee7fb81034ad2`
+- Touched production files:
+  - `miniprogram/pages/followups/index.js`
+  - `miniprogram/pages/followups/detail.js`
+  - `miniprogram/pages/reports/index.js`
+  - `miniprogram/pages/reports/detail.js`
+  - `miniprogram/utils/report-api.js`
+- Touched tests:
+  - `test/followup-pages.test.js`
+  - `test/monitoring-report-pages.test.js`
+  - `test/report-api.test.js`
+- `test/patient-pages.test.js` remains untouched in this round.
+
+### Root cause
+
+- Follow-up creation still navigated to `/pages/followups/detail?patientId=...`.
+- Report standard detail navigation still passed `patientId` through `buildReportRoute`.
+- Patient AI report navigation still navigated to `/pages/reports/detail?mode=patient&patientId=...`.
+- Detail pages still depended on route query patient IDs for doctor-scoped create/detail flows instead of consistently consuming the transient app-memory context introduced in earlier rounds.
+
+### TDD record
+
+#### 1. Red
+
+Command:
+
+```powershell
+node --test test/followup-pages.test.js test/monitoring-report-pages.test.js test/report-api.test.js
+```
+
+Observed result:
+
+```text
+ℹ tests 23
+ℹ pass 19
+ℹ fail 4
+```
+
+Expected failures:
+
+- `doctor followup creation keeps patient identifier out of route query and detail consumes transient context`
+- `doctor report detail navigation keeps patient identifier out of route query and consumes transient context`
+- `patient ai report navigation keeps patient identifier out of route query and uses patient session context`
+- `report access urls never enter route query or storage`
+
+Each failure showed the old route query containing `patientId`.
+
+#### 2. Green
+
+Command:
+
+```powershell
+node --test test/followup-pages.test.js test/monitoring-report-pages.test.js test/report-api.test.js
+```
+
+Observed result:
+
+```text
+ℹ tests 23
+ℹ pass 23
+ℹ fail 0
+```
+
+Focused coverage now proves:
+
+- follow-up creation opens `/pages/followups/detail` and hands off patient context via `getApp().globalData.currentPatientId`
+- follow-up detail consumes and clears transient doctor patient context
+- report standard detail routes contain only the opaque `reportId`
+- patient AI report routes contain only `mode=patient`; patient identity comes from the authenticated patient session
+- report detail consumes and clears transient doctor patient context for standard report access
+- `buildReportRoute` does not include `patientId` or the patient ID value
+
+### Additional verification
+
+Route construction scan:
+
+```powershell
+rg -n "navigateTo|redirectTo|switchTab|reLaunch|buildReportRoute|patientId=.*\$|patientId=|\['patientId'" miniprogram/pages/followups miniprogram/pages/reports miniprogram/utils/report-api.js
+```
+
+Observed result: no remaining `patientId=` URL construction in the affected followup/report flows. Remaining patient IDs are API parameters, page state, or legacy route consumption.
+
+Syntax and hygiene:
+
+```powershell
+node --check miniprogram/pages/followups/index.js
+node --check miniprogram/pages/followups/detail.js
+node --check miniprogram/pages/reports/index.js
+node --check miniprogram/pages/reports/detail.js
+node --check miniprogram/utils/report-api.js
+git diff --check
+git diff --exit-code HEAD -- test/patient-pages.test.js
+```
+
+Observed result: all commands exited `0`. `git diff --check` printed only existing CRLF normalization warnings.
+
+Full suite:
+
+```powershell
+node --test
+```
+
+Observed result:
+
+```text
+ℹ tests 105
+ℹ pass 105
+ℹ fail 0
+```
+
+### Commit
+
+- Fix round 3 commit: `59e9d85abe74c3b50a1a75986ffd3340291770c5`
+
+## Fix round 4 cleanup: detail-page route-derived patient context closure
+
+### Scope
+
+- Baseline: `59e9d85abe74c3b50a1a75986ffd3340291770c5`
+- Touched production files:
+  - `miniprogram/pages/followups/detail.js`
+  - `miniprogram/pages/reports/detail.js`
+  - `miniprogram/utils/report-api.js`
+- Touched tests:
+  - `test/followup-pages.test.js`
+  - `test/monitoring-report-pages.test.js`
+- Guarded file:
+  - `test/patient-pages.test.js` remains byte-for-byte identical to `5970f3b`
+
+### Final diff audit
+
+Dirty intended files before staging:
+
+```text
+M .superpowers/sdd/2026-08-29-full-native-finish/task-1-report.md
+M miniprogram/pages/followups/detail.js
+M miniprogram/pages/reports/detail.js
+M miniprogram/utils/report-api.js
+M test/followup-pages.test.js
+M test/monitoring-report-pages.test.js
+```
+
+`test/patient-pages.test.js` guard:
+
+```powershell
+git diff --exit-code 5970f3b -- test/patient-pages.test.js
+```
+
+Observed result: exit `0`.
+
+Route-construction scan:
+
+```powershell
+rg -n "navigateTo|redirectTo|switchTab|reLaunch|buildReportRoute|patientId=|\['patientId'|query\.patientId" miniprogram/pages/followups miniprogram/pages/reports miniprogram/utils/report-api.js
+```
+
+Observed result:
+
+- no `patientId=` route construction in the affected followup/report/report-api flows
+- remaining `query.patientId` hits are inbound index-page compatibility paths, not URL builders
+- detail pages no longer accept route `patientId` for doctor context when resolving patient identity
+
+### TDD evidence
+
+RED:
+
+```powershell
+node --test test/followup-pages.test.js test/monitoring-report-pages.test.js test/report-api.test.js
+```
+
+Observed result:
+
+```text
+tests 25
+pass 23
+fail 2
+```
+
+Expected failing tests:
+
+- `doctor followup detail ignores route patient id and consumes transient context`
+- `doctor report detail ignores route patient id and consumes transient context`
+
+Both failures showed the old behavior selecting `route-leak` from `query.patientId`.
+
+GREEN:
+
+```powershell
+node --test test/followup-pages.test.js test/monitoring-report-pages.test.js test/report-api.test.js
+```
+
+Observed result:
+
+```text
+tests 25
+pass 25
+fail 0
+```
+
+### Implementation notes
+
+- Doctor follow-up detail now consumes patient context only from `getApp().globalData.currentPatientId`, then clears the transient handoff.
+- Doctor report detail now uses the same transient-only rule.
+- Patient role behavior remains session-derived and unchanged.
+- `buildReportRoute` continues to emit only the opaque `reportId` route identifier.
+
+## Final patient-context route closure
+
+### Scope
+
+- Baseline requested by user: `013a23e`
+- Worktree: `D:\codex\worktrees\cdms-weixin-full-native-finish`
+- Commit message target: `fix: close patient context route chain`
+- Backend files: none modified.
+- Durable storage / webview / H5 changes: none added.
+
+### TDD evidence
+
+RED command:
+
+```powershell
+node --test test/patient-pages.test.js test/monitoring-report-pages.test.js test/followup-pages.test.js test/native-route-contract.test.js
+```
+
+Observed RED result:
+
+```text
+tests 38
+pass 31
+fail 7
+```
+
+Expected failures showed the old contract still leaking patient context through route query:
+
+- `patient-list` still navigated to `/pages/patient-detail/index?id=...`
+- `patient-detail` still preferred route `id` / `patientId`
+- `patient-detail` still opened `/pages/patient-360/index?patientId=...`
+- `patient-360` still preferred route `patientId` / `id`
+- `patient-360` monitoring/report shortcuts still emitted `?patientId=...`
+- follow-up list still emitted generic `?id=...`
+- the source-level route assertion detected patient/generic id query construction
+
+GREEN focused command:
+
+```powershell
+node --test test/patient-pages.test.js test/monitoring-report-pages.test.js test/followup-pages.test.js test/native-route-contract.test.js
+```
+
+Observed GREEN result:
+
+```text
+tests 38
+pass 38
+fail 0
+```
+
+### Full verification
+
+Full suite command:
+
+```powershell
+node --test
+```
+
+Observed result:
+
+```text
+tests 109
+pass 109
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 869.2186
+```
+
+Whitespace command:
+
+```powershell
+git diff --check
+```
+
+Observed result: exit `0`. Git printed only LF-to-CRLF normalization warnings for modified files; no whitespace errors were reported.
+
+### Scope and sensitivity audit
+
+Committed history since Task 1 baseline:
+
+```powershell
+git diff --name-only 5970f3b..HEAD
+```
+
+Observed files:
+
+```text
+.superpowers/sdd/2026-08-29-full-native-finish/task-1-report.md
+miniprogram/pages/doctor/workspace/index.js
+miniprogram/pages/doctor/workspace/index.wxml
+miniprogram/pages/followups/detail.js
+miniprogram/pages/followups/index.js
+miniprogram/pages/monitoring/index.js
+miniprogram/pages/reports/detail.js
+miniprogram/pages/reports/index.js
+miniprogram/utils/report-api.js
+test/followup-pages.test.js
+test/monitoring-report-pages.test.js
+test/native-route-contract.test.js
+test/report-api.test.js
+test/workspace-entry.test.js
+```
+
+Current intended working-tree files before final staging:
+
+```text
+.superpowers/sdd/2026-08-29-full-native-finish/task-1-report.md
+miniprogram/pages/followups/detail.js
+miniprogram/pages/followups/index.js
+miniprogram/pages/monitoring/index.js
+miniprogram/pages/patient-360/index.js
+miniprogram/pages/patient-detail/index.js
+miniprogram/pages/patient-list/index.js
+miniprogram/pages/reports/index.js
+test/followup-pages.test.js
+test/monitoring-report-pages.test.js
+test/native-route-contract.test.js
+test/patient-pages.test.js
+```
+
+Sensitive/backend path scan:
+
+```powershell
+git diff --name-only | rg -n "(^|/)(backend|server|src/main|pom\.xml|application.*\.yml|\.env|private|secret|credential|key|token)(/|$|\.)"
+```
+
+Observed result: exit `1`, no matches. The intended final dirty set contains only miniapp pages, focused tests, and this report.
+
+### Implementation notes
+
+- `patient-list` now stores the selected opaque patient id in `getApp().globalData.currentPatientId` and navigates to `/pages/patient-detail/index`.
+- `patient-detail` now consumes and clears transient doctor patient context on load, keeps create flow bare, and opens patient 360 through `/pages/patient-360/index` after resetting transient context.
+- `patient-360` now consumes and clears transient doctor patient context on load, sets transient context before monitoring/report shortcuts, navigates to bare `/pages/monitoring/index` and `/pages/reports/index`, and uses `wx.navigateBack({ delta: 1 })` for `backDetail`.
+- Follow-up detail navigation now preserves the record identifier as `followupId`, avoiding generic `id` query construction.
+- Monitoring, reports, and follow-ups now prefer transient global patient context over legacy inbound query fallback where compatibility remains.
+- The source-level production route assertion forbids `patientId` and generic `id` query construction in `patient-list`, `patient-detail`, `patient-360`, `followups`, `monitoring`, and `reports`, while preserving `reportId` and `followupId`.

@@ -134,7 +134,7 @@ test('followup list switches between patient and doctor scope and opens detail p
     assert.strictEqual(page.data.canEdit, false)
     assert.strictEqual(page.data.followups[0].id, '9001')
     assert.deepStrictEqual(patientCalls, [{ page: 1, pageSize: 20 }])
-    assert.deepStrictEqual(patientEnv.navigations, [{ url: '/pages/followups/detail?id=9001' }])
+    assert.deepStrictEqual(patientEnv.navigations, [{ url: '/pages/followups/detail?followupId=9001' }])
   } finally {
     patientEnv.cleanup()
   }
@@ -169,7 +169,7 @@ test('followup list switches between patient and doctor scope and opens detail p
     assert.strictEqual(page.data.patientId, '768495013408443')
     assert.strictEqual(page.data.followups[0].id, '9002')
     assert.deepStrictEqual(doctorCalls, [{ patientId: '768495013408443', params: { page: 1, pageSize: 20 } }])
-    assert.deepStrictEqual(doctorEnv.navigations, [{ url: '/pages/followups/detail?id=9002' }])
+    assert.deepStrictEqual(doctorEnv.navigations, [{ url: '/pages/followups/detail?followupId=9002' }])
   } finally {
     doctorEnv.cleanup()
   }
@@ -247,7 +247,7 @@ test('doctor followup list consumes transient workspace patient context and clea
 
 test('doctor followup creation keeps patient identifier out of route query and detail consumes transient context', async () => {
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -358,7 +358,7 @@ test('followup detail blocks invalid submit, saves drafts, and uploads photos', 
     loadPage('miniprogram/pages/followups/detail.js')
     const page = env.pages[0]
 
-    await page.onLoad({ patientId: '768495013408443' })
+    await page.onLoad()
     page.setData({
       form: Object.assign({}, page.data.form, {
         patientId: '768495013408443',

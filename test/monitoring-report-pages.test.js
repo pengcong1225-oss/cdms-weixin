@@ -601,9 +601,13 @@ test('reports detail retries ai load and confirms with minimal body', async () =
   }
 })
 
-test('patient 360 exposes monitoring and report shortcuts', async () => {
+test('patient 360 exposes monitoring and report shortcuts through transient context and clean routes', async () => {
+  const backs = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    wxOverrides: {
+      navigateBack: options => backs.push(options)
+    },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -627,14 +631,24 @@ test('patient 360 exposes monitoring and report shortcuts', async () => {
     loadPage('miniprogram/pages/patient-360/index.js')
     const page = env.pages[0]
 
-    await page.onLoad({ patientId: '768495013408443' })
+    await page.onLoad({ patientId: 'route-leak' })
+    assert.strictEqual(page.data.patientId, '768495013408443')
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+
     page.onQuickActionSelect({ currentTarget: { dataset: { key: 'monitoring' } } })
+    assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
+
+    delete env.app.globalData.currentPatientId
     page.onQuickActionSelect({ currentTarget: { dataset: { key: 'reports' } } })
+    assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
+
+    page.backDetail()
 
     assert.deepStrictEqual(env.navigations, [
-      { url: '/pages/monitoring/index?patientId=768495013408443' },
-      { url: '/pages/reports/index?patientId=768495013408443' }
+      { url: '/pages/monitoring/index' },
+      { url: '/pages/reports/index' }
     ])
+    assert.deepStrictEqual(backs, [{ delta: 1 }])
     assert.strictEqual(page.data.quickActions.some(item => item.key === 'monitoring'), true)
     assert.strictEqual(page.data.quickActions.some(item => item.key === 'reports'), true)
   } finally {

@@ -163,14 +163,15 @@ Page({
     const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
     const canEdit = session.activeRole === 'DOCTOR'
     const patientId = consumePatientId(query, session)
+    const followupId = String(query.followupId || query.id || '')
     this.setData({
       canEdit,
       patientId,
-      followupId: String(query.id || ''),
+      followupId,
       form: patientId ? buildEmptyForm(patientId) : buildEmptyForm('')
     })
-    if (query.id) {
-      await this.loadFollowup(query.id)
+    if (followupId) {
+      await this.loadFollowup(followupId)
       return
     }
     if (!patientId) {

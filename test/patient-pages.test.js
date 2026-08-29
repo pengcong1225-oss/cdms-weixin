@@ -18,19 +18,20 @@ function installPageTestEnv ({ patientApi, session, wxOverrides } = {}) {
   const navigations = []
   const toasts = []
   const ensureSessionCalls = []
-  global.Page = config => {
-    config.data = JSON.parse(JSON.stringify(config.data || {}))
-    config.setData = values => { config.data = Object.assign({}, config.data, values) }
-    pages.push(config)
-  }
-  global.getApp = () => ({
+  const app = {
     globalData: Object.assign({
       accessToken: 'access-1',
       refreshToken: 'refresh-1',
       activeRole: 'DOCTOR',
       orgId: 'client-org-should-not-filter'
     }, session)
-  })
+  }
+  global.Page = config => {
+    config.data = JSON.parse(JSON.stringify(config.data || {}))
+    config.setData = values => { config.data = Object.assign({}, config.data, values) }
+    pages.push(config)
+  }
+  global.getApp = () => app
   global.wx = Object.assign({
     getStorageSync: () => null,
     setStorageSync: () => {},
@@ -65,7 +66,7 @@ function installPageTestEnv ({ patientApi, session, wxOverrides } = {}) {
       }
     }
   }
-  return { pages, navigations, toasts, ensureSessionCalls }
+  return { app, pages, navigations, toasts, ensureSessionCalls }
 }
 
 function loadPage (relativePath) {
@@ -144,7 +145,8 @@ test('patient list keeps fixed state, paginates server results, and does not cli
   assert.deepStrictEqual(page.data.patients.map(patient => patient.statusText), ['状态已脱敏', '状态已脱敏'])
   assert.deepStrictEqual(page.data.patients.map(patient => patient.statusTone), ['neutral', 'neutral'])
   assert.equal(page.data.hasMore, false)
-  assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-detail/index?id=768495013408443' }])
+  assert.equal(env.app.globalData.currentPatientId, '768495013408443')
+  assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-detail/index' }])
 })
 
 test('patient list shows permission errors and retry reloads first page', async () => {
@@ -198,12 +200,15 @@ test('patient detail masks sensitive display values and saves PatientSaveDTO bod
         calls.push(['update', id, payload])
         return { id, basicInfo: payload.basicInfo }
       }
-    }
+    },
+    session: { currentPatientId: '768495013408443' }
   })
   loadPage('miniprogram/pages/patient-detail/index.js')
   const page = env.pages[0]
 
-  await page.onLoad({ id: '768495013408443' })
+  await page.onLoad({ id: 'route-leak' })
+  assert.equal(env.app.globalData.currentPatientId, undefined)
+  assert.deepStrictEqual(calls[0], ['get', '768495013408443'])
   assert.equal(page.data.summary.phoneMasked, '186****4935')
   assert.equal(page.data.summary.idCardMasked, '429004********2952')
   assert.equal(page.data.summary.statusMasked, '状态已脱敏')
@@ -220,6 +225,32 @@ test('patient detail masks sensitive display values and saves PatientSaveDTO bod
   assert.deepStrictEqual(Object.keys(update[2]).sort(), ['allergies', 'basicInfo', 'copdInfo', 'dustExposures', 'lungFunction', 'smokeInfo'].sort())
   assert.equal(update[2].basicInfo.phone, '18696144936')
   assert.equal(update[2].basicInfo.orgId, '1972545374712086529')
+})
+
+test('patient detail opens patient 360 through transient context and a clean route', async () => {
+  const env = installPageTestEnv({
+    session: { currentPatientId: '768495013408443' },
+    patientApi: {
+      getPatient: async id => ({
+        id,
+        basicInfo: { name: '测试患者2', gender: 1, age: 35 },
+        orgInfo: {},
+        smokeInfo: {},
+        lungFunction: {},
+        copdInfo: {},
+        allergies: [],
+        dustExposures: []
+      })
+    }
+  })
+  loadPage('miniprogram/pages/patient-detail/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  page.onAction({ currentTarget: { dataset: { key: 'patient360' } } })
+
+  assert.equal(env.app.globalData.currentPatientId, '768495013408443')
+  assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-360/index' }])
 })
 
 test('patient detail handles save permission errors without logging raw identity values', async () => {
@@ -274,14 +305,17 @@ test('patient 360 renders server clinical sections without recomputing risk', as
         deviceMetrics: [{ type: 'HEART_RATE', value: 72, unit: 'bpm', measuredAt: '2026-08-26T13:05:22' }],
         riskTips: [{ levelText: '服务端重点关注', message: '服务端结论' }]
       })
-    }
+    },
+    session: { currentPatientId: '768495013408443' }
   })
   loadPage('miniprogram/pages/patient-360/index.js')
   const page = env.pages[0]
 
-  await page.onLoad({ patientId: '768495013408443' })
+  await page.onLoad({ patientId: 'route-leak' })
 
   assert.deepStrictEqual(env.ensureSessionCalls, [{ role: 'DOCTOR' }])
+  assert.equal(page.data.patientId, '768495013408443')
+  assert.equal(env.app.globalData.currentPatientId, undefined)
   assert.equal(page.data.sections.basicInfo.title, '基本信息')
   assert.equal(page.data.sections.copd.title, 'COPD 专档')
   assert.equal(page.data.sections.latestFollowup.items[0].value, '稳定')

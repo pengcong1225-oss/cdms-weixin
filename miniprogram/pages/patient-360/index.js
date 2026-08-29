@@ -120,6 +120,26 @@ function friendlyError (error) {
   return '患者360加载失败，请稍后重试'
 }
 
+function consumeDoctorPatientId () {
+  const app = typeof getApp === 'function' ? getApp() : null
+  const patientId = String(app?.globalData?.currentPatientId || '').trim()
+  if (app?.globalData) {
+    delete app.globalData.currentPatientId
+  }
+  return patientId
+}
+
+function persistDoctorPatientId (patientId) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  if (!app?.globalData) return
+  const nextPatientId = String(patientId || '').trim()
+  if (nextPatientId) {
+    app.globalData.currentPatientId = nextPatientId
+    return
+  }
+  delete app.globalData.currentPatientId
+}
+
 Page({
   data: {
     patientId: '',
@@ -133,10 +153,10 @@ Page({
     ]
   },
 
-  async onLoad (query = {}) {
-    const patientId = String(query.patientId || query.id || '')
-    this.setData({ patientId })
+  async onLoad () {
     await ensureSession({ role: 'DOCTOR' })
+    const patientId = consumeDoctorPatientId()
+    this.setData({ patientId })
     await this.load360()
   },
 
@@ -162,16 +182,18 @@ Page({
     const key = String(event.currentTarget.dataset.key || '')
     if (!key || !this.data.patientId) return
     if (key === 'monitoring') {
-      wx.navigateTo({ url: `/pages/monitoring/index?patientId=${encodeURIComponent(this.data.patientId)}` })
+      persistDoctorPatientId(this.data.patientId)
+      wx.navigateTo({ url: '/pages/monitoring/index' })
       return
     }
     if (key === 'reports') {
-      wx.navigateTo({ url: `/pages/reports/index?patientId=${encodeURIComponent(this.data.patientId)}` })
+      persistDoctorPatientId(this.data.patientId)
+      wx.navigateTo({ url: '/pages/reports/index' })
     }
   },
 
   backDetail () {
-    wx.navigateBack ? wx.navigateBack() : wx.navigateTo({ url: `/pages/patient-detail/index?id=${encodeURIComponent(this.data.patientId)}` })
+    if (wx.navigateBack) wx.navigateBack({ delta: 1 })
   }
 })
 

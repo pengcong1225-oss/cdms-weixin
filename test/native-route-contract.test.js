@@ -95,3 +95,21 @@ test('doctor workspace source closes native entry placeholders and keeps patient
     assert.match(source, /请选择患者后再查看/)
   })
 })
+
+test('patient context native route construction never serializes patient identifiers', () => {
+  const routeFiles = [
+    'miniprogram/pages/patient-list/index.js',
+    'miniprogram/pages/patient-detail/index.js',
+    'miniprogram/pages/patient-360/index.js',
+    'miniprogram/pages/followups/index.js',
+    'miniprogram/pages/followups/detail.js',
+    'miniprogram/pages/monitoring/index.js',
+    'miniprogram/pages/reports/index.js',
+    'miniprogram/pages/reports/detail.js'
+  ]
+
+  routeFiles.forEach(relativePath => {
+    const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+    assert.equal(/[?&](?:patientId|id)=/.test(source), false, `${relativePath} must not construct patientId or generic id route queries`)
+  })
+})
