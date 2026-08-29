@@ -1,14 +1,14 @@
 # CDMS 全量原生小程序验收记录
 
 日期：2026-08-29
-分支：`feature/full-native-miniapp`
-工作树：`D:\\codex\\worktrees\\cdms-weixin-full-native`
+分支：`feature/full-native-finish`
+工作树：`D:\\codex\\worktrees\\cdms-weixin-full-native-finish`
 
 ## 自动化验收
 
 | 检查项 | 结果 | 证据 |
 |---|---|---|
-| 全量 Node 测试 | PASS | `node --test`：95/95 |
+| 全量 Node 测试 | PASS | `node --test`：117/117 |
 | 原生业务路由扫描 | PASS | `test/full-native-route-scan.test.js`：无 `<web-view`、`/pages/h5/`、`createHandoff(` |
 | 敏感字段扫描 | PASS | `test/full-native-security-scan.test.js`：除授权快照外，无令牌/身份证/微信标识/设备密钥/短时访问地址进入 URL、持久化或日志；授权快照仅按 Task 2 规则保存 Refresh Token |
 | JavaScript 语法 | PASS | `miniprogram/**/*.js`（排除打包 SDK）逐文件 `node --check` |
@@ -27,13 +27,13 @@
 - [ ] 两名以上患者扫码进入同一体脂秤场次，连续叫号、测量、确认、跳过、重测。
 - [ ] 体脂秤断线重连不生成空结果；异常测量不自动补绑患者。
 - [ ] 指环绑定、同步、历史、解绑保持原有行为。
-- [ ] MFA-1 会话和 Sunvou 查询不通过 WebView，短时地址不落盘。
+- [ ] MFA-1 会话和 Sunvou 查询不通过 WebView；MFA-1 只通过 CDMS JWT 门面，短时地址不落盘。
 - [ ] 所有页面符合患者工作台视觉体系。
 
 ## 发布门禁与未决项
 
 1. `cdms` 体脂秤服务端分支和 `cdms-iot` 相关服务必须分别完成后端测试、构建和发布审计后，才能联调轮测闭环。
-2. MFA-1 采集接口当前要求 IoT client-credential HMAC；`runtime.js` 中密钥为空。生产不得把 HMAC secret 编译进公开小程序包，必须先提供受控服务端代理或经安全评审的凭据方案。
+2. MFA-1 的 IoT client-credential HMAC 已收口到 CDMS 服务端门面；上线前必须在部署环境注入服务端凭证并完成 CDMS 与 cdms-iot 联调。
 3. Task 9 测试患者数据只允许按 runbook 在测试环境执行，必须先备份并完成前后主键/内容摘要核对；本分支未自动写数据库。
 4. 在上述门禁和真机清单全部通过前，不上传微信体验版、不部署服务端、不切换生产配置。
 

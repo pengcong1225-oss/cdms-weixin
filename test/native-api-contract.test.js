@@ -101,6 +101,18 @@ test('documents required miniapp and iot contract baselines plus server gaps', (
   ].forEach(item => expectIncludes(matrix, item))
 })
 
+test('documents the server-side MFA-1 acquisition facade contract', () => {
+  const contract = fs.readFileSync(path.join(__dirname, '..', 'docs', 'superpowers', 'contracts', '2026-08-29-miniapp-acquisition-facade.md'), 'utf8')
+  ;[
+    'POST /api/v1/miniapp/iot/acquisition-sessions',
+    'GET /api/v1/miniapp/iot/acquisition-sessions/{sessionId}',
+    'POST /api/v1/miniapp/iot/acquisition-sessions/{sessionId}/wss-token',
+    'POST /api/v1/miniapp/iot/acquisition-sessions/{sessionId}/cancel',
+    'IOT_ACQUISITION_CLIENT_SECRET',
+    '绝不进入小程序源代码'
+  ].forEach(item => expectIncludes(contract, item))
+})
+
 test('locks string ids, auth session semantics, screening rules and report URL lifecycle', () => {
   const payload = { patientId: '768495013408443', orgId: '1972545374712086529', reportId: '9001', sessionId: 'session-1' }
   assert.equal(typeof payload.patientId, 'string')
