@@ -35,6 +35,16 @@ function friendlyError (error) {
   return '随访列表加载失败'
 }
 
+function consumeDoctorPatientId (query = {}) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  const queryPatientId = String(query.patientId || query.id || '').trim()
+  const transientPatientId = String(app?.globalData?.currentPatientId || '').trim()
+  if (app?.globalData) {
+    delete app.globalData.currentPatientId
+  }
+  return queryPatientId || transientPatientId
+}
+
 Page({
   data: {
     scope: 'PATIENT',
@@ -54,13 +64,15 @@ Page({
 
   async onLoad (query = {}) {
     const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    const patientId = String(query.patientId || query.id || session.patientId || session.patientRef || '')
     const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
+    const patientId = scope === 'DOCTOR'
+      ? consumeDoctorPatientId(query)
+      : String(session.patientRef || session.patientId || '')
     this.setData({
       scope,
       scopeLabel: scope === 'DOCTOR' ? '患者随访' : '我的随访',
       canEdit: session.activeRole === 'DOCTOR',
-      patientId: scope === 'DOCTOR' ? patientId : String(session.patientRef || session.patientId || ''),
+      patientId,
       headerSubtitle: scope === 'DOCTOR'
         ? '医生在患者上下文中查看和新建随访'
         : '患者仅查看自己的随访历史'

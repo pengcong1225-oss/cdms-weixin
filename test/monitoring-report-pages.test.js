@@ -18,6 +18,16 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
   const downloads = []
   const openDocuments = []
   const previews = []
+  const app = {
+    globalData: Object.assign({
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      activeRole: 'DOCTOR',
+      patientRef: '768495013408443',
+      orgId: '1972545374712086529',
+      cdmsBaseUrl: 'https://cdms.example'
+    }, session)
+  }
   const previous = {
     Page: global.Page,
     getApp: global.getApp,
@@ -31,16 +41,7 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
     }
     pages.push(config)
   }
-  global.getApp = () => ({
-    globalData: Object.assign({
-      accessToken: 'access-1',
-      refreshToken: 'refresh-1',
-      activeRole: 'DOCTOR',
-      patientRef: '768495013408443',
-      orgId: '1972545374712086529',
-      cdmsBaseUrl: 'https://cdms.example'
-    }, session)
-  })
+  global.getApp = () => app
   global.wx = Object.assign({
     getStorageSync: () => null,
     setStorageSync: (key, value) => storageWrites.push([key, value]),
@@ -84,6 +85,7 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
   })
 
   return {
+    app,
     pages,
     navigations,
     toasts,
@@ -181,6 +183,45 @@ test('monitoring page renders server data and refreshes after alert acknowledgem
   }
 })
 
+test('monitoring page consumes transient doctor patient context and clears the shared handoff', async () => {
+  const calls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [monitoringApiPath]: {
+        getMonitoringSummary: async patientId => {
+          calls.push(['summary', patientId])
+          return { patientId, attentionLevelText: '高危', activeAlertCount: 1, dataStatus: 'ACTIVE', deviceName: 'Ring' }
+        },
+        getMonitoringTrends: async (patientId, params) => {
+          calls.push(['trends', patientId, params])
+          return { patientId, bloodOxygen: [], heartRate: [], steps: [], sleepDuration: [] }
+        },
+        getMonitoringAlerts: async (patientId, params) => {
+          calls.push(['alerts', patientId, params])
+          return { list: [], page: params.page, pageSize: params.pageSize, total: 0 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/monitoring/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '768495013408443')
+    assert.deepStrictEqual(calls.map(call => call[1]), ['768495013408443', '768495013408443', '768495013408443'])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('monitoring trend rows bind the point item explicitly in WXML', () => {
   const wxml = fs.readFileSync(path.join(root, 'miniprogram/pages/monitoring/index.wxml'), 'utf8')
   assert.match(wxml, /wx:for="\{\{item\.points\}\}"\s+wx:for-item="point"/)
@@ -255,6 +296,42 @@ test('reports pages keep short-lived access urls in memory only', async () => {
     assert.strictEqual(env.openDocuments[0].filePath, '/tmp/report.pdf')
     assert.strictEqual(env.openDocuments[1].filePath, '/tmp/report.pdf')
     assert.strictEqual(listCalls.some(call => String(call[2]?.accessUrl || '').length), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('reports page consumes transient doctor patient context and clears the shared handoff', async () => {
+  const listCalls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [reportApiPath]: {
+        listPatientReports: async (patientId, params) => {
+          listCalls.push(['list', patientId, params])
+          return {
+            items: [{ reportId: 9001, patientId, reportNo: 'RPT-9001', category: 'RING', createdAt: '2026-08-29T10:00:00', downloadAvailable: true }],
+            page: 1,
+            pageSize: 20,
+            total: 1
+          }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '768495013408443')
+    assert.deepStrictEqual(listCalls, [['list', '768495013408443', { page: 1, pageSize: 20 }]])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
   } finally {
     env.cleanup()
   }

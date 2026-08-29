@@ -16,6 +16,14 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
   const toasts = []
   const clipboard = []
   const modalCalls = []
+  const app = {
+    globalData: Object.assign({
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      activeRole: 'PATIENT',
+      cdmsBaseUrl: 'https://cdms.example'
+    }, session)
+  }
   const previous = {
     Page: global.Page,
     getApp: global.getApp,
@@ -29,14 +37,7 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
     }
     pages.push(config)
   }
-  global.getApp = () => ({
-    globalData: Object.assign({
-      accessToken: 'access-1',
-      refreshToken: 'refresh-1',
-      activeRole: 'PATIENT',
-      cdmsBaseUrl: 'https://cdms.example'
-    }, session)
-  })
+  global.getApp = () => app
   global.wx = Object.assign({
     getStorageSync: () => null,
     setStorageSync: () => {},
@@ -80,6 +81,7 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
   })
 
   return {
+    app,
     pages,
     navigations,
     toasts,
@@ -204,6 +206,40 @@ test('doctor followup list without patient context blocks personal fallback', as
     assert.strictEqual(page.data.error, '请选择患者后再查看随访')
     assert.strictEqual(page.data.followups.length, 0)
     assert.deepStrictEqual(doctorCalls, [])
+  } finally {
+    doctorEnv.cleanup()
+  }
+})
+
+test('doctor followup list consumes transient workspace patient context and clears the shared handoff', async () => {
+  const doctorCalls = []
+  const doctorEnv = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        listMyFollowups: async () => {
+          throw new Error('patient scope should not be used for doctor workspace handoff')
+        },
+        listPatientFollowups: async (patientId, params) => {
+          doctorCalls.push({ patientId, params })
+          return { list: [{ id: 9003, visitDate: '2026-08-29T09:00:00', patientStatusText: '稳定' }], total: 1, page: 1, pageSize: 20 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/index.js')
+    const page = doctorEnv.pages[0]
+
+    await page.onLoad()
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '768495013408443')
+    assert.deepStrictEqual(doctorCalls, [{ patientId: '768495013408443', params: { page: 1, pageSize: 20 } }])
+    assert.strictEqual(doctorEnv.app.globalData.currentPatientId, undefined)
   } finally {
     doctorEnv.cleanup()
   }

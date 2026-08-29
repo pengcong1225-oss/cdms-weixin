@@ -110,6 +110,16 @@ function friendlyError (error) {
   return '监测加载失败，请稍后重试'
 }
 
+function consumeDoctorPatientId (query = {}) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  const queryPatientId = String(query.patientId || query.id || '').trim()
+  const transientPatientId = String(app?.globalData?.currentPatientId || '').trim()
+  if (app?.globalData) {
+    delete app.globalData.currentPatientId
+  }
+  return queryPatientId || transientPatientId
+}
+
 Page({
   data: {
     scope: 'PATIENT',
@@ -133,7 +143,7 @@ Page({
     const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
     const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
     const patientId = scope === 'DOCTOR'
-      ? String(query.patientId || query.id || '')
+      ? consumeDoctorPatientId(query)
       : String(session.patientRef || session.patientId || '')
     this.setData({
       scope,
