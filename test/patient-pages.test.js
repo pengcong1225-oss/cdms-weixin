@@ -106,9 +106,11 @@ test('doctor workspace opens the native body-composition station', async () => {
   const page = env.pages[0]
 
   await page.onLoad()
-  page.onEntrySelect({ currentTarget: { dataset: { index: 1 } } })
+  const stationIndex = page.data.entries.findIndex(item => item.key === 'station')
+  page.onEntrySelect({ currentTarget: { dataset: { index: stationIndex } } })
 
-  assert.equal(page.data.entries[1].disabled, false)
+  assert.notEqual(stationIndex, -1)
+  assert.equal(page.data.entries[stationIndex].disabled, false)
   assert.deepStrictEqual(env.navigations, [{ url: '/pages/device-scale/station/index' }])
 })
 

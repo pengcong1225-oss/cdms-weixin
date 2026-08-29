@@ -35,6 +35,11 @@ test('native workspace routes are registered and h5 webview route is removed', (
   const appConfig = JSON.parse(fs.readFileSync(path.join(root, 'miniprogram/app.json'), 'utf8'))
   assert.ok(appConfig.pages.includes('pages/doctor/workspace/index'))
   assert.ok(appConfig.pages.includes('pages/patient/workspace/index'))
+  assert.ok(appConfig.pages.includes('pages/followups/index'))
+  assert.ok(appConfig.pages.includes('pages/monitoring/index'))
+  assert.ok(appConfig.pages.includes('pages/messages/index'))
+  assert.ok(appConfig.pages.includes('pages/statistics/index'))
+  assert.ok(appConfig.pages.includes('pages/reports/index'))
   assert.ok(appConfig.pages.includes('pages/device-mfa1/index'))
   assert.ok(appConfig.pages.includes('pages/device-sunvou/index'))
   assert.equal(appConfig.pages.some(page => page.includes('pages/h5')), false)
@@ -60,4 +65,29 @@ test('miniprogram source has no webview business entry paths', () => {
   assert.equal(source.includes('pages/h5'), false)
   assert.equal(source.includes('createHandoff'), false)
   assert.equal(/targetPath[^\n]*h5/i.test(source), false)
+})
+
+test('doctor workspace source closes native entry placeholders and keeps patient routes context-safe', () => {
+  const doctorWorkspace = fs.readFileSync(path.join(root, 'miniprogram/pages/doctor/workspace/index.js'), 'utf8')
+
+  assert.equal(doctorWorkspace.includes('后续原生页面接入'), false)
+  assert.equal(doctorWorkspace.includes('功能准备中'), false)
+  assert.equal(/key:\s*'followups'[\s\S]*disabled:\s*true/.test(doctorWorkspace), false)
+  assert.match(doctorWorkspace, /\/pages\/followups\/index/)
+  assert.match(doctorWorkspace, /\/pages\/monitoring\/index/)
+  assert.match(doctorWorkspace, /\/pages\/messages\/index/)
+  assert.match(doctorWorkspace, /\/pages\/statistics\/index/)
+  assert.match(doctorWorkspace, /\/pages\/reports\/index/)
+  assert.match(doctorWorkspace, /currentPatientId/)
+  assert.match(doctorWorkspace, /requiresPatientContext/)
+
+  const patientScopedPages = [
+    'miniprogram/pages/followups/index.js',
+    'miniprogram/pages/monitoring/index.js',
+    'miniprogram/pages/reports/index.js'
+  ]
+  patientScopedPages.forEach(relativePath => {
+    const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+    assert.match(source, /请选择患者后再查看/)
+  })
 })

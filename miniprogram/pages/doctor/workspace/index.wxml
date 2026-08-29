@@ -1,5 +1,5 @@
 <view class="page workspace-page">
-  <app-header title="医生工作台" subtitle="患者管理、随访和设备入口已切换为原生壳" showBack="{{true}}" showLogout="{{true}}" bindback="backHome" bindlogout="logout" />
+  <app-header title="医生工作台" subtitle="患者管理、随访、监测、报告与设备工作站均从原生入口进入" showBack="{{true}}" showLogout="{{true}}" bindback="backHome" bindlogout="logout" />
 
   <view class="stats-grid">
     <stat-card wx:for="{{stats}}" wx:key="key" title="{{item.title}}" value="{{item.value}}" caption="{{item.caption}}" tone="{{item.tone}}" />
@@ -17,5 +17,5 @@
     bindselect="onEntrySelect"
   />
 
-  <state-panel state="empty" title="后续业务分批接入" message="患者管理已原生化，随访与报告继续按任务推进，设备工作站可进入指环、MFA-1 和 Sunvou 原生入口。" />
+  <state-panel state="empty" title="原生入口已就绪" message="患者管理、随访、监测、消息、统计、报告、体脂秤和设备工作站均可进入；随访、监测和报告在缺少患者上下文时会提示先选择患者。" />
 </view>
