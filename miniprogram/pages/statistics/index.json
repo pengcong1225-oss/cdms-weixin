@@ -1,0 +1,9 @@
+{
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "state-panel": "/components/state-panel/state-panel",
+    "stat-card": "/components/stat-card/stat-card",
+    "form-section": "/components/form-section/form-section",
+    "choice-tile": "/components/choice-tile/choice-tile"
+  }
+}

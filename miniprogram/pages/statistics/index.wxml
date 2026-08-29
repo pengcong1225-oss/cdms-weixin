@@ -1,0 +1,51 @@
+<view class="page stats-page">
+  <app-header
+    title="统计"
+    subtitle="{{mode === 'DOCTOR' ? '服务端机构统计和趋势' : '个人随访统计和趋势'}}"
+    showBack="{{true}}"
+    bindback="backWorkspace"
+  />
+
+  <view class="range-bar">
+    <choice-tile options="{{rangeOptions}}" value="{{rangeKey}}" bindchange="onRangeChange" />
+  </view>
+
+  <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
+
+  <view wx:else class="stats-stack">
+    <view class="stats-grid">
+      <stat-card wx:for="{{summaryCards}}" wx:key="key" title="{{item.title}}" value="{{item.value}}" caption="{{item.caption}}" tone="{{item.tone}}" />
+    </view>
+
+    <form-section title="{{trendTitle}}" caption="{{trendCaption}}">
+      <view wx:if="{{!trendRows.length}}" class="empty-inline">暂无趋势数据</view>
+      <view wx:for="{{trendRows}}" wx:key="label" class="trend-row">
+        <view class="trend-copy">
+          <view class="trend-label">{{item.label}}</view>
+          <view wx:if="{{item.caption}}" class="trend-caption">{{item.caption}}</view>
+        </view>
+        <view class="trend-value">{{item.value}}</view>
+      </view>
+    </form-section>
+
+    <form-section wx:if="{{detailRows.length}}" title="{{detailTitle}}">
+      <view wx:for="{{detailRows}}" wx:key="label" class="trend-row">
+        <view class="trend-copy">
+          <view class="trend-label">{{item.label}}</view>
+          <view wx:if="{{item.caption}}" class="trend-caption">{{item.caption}}</view>
+        </view>
+        <view class="trend-value">{{item.value}}</view>
+      </view>
+    </form-section>
+
+    <form-section wx:if="{{highlightRows.length}}" title="{{highlightTitle}}">
+      <view wx:for="{{highlightRows}}" wx:key="label" class="trend-row">
+        <view class="trend-copy">
+          <view class="trend-label">{{item.label}}</view>
+          <view wx:if="{{item.caption}}" class="trend-caption">{{item.caption}}</view>
+        </view>
+        <view class="trend-value">{{item.value}}</view>
+      </view>
+    </form-section>
+  </view>
+</view>

@@ -1,0 +1,95 @@
+<view class="page followup-detail-page">
+  <app-header
+    title="{{canEdit ? '随访填报' : '随访详情'}}"
+    subtitle="{{canEdit ? '草稿可先保存，提交后由服务端计算 CAT 与临床结论' : '随访详情由服务端返回'}}"
+    showBack="{{true}}"
+    bindback="backList"
+  />
+
+  <state-panel wx:if="{{error}}" state="error" title="操作失败" message="{{error}}" actionText="重试" bindaction="backList" />
+
+  <view wx:elif="{{loading}}" class="loading-panel">
+    <state-panel state="loading" title="加载中" message="正在读取随访详情" />
+  </view>
+
+  <view wx:else class="detail-stack">
+    <form-section title="基础信息" caption="患者、随访时间和状态">
+      <input class="form-input" value="{{form.patientId}}" disabled="true" placeholder="患者ID" />
+      <input class="form-input" value="{{form.visitDate}}" disabled="{{!canEdit}}" placeholder="随访日期时间" bindinput="updateField" data-field="visitDate" />
+      <view class="choice-block">
+        <view class="choice-title">随访类型</view>
+        <choice-tile options="{{visitTypeOptions}}" value="{{form.visitType}}" bindchange="onChoiceChange" data-field="visitType" />
+      </view>
+      <view class="choice-block">
+        <view class="choice-title">患者状态</view>
+        <choice-tile options="{{patientStatusOptions}}" value="{{form.patientStatus}}" bindchange="onChoiceChange" data-field="patientStatus" />
+      </view>
+    </form-section>
+
+    <form-section title="CAT 评估" caption="8 项原始答案全部由服务端计算 CAT">
+      <view wx:for="{{catQuestions}}" wx:key="index" class="cat-item">
+        <view class="cat-label">{{index + 1}}. {{item}}</view>
+        <choice-tile options="{{catOptions}}" value="{{form.catAnswers[index]}}" bindchange="onCatChange" data-index="{{index}}" />
+      </view>
+    </form-section>
+
+    <form-section title="mMRC" caption="呼吸困难分级">
+      <choice-tile options="{{mmrcOptions}}" value="{{form.mmrcOption}}" bindchange="onChoiceChange" data-field="mmrcOption" />
+    </form-section>
+
+    <form-section title="主诉与用药" caption="原生表单仅做信息采集">
+      <textarea class="form-textarea" value="{{form.chiefComplaintsText}}" disabled="{{!canEdit}}" placeholder="主诉，多个主诉请用中文逗号分隔" bindinput="updateField" data-field="chiefComplaintsText" />
+      <textarea class="form-textarea" value="{{form.chiefComplaintsOther}}" disabled="{{!canEdit}}" placeholder="主诉补充" bindinput="updateField" data-field="chiefComplaintsOther" />
+      <textarea class="form-textarea" value="{{form.oralDrugsText}}" disabled="{{!canEdit}}" placeholder="口服药物，多个请用中文逗号分隔" bindinput="updateField" data-field="oralDrugsText" />
+      <textarea class="form-textarea" value="{{form.inhaledDrugsText}}" disabled="{{!canEdit}}" placeholder="吸入药物，多个请用中文逗号分隔" bindinput="updateField" data-field="inhaledDrugsText" />
+      <textarea class="form-textarea" value="{{form.remark}}" disabled="{{!canEdit}}" placeholder="备注" bindinput="updateField" data-field="remark" />
+    </form-section>
+
+    <form-section title="COPD 快照" caption="症状和结构化快照">
+      <textarea class="form-textarea" value="{{form.symptom}}" disabled="{{!canEdit}}" placeholder="COPD 症状" bindinput="updateField" data-field="symptom" />
+      <textarea class="form-textarea" value="{{form.comorbidityListText}}" disabled="{{!canEdit}}" placeholder="合并症，多个请用中文逗号分隔" bindinput="updateField" data-field="comorbidityListText" />
+      <textarea class="form-textarea" value="{{form.otherRemark}}" disabled="{{!canEdit}}" placeholder="其他说明" bindinput="updateField" data-field="otherRemark" />
+      <input class="form-input" value="{{form.regularFollowup}}" disabled="{{!canEdit}}" placeholder="是否规律随访" bindinput="updateField" data-field="regularFollowup" />
+      <input class="form-input" value="{{form.hasAsthma}}" disabled="{{!canEdit}}" placeholder="是否合并哮喘" bindinput="updateField" data-field="hasAsthma" />
+      <input class="form-input" value="{{form.patientGroup}}" disabled="{{!canEdit}}" placeholder="患者分组" bindinput="updateField" data-field="patientGroup" />
+      <input class="form-input" value="{{form.goldGrade}}" disabled="{{!canEdit}}" placeholder="GOLD 分级" bindinput="updateField" data-field="goldGrade" />
+      <input class="form-input" value="{{form.adverseReaction}}" disabled="{{!canEdit}}" placeholder="不良反应" bindinput="updateField" data-field="adverseReaction" />
+      <input class="form-input" value="{{form.needAdjustment}}" disabled="{{!canEdit}}" placeholder="是否需要调整" bindinput="updateField" data-field="needAdjustment" />
+      <textarea class="form-textarea" value="{{form.adjustmentSuggestion}}" disabled="{{!canEdit}}" placeholder="调整建议" bindinput="updateField" data-field="adjustmentSuggestion" />
+      <input class="form-input" value="{{form.nextVisitDate}}" disabled="{{!canEdit}}" placeholder="下次随访日期" bindinput="updateField" data-field="nextVisitDate" />
+    </form-section>
+
+    <form-section title="生活方式与体格" caption="随访扩展快照">
+      <input class="form-input" value="{{form.height}}" disabled="{{!canEdit}}" placeholder="身高 cm" bindinput="updateField" data-field="height" />
+      <input class="form-input" value="{{form.weight}}" disabled="{{!canEdit}}" placeholder="体重 kg" bindinput="updateField" data-field="weight" />
+      <input class="form-input" value="{{form.smokingDaily}}" disabled="{{!canEdit}}" placeholder="日吸烟量" bindinput="updateField" data-field="smokingDaily" />
+      <input class="form-input" value="{{form.exerciseFreq}}" disabled="{{!canEdit}}" placeholder="运动频次" bindinput="updateField" data-field="exerciseFreq" />
+      <input class="form-input" value="{{form.exerciseDuration}}" disabled="{{!canEdit}}" placeholder="运动时长" bindinput="updateField" data-field="exerciseDuration" />
+      <input class="form-input" value="{{form.spo2}}" disabled="{{!canEdit}}" placeholder="SpO2" bindinput="updateField" data-field="spo2" />
+      <input class="form-input" value="{{form.psychology}}" disabled="{{!canEdit}}" placeholder="心理调整" bindinput="updateField" data-field="psychology" />
+      <input class="form-input" value="{{form.compliance}}" disabled="{{!canEdit}}" placeholder="遵医行为" bindinput="updateField" data-field="compliance" />
+      <textarea class="form-textarea" value="{{form.vaccinesText}}" disabled="{{!canEdit}}" placeholder="疫苗免疫史，多个请用中文逗号分隔" bindinput="updateField" data-field="vaccinesText" />
+    </form-section>
+
+    <form-section title="照片" caption="仅支持 jpg/jpeg/png，单张不超过 5 MiB">
+      <view wx:if="{{!form.photos.length}}" class="empty-inline">暂无照片</view>
+      <view wx:for="{{form.photos}}" wx:key="fileUrl" class="photo-row">
+        <view class="photo-copy">
+          <view class="photo-name">{{item.fileName}}</view>
+          <view class="photo-url">{{item.fileUrl}}</view>
+        </view>
+        <button wx:if="{{canEdit}}" class="photo-remove" data-index="{{index}}" bindtap="removePhoto">删除</button>
+      </view>
+      <button wx:if="{{canEdit}}" class="secondary-button photo-add" bindtap="addPhoto">添加照片</button>
+    </form-section>
+  </view>
+
+  <bottom-action-bar
+    wx:if="{{canEdit}}"
+    primaryText="{{followupId ? '更新随访' : '提交随访'}}"
+    secondaryText="保存草稿"
+    loading="{{saving || draftSaving}}"
+    bindprimary="submit"
+    bindsecondary="saveDraft"
+  />
+</view>

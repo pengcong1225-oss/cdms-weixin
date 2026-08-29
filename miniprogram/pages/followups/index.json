@@ -1,0 +1,7 @@
+{
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "state-panel": "/components/state-panel/state-panel",
+    "status-tag": "/components/status-tag/status-tag"
+  }
+}

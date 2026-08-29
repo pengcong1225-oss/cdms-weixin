@@ -1,4 +1,6 @@
 const api = require('../../../utils/api')
+const messageApi = require('../../../utils/message-api')
+const statsApi = require('../../../utils/stats-api')
 const bleManager = require('../../../services/bleManager')
 const { ensureSession } = require('../../../utils/auth-guard')
 const { PUBLIC_SCREENING_URL } = require('../../../utils/workspace-entry')
@@ -7,13 +9,16 @@ Page({
   data: {
     publicScreeningUrl: PUBLIC_SCREENING_URL,
     hasPatientRef: false,
+    showWorkspaceContent: false,
     stats: [
-      { key: 'followups', title: '随访', value: '--', caption: '本人随访记录', tone: 'success' },
-      { key: 'reports', title: '报告', value: '--', caption: '标准与 AI 报告', tone: 'neutral' }
+      { key: 'followups', title: '随访总数', value: '--', caption: '本人累计随访', tone: 'success' },
+      { key: 'messages', title: '未读消息', value: '--', caption: '来自服务端的消息', tone: 'warning' },
+      { key: 'month', title: '本月随访', value: '--', caption: '最近 30 天/本月', tone: 'neutral' }
     ],
     entries: [
-      { key: 'followups', title: '随访记录', subtitle: '后续任务接入原生随访列表', icon: '访', disabled: true },
-      { key: 'reports', title: '健康报告', subtitle: '后续任务接入原生报告查看', icon: '报', disabled: true },
+      { key: 'followups', title: '随访记录', subtitle: '查看本人随访历史和草稿', icon: '访', disabled: false },
+      { key: 'messages', title: '消息中心', subtitle: '查看服务端消息并标记已读', icon: '信', disabled: false },
+      { key: 'reports', title: '健康报告', subtitle: '标准和 AI 报告后续开放', icon: '报', disabled: true },
       { key: 'device', title: '指环设备', subtitle: '连接设备并同步健康数据', icon: '戒', disabled: false }
     ]
   },
@@ -29,16 +34,61 @@ Page({
   async ensurePatient () {
     try {
       const session = await ensureSession({ role: 'PATIENT' })
-      this.setData({ hasPatientRef: !!String(session.patientRef || '').trim() })
+      const hasPatientRef = !!String(session.patientRef || '').trim()
+      this.setData({
+        hasPatientRef,
+        showWorkspaceContent: hasPatientRef
+      })
+      if (hasPatientRef) {
+        await this.loadWorkspaceSummary()
+      }
     } catch (_) {}
+  },
+
+  async loadWorkspaceSummary () {
+    try {
+      const [stats, unread] = await Promise.all([
+        statsApi.getMyStats(),
+        messageApi.getUnreadCount()
+      ])
+      this.setData({
+        stats: [
+          {
+            key: 'followups',
+            title: '随访总数',
+            value: String(stats?.totalFollowups ?? '--'),
+            caption: '本人累计随访',
+            tone: 'success'
+          },
+          {
+            key: 'messages',
+            title: '未读消息',
+            value: String(unread?.count ?? unread ?? '--'),
+            caption: '来自服务端的消息',
+            tone: 'warning'
+          },
+          {
+            key: 'month',
+            title: '本月随访',
+            value: String(stats?.thisMonth ?? '--'),
+            caption: '最近 30 天/本月',
+            tone: 'neutral'
+          }
+        ]
+      })
+    } catch (error) {
+      console.warn('[CDMS] patient workspace summary load failed', error)
+    }
   },
 
   onEntrySelect (event) {
     const entry = this.data.entries[event.currentTarget.dataset.index]
-    if (!entry || entry.disabled) {
+    if (!this.data.showWorkspaceContent || !entry || entry.disabled) {
       wx.showToast({ title: '功能准备中', icon: 'none' })
       return
     }
+    if (entry.key === 'followups') wx.navigateTo({ url: '/pages/followups/index' })
+    if (entry.key === 'messages') wx.navigateTo({ url: '/pages/messages/index' })
     if (entry.key === 'device') wx.switchTab({ url: '/pages/device/device' })
   },
 

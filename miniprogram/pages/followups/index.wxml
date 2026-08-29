@@ -1,0 +1,30 @@
+<view class="page followup-page">
+  <app-header title="随访管理" subtitle="{{headerSubtitle}}" showBack="{{true}}" bindback="backWorkspace" />
+
+  <view wx:if="{{canEdit && patientId}}" class="toolbar">
+    <button class="primary-button toolbar-button" bindtap="createFollowup">新增随访</button>
+  </view>
+
+  <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
+  <state-panel wx:elif="{{empty}}" state="empty" title="暂无随访记录" message="{{scope === 'DOCTOR' ? '当前患者暂无随访记录。' : '当前没有我的随访记录。'}}" />
+
+  <view wx:else class="followup-stack">
+    <view
+      wx:for="{{followups}}"
+      wx:key="id"
+      class="followup-card card"
+      data-id="{{item.id}}"
+      bindtap="onFollowupSelect"
+    >
+      <view class="followup-top">
+        <view class="followup-date">{{item.visitDateText}}</view>
+        <status-tag text="{{item.patientStatusText || '状态已脱敏'}}" tone="{{item.statusTone}}" />
+      </view>
+      <view class="followup-summary">{{item.summaryText}}</view>
+      <view class="followup-meta">{{item.metaText}}</view>
+    </view>
+
+    <view wx:if="{{loading}}" class="list-hint">加载中...</view>
+    <view wx:elif="{{!hasMore}}" class="list-hint">已显示全部</view>
+  </view>
+</view>

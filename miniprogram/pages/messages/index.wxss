@@ -1,0 +1,69 @@
+page {
+  background: var(--cdms-background);
+}
+
+.message-page {
+  padding-bottom: 56rpx;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18rpx;
+  margin-bottom: 18rpx;
+}
+
+.toolbar {
+  margin-bottom: 18rpx;
+}
+
+.toolbar-button {
+  width: 100%;
+}
+
+.message-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.message-card {
+  padding: 24rpx;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}
+
+.message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.message-title {
+  color: var(--cdms-text);
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.message-content {
+  margin-top: 12rpx;
+  color: var(--cdms-text);
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.message-meta,
+.list-hint {
+  margin-top: 10rpx;
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.list-hint {
+  padding: 16rpx 0;
+  text-align: center;
+}

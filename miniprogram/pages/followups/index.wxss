@@ -1,0 +1,62 @@
+page {
+  background: var(--cdms-background);
+}
+
+.followup-page {
+  padding-bottom: 56rpx;
+}
+
+.toolbar {
+  margin: 8rpx 0 18rpx;
+}
+
+.toolbar-button {
+  width: 100%;
+}
+
+.followup-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.followup-card {
+  padding: 24rpx;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}
+
+.followup-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.followup-date {
+  color: var(--cdms-text);
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.followup-summary {
+  margin-top: 12rpx;
+  color: var(--cdms-text);
+  font-size: 25rpx;
+  line-height: 38rpx;
+}
+
+.followup-meta,
+.list-hint {
+  margin-top: 10rpx;
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.list-hint {
+  padding: 16rpx 0;
+  text-align: center;
+}

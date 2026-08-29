@@ -1,0 +1,8 @@
+{
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "state-panel": "/components/state-panel/state-panel",
+    "stat-card": "/components/stat-card/stat-card",
+    "status-tag": "/components/status-tag/status-tag"
+  }
+}
