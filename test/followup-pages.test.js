@@ -197,6 +197,7 @@ test('doctor followup list without patient context blocks personal fallback', as
     const page = doctorEnv.pages[0]
 
     await page.onLoad()
+    await page.retry()
 
     assert.strictEqual(page.data.scope, 'DOCTOR')
     assert.strictEqual(page.data.patientId, '')

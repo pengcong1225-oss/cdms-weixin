@@ -81,6 +81,14 @@ Page({
     const pageSize = this.data.pageSize
     this.setData({ loading: true, error: '', empty: false })
     try {
+      if (this.data.scope === 'DOCTOR' && !this.data.patientId) {
+        this.setData({
+          loading: false,
+          error: '请选择患者后再查看随访',
+          empty: false
+        })
+        return
+      }
       const useDoctorScope = this.data.scope === 'DOCTOR' && this.data.patientId
       const response = useDoctorScope
         ? await followupApi.listPatientFollowups(this.data.patientId, { page, pageSize })
