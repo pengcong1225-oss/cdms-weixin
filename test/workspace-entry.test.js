@@ -13,6 +13,14 @@ function installDoctorWorkspaceEnv (session = {}) {
   const pages = []
   const navigations = []
   const toasts = []
+  const app = {
+    globalData: Object.assign({
+      accessToken: 'doctor-access',
+      refreshToken: 'doctor-refresh',
+      activeRole: 'DOCTOR'
+    }, session),
+    clearAuth: () => {}
+  }
   const previous = {
     Page: global.Page,
     getApp: global.getApp,
@@ -25,14 +33,7 @@ function installDoctorWorkspaceEnv (session = {}) {
     }
     pages.push(config)
   }
-  global.getApp = () => ({
-    globalData: Object.assign({
-      accessToken: 'doctor-access',
-      refreshToken: 'doctor-refresh',
-      activeRole: 'DOCTOR'
-    }, session),
-    clearAuth: () => {}
-  })
+  global.getApp = () => app
   global.wx = {
     navigateTo: options => navigations.push(options),
     switchTab: options => navigations.push(options),
@@ -74,6 +75,7 @@ function installDoctorWorkspaceEnv (session = {}) {
   require(doctorWorkspacePath)
 
   return {
+    app,
     page: pages[0],
     navigations,
     toasts,
@@ -117,14 +119,15 @@ test('doctor workspace exposes every native business entry without disabled plac
 
     assert.deepStrictEqual(page.data.entries.map(item => item.key), [
       'patients',
+      'station',
       'followups',
       'monitoring',
       'messages',
       'statistics',
       'reports',
-      'station',
       'devices'
     ])
+    assert.equal(page.data.entries[1].key, 'station')
     assert.equal(page.data.entries.some(item => item.disabled), false)
     assert.equal(page.data.entries.some(item => /后续接入/.test(item.subtitle)), false)
     assert.equal(page.data.stats.some(item => /后续/.test(String(item.caption || ''))), false)
@@ -133,7 +136,20 @@ test('doctor workspace exposes every native business entry without disabled plac
   }
 })
 
-test('doctor workspace navigates native entries and only attaches patientId when patient context exists', async () => {
+test('doctor workspace ignores query-derived patient context and keeps patient urls clean', async () => {
+  const env = installDoctorWorkspaceEnv()
+  try {
+    const page = env.page
+    await page.onLoad({ patientId: 'query-patient', id: 'query-id' })
+
+    assert.equal(page.data.currentPatientId, '')
+    assert.equal(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('doctor workspace navigates native entries without patientId in urls and uses transient patient context', async () => {
   const env = installDoctorWorkspaceEnv()
   try {
     const page = env.page
@@ -145,12 +161,12 @@ test('doctor workspace navigates native entries and only attaches patientId when
 
     assert.deepStrictEqual(env.navigations, [
       { url: '/pages/patient-list/index' },
+      { url: '/pages/device-scale/station/index' },
       { url: '/pages/followups/index' },
       { url: '/pages/monitoring/index' },
       { url: '/pages/messages/index' },
       { url: '/pages/statistics/index' },
       { url: '/pages/reports/index' },
-      { url: '/pages/device-scale/station/index' },
       { url: '/pages/device/device' }
     ])
     assert.deepStrictEqual(env.toasts, [])
@@ -163,15 +179,20 @@ test('doctor workspace navigates native entries and only attaches patientId when
     const page = scopedEnv.page
     await page.onLoad()
 
-    page.onEntrySelect({ currentTarget: { dataset: { index: 1 } } })
-    page.onEntrySelect({ currentTarget: { dataset: { index: 2 } } })
-    page.onEntrySelect({ currentTarget: { dataset: { index: 5 } } })
+    const followupsIndex = page.data.entries.findIndex(item => item.key === 'followups')
+    const monitoringIndex = page.data.entries.findIndex(item => item.key === 'monitoring')
+    const reportsIndex = page.data.entries.findIndex(item => item.key === 'reports')
+
+    page.onEntrySelect({ currentTarget: { dataset: { index: followupsIndex } } })
+    page.onEntrySelect({ currentTarget: { dataset: { index: monitoringIndex } } })
+    page.onEntrySelect({ currentTarget: { dataset: { index: reportsIndex } } })
 
     assert.deepStrictEqual(scopedEnv.navigations, [
-      { url: '/pages/followups/index?patientId=768495013408443' },
-      { url: '/pages/monitoring/index?patientId=768495013408443' },
-      { url: '/pages/reports/index?patientId=768495013408443' }
+      { url: '/pages/followups/index' },
+      { url: '/pages/monitoring/index' },
+      { url: '/pages/reports/index' }
     ])
+    assert.equal(scopedEnv.app.globalData.currentPatientId, '768495013408443')
   } finally {
     scopedEnv.cleanup()
   }

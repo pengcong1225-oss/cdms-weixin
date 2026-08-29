@@ -80,6 +80,10 @@ test('doctor workspace source closes native entry placeholders and keeps patient
   assert.match(doctorWorkspace, /\/pages\/reports\/index/)
   assert.match(doctorWorkspace, /currentPatientId/)
   assert.match(doctorWorkspace, /requiresPatientContext/)
+  assert.equal(/query\.patientId/.test(doctorWorkspace), false)
+  assert.equal(/query\.id/.test(doctorWorkspace), false)
+  assert.equal(/\?patientId=/.test(doctorWorkspace), false)
+  assert.match(doctorWorkspace, /globalData\.currentPatientId/)
 
   const patientScopedPages = [
     'miniprogram/pages/followups/index.js',

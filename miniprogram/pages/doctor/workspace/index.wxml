@@ -17,5 +17,5 @@
     bindselect="onEntrySelect"
   />
 
-  <state-panel state="empty" title="原生入口已就绪" message="患者管理、随访、监测、消息、统计、报告、体脂秤和设备工作站均可进入；随访、监测和报告在缺少患者上下文时会提示先选择患者。" />
+  <state-panel state="empty" title="原生入口已就绪" message="{{stateMessage}}" />
 </view>

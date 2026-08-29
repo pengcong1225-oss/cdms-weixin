@@ -4,12 +4,12 @@ const { ensureSession } = require('../../../utils/auth-guard')
 
 const DOCTOR_ENTRY_ROUTES = [
   { key: 'patients', title: '患者管理', subtitle: '查看患者列表、新增档案和患者360', icon: '患', url: '/pages/patient-list/index' },
+  { key: 'station', title: '体脂秤工作站', subtitle: '创建场次、扫码签到和轮测确认', icon: '秤', url: '/pages/device-scale/station/index' },
   { key: 'followups', title: '随访工作', subtitle: '查看患者随访列表并新建原生随访', icon: '访', url: '/pages/followups/index', requiresPatientContext: true },
   { key: 'monitoring', title: '监测中心', subtitle: '查看患者监测摘要、趋势和告警', icon: '测', url: '/pages/monitoring/index', requiresPatientContext: true },
   { key: 'messages', title: '消息中心', subtitle: '查看服务端消息并标记已读', icon: '信', url: '/pages/messages/index' },
   { key: 'statistics', title: '统计中心', subtitle: '查看服务数据、待办和风险分层统计', icon: '统', url: '/pages/statistics/index' },
   { key: 'reports', title: '报告中心', subtitle: '查看患者标准报告与 AI 报告', icon: '报', url: '/pages/reports/index', requiresPatientContext: true },
-  { key: 'station', title: '体脂秤工作站', subtitle: '创建场次、扫码签到和轮测确认', icon: '秤', url: '/pages/device-scale/station/index' },
   { key: 'devices', title: '设备工作站', subtitle: '指环、MFA-1 和 Sunvou 原生入口', icon: '设', url: '/pages/device/device' }
 ]
 
@@ -27,8 +27,6 @@ function normalizeEntries () {
 function resolveCurrentPatientId (query = {}, session = {}, fallback = '') {
   const app = typeof getApp === 'function' ? getApp() : null
   return String(
-    query.patientId ||
-    query.id ||
     session.currentPatientId ||
     app?.globalData?.currentPatientId ||
     fallback ||
@@ -37,13 +35,31 @@ function resolveCurrentPatientId (query = {}, session = {}, fallback = '') {
 }
 
 function buildEntryUrl (entry, patientId) {
-  if (!entry?.requiresPatientContext || !patientId) return entry?.url || ''
-  return `${entry.url}?patientId=${encodeURIComponent(patientId)}`
+  return entry?.url || ''
+}
+
+function persistTransientPatientContext (patientId) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  if (!app?.globalData) return
+  const nextPatientId = String(patientId || '').trim()
+  if (nextPatientId) {
+    app.globalData.currentPatientId = nextPatientId
+    return
+  }
+  delete app.globalData.currentPatientId
+}
+
+function buildStateMessage (patientId) {
+  if (String(patientId || '').trim()) {
+    return '患者管理、随访、监测、消息、统计、报告、体脂秤和设备工作站均可进入；当前患者上下文仅保存在本次小程序内存中，不进入路由地址。'
+  }
+  return '患者管理、随访、监测、消息、统计、报告、体脂秤和设备工作站均可进入；随访、监测和报告在缺少患者上下文时会提示先选择患者。'
 }
 
 Page({
   data: {
     currentPatientId: '',
+    stateMessage: buildStateMessage(''),
     stats: buildStats(),
     entries: normalizeEntries()
   },
@@ -59,8 +75,10 @@ Page({
   async ensureDoctor (query = {}) {
     try {
       const session = await ensureSession({ role: 'DOCTOR' })
+      const currentPatientId = resolveCurrentPatientId(query, session, this.data.currentPatientId)
       this.setData({
-        currentPatientId: resolveCurrentPatientId(query, session, this.data.currentPatientId),
+        currentPatientId,
+        stateMessage: buildStateMessage(currentPatientId),
         stats: buildStats(),
         entries: normalizeEntries()
       })
@@ -70,6 +88,7 @@ Page({
   onEntrySelect (event) {
     const entry = this.data.entries[event.currentTarget.dataset.index]
     if (!entry || entry.disabled) return
+    persistTransientPatientContext(entry.requiresPatientContext ? this.data.currentPatientId : '')
     const url = buildEntryUrl(entry, this.data.currentPatientId)
     if (!url) return
     wx.navigateTo({ url })
@@ -107,7 +126,9 @@ Page({
 module.exports = {
   DOCTOR_ENTRY_ROUTES,
   buildEntryUrl,
+  buildStateMessage,
   buildStats,
   normalizeEntries,
+  persistTransientPatientContext,
   resolveCurrentPatientId
 }
