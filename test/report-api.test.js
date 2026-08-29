@@ -62,7 +62,8 @@ test('report access urls never enter route query or storage', async () => {
   assert.strictEqual(route.includes('accessUrl'), false)
   assert.strictEqual(route.includes('token'), false)
   assert.strictEqual(route.includes('reportId=9001'), true)
-  assert.strictEqual(route.includes('patientId=768495013408443'), true)
+  assert.strictEqual(route.includes('patientId='), false)
+  assert.strictEqual(route.includes('768495013408443'), false)
 })
 
 test('ai report endpoints keep confirm body minimal and preserve string ids', async () => {

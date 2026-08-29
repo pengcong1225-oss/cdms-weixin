@@ -5,6 +5,7 @@ const test = require('node:test')
 
 const root = path.resolve(__dirname, '..')
 const authGuardPath = path.join(root, 'miniprogram/utils/auth-guard.js')
+const apiPath = path.join(root, 'miniprogram/utils/api.js')
 const monitoringApiPath = path.join(root, 'miniprogram/utils/monitoring-api.js')
 const patientApiPath = path.join(root, 'miniprogram/utils/patient-api.js')
 const reportApiPath = path.join(root, 'miniprogram/utils/report-api.js')
@@ -103,6 +104,25 @@ function installPageEnv ({ session = {}, stubs = {}, wxOverrides = {} } = {}) {
       })
     }
   }
+}
+
+function actualReportApiWithStubs (exports) {
+  delete require.cache[apiPath]
+  delete require.cache[reportApiPath]
+  require.cache[apiPath] = {
+    id: apiPath,
+    filename: apiPath,
+    loaded: true,
+    exports: {
+      cdmsRequest: async () => {
+        throw new Error('unexpected report api network call')
+      }
+    }
+  }
+  const actualReportApi = require(reportApiPath)
+  delete require.cache[reportApiPath]
+  delete require.cache[apiPath]
+  return Object.assign({}, actualReportApi, exports)
 }
 
 function loadPage (relativePath) {
@@ -270,7 +290,7 @@ test('reports pages keep short-lived access urls in memory only', async () => {
           listCalls.push(['file-url', patientId, fileId])
           return { url: 'https://short.example/file-9001.pdf', expiresInSeconds: 300 }
         },
-        buildReportRoute: ({ patientId, reportId }) => `/pages/reports/detail?patientId=${patientId}&reportId=${reportId}`
+        buildReportRoute: ({ reportId }) => `/pages/reports/detail?reportId=${reportId}`
       }
     }
   })
@@ -283,12 +303,12 @@ test('reports pages keep short-lived access urls in memory only', async () => {
     await indexPage.onLoad({ patientId: '768495013408443' })
     indexPage.onReportTap({ currentTarget: { dataset: { reportId: '9001' } } })
 
-    await detailPage.onLoad({ patientId: '768495013408443', reportId: '9001' })
+    await detailPage.onLoad({ reportId: '9001' })
     await detailPage.openReport()
     await detailPage.openAttachment()
 
     assert.strictEqual(indexPage.data.reports[0].reportId, '9001')
-    assert.deepStrictEqual(env.navigations, [{ url: '/pages/reports/detail?patientId=768495013408443&reportId=9001' }])
+    assert.deepStrictEqual(env.navigations, [{ url: '/pages/reports/detail?reportId=9001' }])
     assert.strictEqual(env.storageWrites.length, 0)
     assert.strictEqual(env.clipboardWrites.length, 0)
     assert.strictEqual(env.downloads[0].url, 'https://short.example/report-9001.pdf')
@@ -296,6 +316,88 @@ test('reports pages keep short-lived access urls in memory only', async () => {
     assert.strictEqual(env.openDocuments[0].filePath, '/tmp/report.pdf')
     assert.strictEqual(env.openDocuments[1].filePath, '/tmp/report.pdf')
     assert.strictEqual(listCalls.some(call => String(call[2]?.accessUrl || '').length), false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('doctor report detail navigation keeps patient identifier out of route query and consumes transient context', async () => {
+  const listCalls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [reportApiPath]: actualReportApiWithStubs({
+        listPatientReports: async (patientId, params) => {
+          listCalls.push(['list', patientId, params])
+          return {
+            items: [{ reportId: 9001, patientId, reportNo: 'RPT-9001', category: 'RING', createdAt: '2026-08-29T10:00:00', downloadAvailable: true }],
+            page: 1,
+            pageSize: 20,
+            total: 1
+          }
+        }
+      })
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/index.js')
+    loadPage('miniprogram/pages/reports/detail.js')
+    const indexPage = env.pages[0]
+    const detailPage = env.pages[1]
+
+    indexPage.setData({ scope: 'DOCTOR', patientId: '768495013408443' })
+    indexPage.onReportTap({ currentTarget: { dataset: { reportId: '9001' } } })
+
+    assert.deepStrictEqual(env.navigations, [{ url: '/pages/reports/detail?reportId=9001' }])
+    assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
+
+    await detailPage.onLoad({ reportId: '9001' })
+
+    assert.strictEqual(detailPage.data.scope, 'DOCTOR')
+    assert.strictEqual(detailPage.data.patientId, '768495013408443')
+    assert.deepStrictEqual(listCalls, [['list', '768495013408443', { page: 1, pageSize: 50 }]])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('patient ai report navigation keeps patient identifier out of route query and uses patient session context', async () => {
+  const calls = []
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '768495013408443' })
+      },
+      [reportApiPath]: {
+        getAiReport: async patientId => {
+          calls.push(['get-ai', patientId])
+          return { reportId: 9101, patientId, reportType: 1, markdownContent: '# patient', doctorConfirmed: 0 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/index.js')
+    loadPage('miniprogram/pages/reports/detail.js')
+    const indexPage = env.pages[0]
+    const detailPage = env.pages[1]
+
+    indexPage.setData({ scope: 'PATIENT', patientId: '768495013408443' })
+    indexPage.onAiActionTap({ currentTarget: { dataset: { key: 'patient-ai' } } })
+
+    assert.deepStrictEqual(env.navigations, [{ url: '/pages/reports/detail?mode=patient' }])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+
+    await detailPage.onLoad({ mode: 'patient' })
+
+    assert.strictEqual(detailPage.data.scope, 'PATIENT')
+    assert.strictEqual(detailPage.data.patientId, '768495013408443')
+    assert.deepStrictEqual(calls, [['get-ai', '768495013408443']])
   } finally {
     env.cleanup()
   }

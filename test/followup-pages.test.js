@@ -245,6 +245,44 @@ test('doctor followup list consumes transient workspace patient context and clea
   }
 })
 
+test('doctor followup creation keeps patient identifier out of route query and detail consumes transient context', async () => {
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        listMyFollowups: async () => {
+          throw new Error('patient scope should not be used for doctor followup creation')
+        },
+        listPatientFollowups: async () => ({ list: [], total: 0, page: 1, pageSize: 20 })
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/index.js')
+    loadPage('miniprogram/pages/followups/detail.js')
+    const indexPage = env.pages[0]
+    const detailPage = env.pages[1]
+
+    indexPage.setData({ canEdit: true, patientId: '768495013408443' })
+    indexPage.createFollowup()
+
+    assert.deepStrictEqual(env.navigations, [{ url: '/pages/followups/detail' }])
+    assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
+
+    await detailPage.onLoad()
+
+    assert.strictEqual(detailPage.data.canEdit, true)
+    assert.strictEqual(detailPage.data.patientId, '768495013408443')
+    assert.strictEqual(detailPage.data.form.patientId, '768495013408443')
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('followup detail blocks invalid submit, saves drafts, and uploads photos', async () => {
   const calls = []
   let allowSubmit = false

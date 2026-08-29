@@ -45,6 +45,17 @@ function consumeDoctorPatientId (query = {}) {
   return queryPatientId || transientPatientId
 }
 
+function persistDoctorPatientId (patientId) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  if (!app?.globalData) return
+  const nextPatientId = String(patientId || '').trim()
+  if (nextPatientId) {
+    app.globalData.currentPatientId = nextPatientId
+    return
+  }
+  delete app.globalData.currentPatientId
+}
+
 Page({
   data: {
     scope: 'PATIENT',
@@ -148,7 +159,8 @@ Page({
       wx.showToast({ title: '请选择患者后再新建随访', icon: 'none' })
       return
     }
-    wx.navigateTo({ url: `/pages/followups/detail?patientId=${encodeURIComponent(this.data.patientId)}` })
+    persistDoctorPatientId(this.data.patientId)
+    wx.navigateTo({ url: '/pages/followups/detail' })
   },
 
   retry () {
