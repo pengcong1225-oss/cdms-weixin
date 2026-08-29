@@ -1,5 +1,7 @@
 const assert = require('assert')
-const { buildUserInfoFrame, buildUnitFrame, buildWorkModeFrame, parseScaleFrame, FrameAssembler } = require('../miniprogram/services/scale/scaleBle')
+const scaleBle = require('../miniprogram/services/scale/scaleBle')
+const scaleBleWrapper = require('../miniprogram/services/scaleBle')
+const { buildUserInfoFrame, buildUnitFrame, buildWorkModeFrame, parseScaleFrame, FrameAssembler } = scaleBle
 
 function bytes (frame) { return Array.from(frame) }
 
@@ -23,5 +25,6 @@ assert.deepStrictEqual(parsed.metrics, [
 const assembler = new FrameAssembler()
 assert.deepStrictEqual(assembler.push(segment1.slice(0, 7)), [])
 assert.strictEqual(assembler.push(segment1.slice(7)).length, 1)
+assert.strictEqual(scaleBleWrapper.ScaleBle, scaleBle.ScaleBle)
 
 console.log('scale ble tests passed')

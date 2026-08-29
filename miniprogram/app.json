@@ -13,6 +13,7 @@
     "pages/patient-list/index",
     "pages/patient-detail/index",
     "pages/patient-360/index",
+    "pages/device-scale/station/index",
     "pages/home/home",
     "pages/device/device",
     "pages/search/search",

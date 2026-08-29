@@ -1,0 +1,114 @@
+.page {
+  min-height: 100vh;
+  background: #f4f8f6;
+  padding-bottom: 32rpx;
+  color: #173d32;
+}
+
+.loading-panel {
+  padding: 24rpx;
+}
+
+.station-stack {
+  padding: 0 24rpx 24rpx;
+}
+
+.station-summary,
+.queue-card,
+.patient-card,
+.metric-card {
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 26rpx rgba(23, 61, 50, 0.06);
+}
+
+.station-summary {
+  display: flex;
+  gap: 20rpx;
+  padding: 24rpx;
+}
+
+.station-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.station-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.station-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  margin-bottom: 8rpx;
+}
+
+.station-meta,
+.queue-meta,
+.patient-meta {
+  color: #6f867d;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.station-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.patient-card,
+.queue-card {
+  padding: 24rpx;
+}
+
+.patient-name,
+.queue-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 8rpx;
+}
+
+.queue-card + .queue-card {
+  margin-top: 16rpx;
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.metric-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14rpx;
+  margin-top: 18rpx;
+}
+
+.metric-card {
+  padding: 18rpx;
+}
+
+.metric-label {
+  display: block;
+  color: #527166;
+  font-size: 24rpx;
+}
+
+.metric-value {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.empty-inline {
+  color: #6f867d;
+  font-size: 24rpx;
+  padding: 10rpx 0;
+}

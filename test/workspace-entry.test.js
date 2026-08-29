@@ -15,6 +15,7 @@ assert.deepStrictEqual(getWorkspaceEntries(''), [])
 
 const appConfig = require('../miniprogram/app.json')
 assert.ok(!appConfig.pages.includes('pages/device-scale/index'), '体脂秤页面暂不注册入口')
+assert.ok(appConfig.pages.includes('pages/device-scale/station/index'), '体脂秤工作站页必须注册')
 assert.ok(appConfig.pages.includes('pages/device/device'), '患者手环设备页必须保留')
 assert.ok(!appConfig.pages.includes('pages/h5/index'), '业务 H5 WebView 页面不得注册')
 console.log('workspace-entry tests passed')

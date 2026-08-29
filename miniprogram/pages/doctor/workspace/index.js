@@ -10,6 +10,7 @@ Page({
     ],
     entries: [
       { key: 'patients', title: '患者管理', subtitle: '查看患者列表、新增档案和患者360', icon: '患', disabled: false },
+      { key: 'station', title: '体脂秤工作站', subtitle: '创建场次、扫码签到和轮测确认', icon: '秤', disabled: false },
       { key: 'followups', title: '随访工作', subtitle: '继续使用服务端权限，后续迁移原生表单', icon: '访', disabled: true },
       { key: 'devices', title: '设备工作站', subtitle: '体脂秤、MFA-1 和 Sunvou 后续开放', icon: '设', disabled: true }
     ]
@@ -33,6 +34,10 @@ Page({
     const entry = this.data.entries[event.currentTarget.dataset.index]
     if (entry?.key === 'patients' && !entry.disabled) {
       wx.navigateTo({ url: '/pages/patient-list/index' })
+      return
+    }
+    if (entry?.key === 'station' && !entry.disabled) {
+      wx.navigateTo({ url: '/pages/device-scale/station/index' })
       return
     }
     wx.showToast({ title: '功能准备中', icon: 'none' })

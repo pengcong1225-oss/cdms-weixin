@@ -100,6 +100,18 @@ test('doctor workspace opens the native patient list', async () => {
   assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-list/index' }])
 })
 
+test('doctor workspace opens the native body-composition station', async () => {
+  const env = installPageTestEnv()
+  loadPage('miniprogram/pages/doctor/workspace/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  page.onEntrySelect({ currentTarget: { dataset: { index: 1 } } })
+
+  assert.equal(page.data.entries[1].disabled, false)
+  assert.deepStrictEqual(env.navigations, [{ url: '/pages/device-scale/station/index' }])
+})
+
 test('patient list keeps fixed state, paginates server results, and does not client-filter org scope', async () => {
   const calls = []
   const env = installPageTestEnv({
