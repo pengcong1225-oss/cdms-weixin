@@ -163,7 +163,7 @@ Page({
     const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
     const canEdit = session.activeRole === 'DOCTOR'
     const patientId = consumePatientId(query, session)
-    const followupId = String(query.followupId || query.id || '')
+    const followupId = String(query.followupId || '')
     this.setData({
       canEdit,
       patientId,

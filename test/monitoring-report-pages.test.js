@@ -190,7 +190,7 @@ test('monitoring page renders server data and refreshes after alert acknowledgem
     loadPage('miniprogram/pages/monitoring/index.js')
     const page = env.pages[0]
 
-    await page.onLoad({ patientId: '768495013408443' })
+    await page.onLoad({ patientId: 'forged-route-patient', id: 'forged-route-id' })
     await page.acknowledgeAlert({ currentTarget: { dataset: { id: '9001' } } })
 
     assert.strictEqual(page.data.patientId, '768495013408443')
@@ -198,6 +198,7 @@ test('monitoring page renders server data and refreshes after alert acknowledgem
     assert.strictEqual(page.data.trendSections[0].points[0].value, '91.2 %')
     assert.strictEqual(page.data.alerts[0].acknowledgedAt, '2026-08-29 09:30')
     assert.deepStrictEqual(calls.map(call => call[0]), ['summary', 'trends', 'alerts', 'ack', 'summary', 'trends', 'alerts'])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
   } finally {
     env.cleanup()
   }
@@ -237,6 +238,45 @@ test('monitoring page consumes transient doctor patient context and clears the s
     assert.strictEqual(page.data.patientId, '768495013408443')
     assert.deepStrictEqual(calls.map(call => call[1]), ['768495013408443', '768495013408443', '768495013408443'])
     assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('monitoring page rejects forged query patient context without transient handoff', async () => {
+  const calls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [monitoringApiPath]: {
+        getMonitoringSummary: async patientId => {
+          calls.push(['summary', patientId])
+          return { patientId }
+        },
+        getMonitoringTrends: async (patientId, params) => {
+          calls.push(['trends', patientId, params])
+          return { patientId, bloodOxygen: [], heartRate: [], steps: [], sleepDuration: [] }
+        },
+        getMonitoringAlerts: async (patientId, params) => {
+          calls.push(['alerts', patientId, params])
+          return { list: [], page: params.page, pageSize: params.pageSize, total: 0 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/monitoring/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ patientId: 'forged-route-patient', id: 'forged-route-id' })
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '')
+    assert.strictEqual(page.data.error, '请选择患者后再查看监测')
+    assert.deepStrictEqual(calls, [])
   } finally {
     env.cleanup()
   }
@@ -324,7 +364,7 @@ test('reports pages keep short-lived access urls in memory only', async () => {
 test('doctor report detail navigation keeps patient identifier out of route query and consumes transient context', async () => {
   const listCalls = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -401,6 +441,37 @@ test('doctor report detail ignores route patient id and consumes transient conte
   }
 })
 
+test('reports page rejects forged query patient context without transient handoff', async () => {
+  const listCalls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [reportApiPath]: {
+        listPatientReports: async (patientId, params) => {
+          listCalls.push(['list', patientId, params])
+          return { items: [], page: 1, pageSize: 20, total: 0 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ patientId: 'forged-route-patient', id: 'forged-route-id' })
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '')
+    assert.strictEqual(page.data.error, '请选择患者后再查看报告')
+    assert.deepStrictEqual(listCalls, [])
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('patient ai report navigation keeps patient identifier out of route query and uses patient session context', async () => {
   const calls = []
   const env = installPageEnv({
@@ -439,10 +510,49 @@ test('patient ai report navigation keeps patient identifier out of route query a
   }
 })
 
+test('doctor patient ai report navigation uses transient patient context and detail consumes it', async () => {
+  const calls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [reportApiPath]: {
+        getAiReport: async patientId => {
+          calls.push(['get-ai', patientId])
+          return { reportId: 9101, patientId, reportType: 1, markdownContent: '# patient', doctorConfirmed: 0 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/index.js')
+    loadPage('miniprogram/pages/reports/detail.js')
+    const indexPage = env.pages[0]
+    const detailPage = env.pages[1]
+
+    indexPage.setData({ scope: 'DOCTOR', patientId: '768495013408443' })
+    indexPage.onAiActionTap({ currentTarget: { dataset: { key: 'patient-ai' } } })
+
+    assert.deepStrictEqual(env.navigations, [{ url: '/pages/reports/detail?mode=patient' }])
+    assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
+
+    await detailPage.onLoad({ mode: 'patient', patientId: 'forged-route-patient', id: 'forged-route-id' })
+
+    assert.strictEqual(detailPage.data.scope, 'DOCTOR')
+    assert.strictEqual(detailPage.data.patientId, '768495013408443')
+    assert.deepStrictEqual(calls, [['get-ai', '768495013408443']])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('reports page consumes transient doctor patient context and clears the shared handoff', async () => {
   const listCalls = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -470,6 +580,37 @@ test('reports page consumes transient doctor patient context and clears the shar
     assert.strictEqual(page.data.patientId, '768495013408443')
     assert.deepStrictEqual(listCalls, [['list', '768495013408443', { page: 1, pageSize: 20 }]])
     assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('doctor report detail rejects forged route patient context without transient handoff', async () => {
+  const listCalls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [reportApiPath]: actualReportApiWithStubs({
+        listPatientReports: async (patientId, params) => {
+          listCalls.push(['list', patientId, params])
+          return { items: [], page: 1, pageSize: 20, total: 0 }
+        }
+      })
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ reportId: '9001', patientId: 'forged-route-patient', id: 'forged-route-id' })
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '')
+    assert.strictEqual(page.data.error, '请选择患者后再查看报告')
+    assert.deepStrictEqual(listCalls, [])
   } finally {
     env.cleanup()
   }
@@ -532,7 +673,7 @@ test('reports detail retries ai load and confirms with minimal body', async () =
   const calls = []
   let failOnce = true
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -601,10 +742,10 @@ test('reports detail retries ai load and confirms with minimal body', async () =
   }
 })
 
-test('patient 360 exposes monitoring and report shortcuts through transient context and clean routes', async () => {
+test('patient 360 exposes followups, monitoring and report shortcuts through transient context and clean routes', async () => {
   const backs = []
   const env = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
     wxOverrides: {
       navigateBack: options => backs.push(options)
     },
@@ -635,6 +776,10 @@ test('patient 360 exposes monitoring and report shortcuts through transient cont
     assert.strictEqual(page.data.patientId, '768495013408443')
     assert.strictEqual(env.app.globalData.currentPatientId, undefined)
 
+    page.onQuickActionSelect({ currentTarget: { dataset: { key: 'followups' } } })
+    assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
+
+    delete env.app.globalData.currentPatientId
     page.onQuickActionSelect({ currentTarget: { dataset: { key: 'monitoring' } } })
     assert.strictEqual(env.app.globalData.currentPatientId, '768495013408443')
 
@@ -645,10 +790,12 @@ test('patient 360 exposes monitoring and report shortcuts through transient cont
     page.backDetail()
 
     assert.deepStrictEqual(env.navigations, [
+      { url: '/pages/followups/index' },
       { url: '/pages/monitoring/index' },
       { url: '/pages/reports/index' }
     ])
     assert.deepStrictEqual(backs, [{ delta: 1 }])
+    assert.strictEqual(page.data.quickActions.some(item => item.key === 'followups'), true)
     assert.strictEqual(page.data.quickActions.some(item => item.key === 'monitoring'), true)
     assert.strictEqual(page.data.quickActions.some(item => item.key === 'reports'), true)
   } finally {

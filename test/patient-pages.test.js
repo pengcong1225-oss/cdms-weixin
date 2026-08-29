@@ -253,6 +253,35 @@ test('patient detail opens patient 360 through transient context and a clean rou
   assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-360/index' }])
 })
 
+test('patient detail enables native followups action through transient context and a clean route', async () => {
+  const env = installPageTestEnv({
+    session: { currentPatientId: '768495013408443' },
+    patientApi: {
+      getPatient: async id => ({
+        id,
+        basicInfo: { name: '测试患者2', gender: 1, age: 35 },
+        orgInfo: {},
+        smokeInfo: {},
+        lungFunction: {},
+        copdInfo: {},
+        allergies: [],
+        dustExposures: []
+      })
+    }
+  })
+  loadPage('miniprogram/pages/patient-detail/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  const followupsAction = page.data.actions.find(item => item.key === 'followups')
+  assert.equal(followupsAction.enabled, true)
+
+  page.onAction({ currentTarget: { dataset: { key: 'followups' } } })
+
+  assert.equal(env.app.globalData.currentPatientId, '768495013408443')
+  assert.deepStrictEqual(env.navigations, [{ url: '/pages/followups/index' }])
+})
+
 test('patient detail handles save permission errors without logging raw identity values', async () => {
   const logs = []
   const forbidden = new Error('HTTP 403')
@@ -322,4 +351,13 @@ test('patient 360 renders server clinical sections without recomputing risk', as
   assert.equal(page.data.sections.deviceMetrics.items[0].value, '72 bpm')
   assert.equal(page.data.sections.riskTips.items[0].value, '服务端结论')
   assert.equal(JSON.stringify(page.data.sections).includes('极高危'), false)
+})
+
+test('patient detail and patient 360 WXML expose the native followups action copy', () => {
+  const detailWxml = read('miniprogram/pages/patient-detail/index.wxml')
+  const patient360Wxml = read('miniprogram/pages/patient-360/index.wxml')
+
+  assert.match(detailWxml, /action-grid/)
+  assert.match(patient360Wxml, /caption="进入随访、监测中心和报告中心"/)
+  assert.match(patient360Wxml, /title="\{\{item\.title\}\}"/)
 })

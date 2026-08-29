@@ -141,7 +141,7 @@ test('followup list switches between patient and doctor scope and opens detail p
 
   const doctorCalls = []
   const doctorEnv = installPageEnv({
-    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
     stubs: {
       [authGuardPath]: {
         ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
@@ -161,7 +161,7 @@ test('followup list switches between patient and doctor scope and opens detail p
     loadPage('miniprogram/pages/followups/index.js')
     const page = doctorEnv.pages[0]
 
-    await page.onLoad({ patientId: '768495013408443' })
+    await page.onLoad({ patientId: 'forged-route-patient', id: 'forged-route-id' })
     page.onFollowupSelect({ currentTarget: { dataset: { id: '9002' } } })
 
     assert.strictEqual(page.data.scope, 'DOCTOR')
@@ -170,6 +170,7 @@ test('followup list switches between patient and doctor scope and opens detail p
     assert.strictEqual(page.data.followups[0].id, '9002')
     assert.deepStrictEqual(doctorCalls, [{ patientId: '768495013408443', params: { page: 1, pageSize: 20 } }])
     assert.deepStrictEqual(doctorEnv.navigations, [{ url: '/pages/followups/detail?followupId=9002' }])
+    assert.strictEqual(doctorEnv.app.globalData.currentPatientId, undefined)
   } finally {
     doctorEnv.cleanup()
   }
@@ -306,6 +307,68 @@ test('doctor followup detail ignores route patient id and consumes transient con
     assert.strictEqual(page.data.patientId, '768495013408443')
     assert.strictEqual(page.data.form.patientId, '768495013408443')
     assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('doctor followup list rejects forged query patient context without transient handoff', async () => {
+  const doctorCalls = []
+  const doctorEnv = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        listMyFollowups: async () => {
+          throw new Error('patient scope should not be used for doctor without transient patient context')
+        },
+        listPatientFollowups: async (patientId, params) => {
+          doctorCalls.push({ patientId, params })
+          return { list: [], total: 0, page: 1, pageSize: 20 }
+        }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/index.js')
+    const page = doctorEnv.pages[0]
+
+    await page.onLoad({ patientId: 'forged-route-patient', id: 'forged-route-id' })
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '')
+    assert.strictEqual(page.data.error, '请选择患者后再查看随访')
+    assert.deepStrictEqual(doctorCalls, [])
+  } finally {
+    doctorEnv.cleanup()
+  }
+})
+
+test('doctor followup detail rejects forged query patient context without transient handoff', async () => {
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        buildPayload: payload => JSON.parse(JSON.stringify(payload)),
+        validateFollowup: () => ({ ok: true, errors: {} })
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ patientId: 'forged-route-patient', id: 'forged-route-id' })
+
+    assert.strictEqual(page.data.canEdit, true)
+    assert.strictEqual(page.data.patientId, '')
+    assert.strictEqual(page.data.form.patientId, '')
+    assert.strictEqual(page.data.error, '缺少患者 ID')
   } finally {
     env.cleanup()
   }

@@ -37,12 +37,11 @@ function friendlyError (error) {
 
 function consumeDoctorPatientId (query = {}) {
   const app = typeof getApp === 'function' ? getApp() : null
-  const queryPatientId = String(query.patientId || query.id || '').trim()
   const transientPatientId = String(app?.globalData?.currentPatientId || '').trim()
   if (app?.globalData) {
     delete app.globalData.currentPatientId
   }
-  return transientPatientId || queryPatientId
+  return transientPatientId
 }
 
 function persistDoctorPatientId (patientId) {

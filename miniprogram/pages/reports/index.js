@@ -42,12 +42,11 @@ function friendlyError (error) {
 
 function consumeDoctorPatientId (query = {}) {
   const app = typeof getApp === 'function' ? getApp() : null
-  const queryPatientId = String(query.patientId || query.id || '').trim()
   const transientPatientId = String(app?.globalData?.currentPatientId || '').trim()
   if (app?.globalData) {
     delete app.globalData.currentPatientId
   }
-  return transientPatientId || queryPatientId
+  return transientPatientId
 }
 
 function persistDoctorPatientId (patientId) {
@@ -157,6 +156,9 @@ Page({
     if (key === 'org-ai') {
       wx.navigateTo({ url: `/pages/reports/detail?mode=org&period=${encodeURIComponent(this.currentPeriod())}` })
       return
+    }
+    if (this.data.scope === 'DOCTOR') {
+      persistDoctorPatientId(this.data.patientId)
     }
     wx.navigateTo({ url: '/pages/reports/detail?mode=patient' })
   },

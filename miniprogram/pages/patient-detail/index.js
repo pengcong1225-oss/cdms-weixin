@@ -199,6 +199,9 @@ Page({
     try {
       const detail = await patientApi.getPatient(patientId)
       this.setData({
+        actions: this.data.actions.map(item => item.key === 'followups'
+          ? Object.assign({}, item, { enabled: true })
+          : item),
         detail,
         summary: buildSummary(detail),
         form: mergeForm(detail),
@@ -277,6 +280,11 @@ Page({
     if (key === 'patient360' && this.data.patientId) {
       persistDoctorPatientId(this.data.patientId)
       wx.navigateTo({ url: '/pages/patient-360/index' })
+      return
+    }
+    if (key === 'followups' && this.data.patientId) {
+      persistDoctorPatientId(this.data.patientId)
+      wx.navigateTo({ url: '/pages/followups/index' })
       return
     }
     wx.showToast({ title: '后续任务接入', icon: 'none' })

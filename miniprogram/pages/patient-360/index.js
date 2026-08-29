@@ -148,6 +148,7 @@ Page({
     data: null,
     sections: buildSections(null),
     quickActions: [
+      { key: 'followups', title: '随访管理', subtitle: '查看历史并新建随访', icon: '随', disabled: false },
       { key: 'monitoring', title: '监测中心', subtitle: '查看监测摘要、趋势和告警', icon: '测', disabled: false },
       { key: 'reports', title: '报告中心', subtitle: '查看标准报告和 AI 报告', icon: '报', disabled: false }
     ]
@@ -181,6 +182,11 @@ Page({
   onQuickActionSelect (event) {
     const key = String(event.currentTarget.dataset.key || '')
     if (!key || !this.data.patientId) return
+    if (key === 'followups') {
+      persistDoctorPatientId(this.data.patientId)
+      wx.navigateTo({ url: '/pages/followups/index' })
+      return
+    }
     if (key === 'monitoring') {
       persistDoctorPatientId(this.data.patientId)
       wx.navigateTo({ url: '/pages/monitoring/index' })
