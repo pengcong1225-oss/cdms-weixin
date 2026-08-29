@@ -365,6 +365,42 @@ test('doctor report detail navigation keeps patient identifier out of route quer
   }
 })
 
+test('doctor report detail ignores route patient id and consumes transient context', async () => {
+  const listCalls = []
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [reportApiPath]: actualReportApiWithStubs({
+        listPatientReports: async (patientId, params) => {
+          listCalls.push(['list', patientId, params])
+          return {
+            items: [{ reportId: 9001, patientId, reportNo: 'RPT-9001', category: 'RING', createdAt: '2026-08-29T10:00:00', downloadAvailable: true }],
+            page: 1,
+            pageSize: 20,
+            total: 1
+          }
+        }
+      })
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ reportId: '9001', patientId: 'route-leak' })
+
+    assert.strictEqual(page.data.scope, 'DOCTOR')
+    assert.strictEqual(page.data.patientId, '768495013408443')
+    assert.deepStrictEqual(listCalls, [['list', '768495013408443', { page: 1, pageSize: 50 }]])
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('patient ai report navigation keeps patient identifier out of route query and uses patient session context', async () => {
   const calls = []
   const env = installPageEnv({

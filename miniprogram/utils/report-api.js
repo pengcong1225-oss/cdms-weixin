@@ -120,9 +120,8 @@ async function confirmAiReport (reportId, body = {}) {
   }, currentAccessToken()))
 }
 
-function buildReportRoute ({ patientId, reportId }) {
+function buildReportRoute ({ reportId }) {
   const query = queryString([
-    ['patientId', patientId],
     ['reportId', reportId]
   ])
   return `/pages/reports/detail${query}`

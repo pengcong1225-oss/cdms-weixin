@@ -283,6 +283,34 @@ test('doctor followup creation keeps patient identifier out of route query and d
   }
 })
 
+test('doctor followup detail ignores route patient id and consumes transient context', async () => {
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        buildPayload: payload => JSON.parse(JSON.stringify(payload)),
+        validateFollowup: () => ({ ok: true, errors: {} })
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ patientId: 'route-leak' })
+
+    assert.strictEqual(page.data.canEdit, true)
+    assert.strictEqual(page.data.patientId, '768495013408443')
+    assert.strictEqual(page.data.form.patientId, '768495013408443')
+    assert.strictEqual(env.app.globalData.currentPatientId, undefined)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('followup detail blocks invalid submit, saves drafts, and uploads photos', async () => {
   const calls = []
   let allowSubmit = false

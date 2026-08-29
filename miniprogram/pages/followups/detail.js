@@ -125,6 +125,16 @@ function friendlyError (error) {
   return '随访保存失败，请稍后重试'
 }
 
+function consumePatientId (query = {}, session = {}) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  const transientPatientId = String(app?.globalData?.currentPatientId || '').trim()
+  if (app?.globalData) {
+    delete app.globalData.currentPatientId
+  }
+  if (session.activeRole === 'DOCTOR') return transientPatientId
+  return String(session.patientId || session.patientRef || '').trim()
+}
+
 function asTimeText (value) {
   const text = String(value || '').trim()
   if (!text) return '-'
@@ -152,7 +162,7 @@ Page({
   async onLoad (query = {}) {
     const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
     const canEdit = session.activeRole === 'DOCTOR'
-    const patientId = String(query.patientId || query.id || session.patientId || session.patientRef || '')
+    const patientId = consumePatientId(query, session)
     this.setData({
       canEdit,
       patientId,

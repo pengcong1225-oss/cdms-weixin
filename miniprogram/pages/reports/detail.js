@@ -99,6 +99,16 @@ function friendlyError (error) {
   return '报告加载失败，请稍后重试'
 }
 
+function consumePatientId (query = {}, session = {}) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  const transientPatientId = String(app?.globalData?.currentPatientId || '').trim()
+  if (app?.globalData) {
+    delete app.globalData.currentPatientId
+  }
+  if (session.activeRole === 'DOCTOR') return transientPatientId
+  return String(session.patientRef || session.patientId || '').trim()
+}
+
 Page({
   data: {
     scope: 'PATIENT',
@@ -127,7 +137,7 @@ Page({
       : String(query.mode || '').toLowerCase() === 'org'
         ? 'ORG_AI'
         : 'PATIENT_AI'
-    const patientId = String(query.patientId || (scope === 'PATIENT' ? session.patientRef || session.patientId || '' : '') || '')
+    const patientId = consumePatientId(query, session)
     const orgId = String(query.orgId || session.orgId || '')
     const period = String(query.period || currentMonth())
     this.setData({
