@@ -1,0 +1,54 @@
+<view class="page reports-detail-page">
+  <app-header
+    title="{{mode === 'STANDARD' ? '标准报告详情' : 'AI 报告详情'}}"
+    subtitle="{{mode === 'STANDARD' ? '报告短时地址仅在打开时临时获取' : 'AI 报告由服务端生成并确认'}}"
+    showBack="{{true}}"
+    bindback="backList"
+  />
+
+  <state-panel wx:if="{{error}}" state="error" title="操作失败" message="{{error}}" actionText="重试" bindaction="retry" />
+
+  <view wx:elif="{{loading}}" class="loading-panel">
+    <state-panel state="loading" title="加载中" message="正在读取报告详情" />
+  </view>
+
+  <view wx:else class="detail-stack">
+    <form-section wx:if="{{mode === 'STANDARD'}}" title="标准报告" caption="点击时才会获取短时访问地址">
+      <view wx:if="{{reportItem}}">
+        <view class="report-row">
+          <view class="report-main">
+            <view class="report-no">{{reportItem.reportNo}}</view>
+            <view class="report-meta">{{reportItem.categoryText}} · {{reportItem.createdAtText}}</view>
+            <status-tag text="{{reportItem.statusText}}" tone="{{reportItem.downloadAvailable ? 'success' : 'neutral'}}" />
+          </view>
+          <view class="report-actions">
+            <button class="secondary-button" bindtap="openReport">查看报告</button>
+            <button wx:if="{{reportItem.fileId || reportItem.fileObjectKey}}" class="secondary-button" bindtap="openAttachment">打开附件</button>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="empty-inline">暂无匹配的标准报告</view>
+    </form-section>
+
+    <form-section wx:else title="AI 报告" caption="先读服务端报告，再在服务端确认">
+      <view wx:if="{{aiReport}}">
+        <view class="ai-meta">报告版本：{{aiReport.reportId}}</view>
+        <view class="ai-meta">生成时间：{{aiReport.createTimeText}}</view>
+        <view class="ai-meta">患者摘要：{{aiReport.patientId || patientId}}</view>
+        <view class="markdown">{{aiReport.markdownContent}}</view>
+      </view>
+      <view wx:else class="empty-inline">暂无 AI 报告</view>
+
+      <view wx:if="{{mode !== 'STANDARD'}}" class="action-stack">
+        <button class="primary-button" loading="{{generating}}" bindtap="generateAiReport">生成 AI 报告</button>
+        <textarea class="form-textarea" value="{{doctorRemark}}" placeholder="医生批注" bindinput="updateDoctorRemark" />
+        <view class="confirm-row">
+          <switch checked="{{confirmChecked}}" bindchange="toggleConfirm" />
+          <text>确认报告</text>
+        </view>
+        <button class="secondary-button" loading="{{saving}}" bindtap="confirmReport">确认并提交</button>
+      </view>
+    </form-section>
+  </view>
+</view>
+

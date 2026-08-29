@@ -4,6 +4,18 @@
   <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
 
   <view wx:else class="section-stack">
+    <form-section title="快捷入口" caption="进入监测中心和报告中心">
+      <workspace-card
+        wx:for="{{quickActions}}"
+        wx:key="key"
+        title="{{item.title}}"
+        subtitle="{{item.subtitle}}"
+        icon="{{item.icon}}"
+        disabled="{{item.disabled}}"
+        data-key="{{item.key}}"
+        bindselect="onQuickActionSelect"
+      />
+    </form-section>
     <form-section title="{{sections.basicInfo.title}}">
       <view wx:for="{{sections.basicInfo.items}}" wx:key="label" class="info-row"><text>{{item.label}}</text><text>{{item.value}}</text></view>
     </form-section>

@@ -126,7 +126,11 @@ Page({
     loading: false,
     error: '',
     data: null,
-    sections: buildSections(null)
+    sections: buildSections(null),
+    quickActions: [
+      { key: 'monitoring', title: '监测中心', subtitle: '查看监测摘要、趋势和告警', icon: '测', disabled: false },
+      { key: 'reports', title: '报告中心', subtitle: '查看标准报告和 AI 报告', icon: '报', disabled: false }
+    ]
   },
 
   async onLoad (query = {}) {
@@ -152,6 +156,18 @@ Page({
 
   retry () {
     return this.load360()
+  },
+
+  onQuickActionSelect (event) {
+    const key = String(event.currentTarget.dataset.key || '')
+    if (!key || !this.data.patientId) return
+    if (key === 'monitoring') {
+      wx.navigateTo({ url: `/pages/monitoring/index?patientId=${encodeURIComponent(this.data.patientId)}` })
+      return
+    }
+    if (key === 'reports') {
+      wx.navigateTo({ url: `/pages/reports/index?patientId=${encodeURIComponent(this.data.patientId)}` })
+    }
   },
 
   backDetail () {

@@ -1,0 +1,41 @@
+<view class="page reports-page">
+  <app-header
+    title="报告中心"
+    subtitle="{{scope === 'DOCTOR' ? '查看患者标准报告并进入 AI 报告' : '查看我的标准报告并进入 AI 报告'}}"
+    showBack="{{true}}"
+    bindback="backWorkspace"
+  />
+
+  <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
+
+  <view wx:elif="{{loading}}" class="loading-panel">
+    <state-panel state="loading" title="加载中" message="正在读取报告列表" />
+  </view>
+
+  <view wx:else class="reports-stack">
+    <form-section title="AI 报告" caption="阅读、生成和确认均由服务端决定">
+      <workspace-card
+        wx:for="{{aiActions}}"
+        wx:key="key"
+        title="{{item.title}}"
+        subtitle="{{item.subtitle}}"
+        icon="{{item.icon}}"
+        disabled="{{item.disabled}}"
+        data-key="{{item.key}}"
+        bindselect="onAiActionTap"
+      />
+    </form-section>
+
+    <form-section title="标准报告" caption="报告短时地址仅在点击后临时使用">
+      <view wx:if="{{!reports.length}}" class="empty-inline">暂无标准报告</view>
+      <view wx:for="{{reports}}" wx:key="reportId" class="report-card" data-report-id="{{item.reportId}}" bindtap="onReportTap">
+        <view class="report-top">
+          <view class="report-no">{{item.reportNo}}</view>
+          <status-tag text="{{item.statusText}}" tone="{{item.downloadAvailable ? 'success' : 'neutral'}}" />
+        </view>
+        <view class="report-meta">{{item.categoryText}} · {{item.createdAtText}}</view>
+      </view>
+    </form-section>
+  </view>
+</view>
+

@@ -1,0 +1,12 @@
+{
+  "navigationBarTitleText": "监测中心",
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "form-section": "/components/form-section/form-section",
+    "state-panel": "/components/state-panel/state-panel",
+    "choice-tile": "/components/choice-tile/choice-tile",
+    "stat-card": "/components/stat-card/stat-card",
+    "status-tag": "/components/status-tag/status-tag"
+  }
+}
+

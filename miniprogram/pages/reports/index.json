@@ -1,10 +1,11 @@
 {
-  "navigationBarTitleText": "患者360",
+  "navigationBarTitleText": "报告中心",
   "usingComponents": {
     "app-header": "/components/app-header/app-header",
     "form-section": "/components/form-section/form-section",
+    "state-panel": "/components/state-panel/state-panel",
     "workspace-card": "/components/workspace-card/workspace-card",
-    "status-tag": "/components/status-tag/status-tag",
-    "state-panel": "/components/state-panel/state-panel"
+    "status-tag": "/components/status-tag/status-tag"
   }
 }
+

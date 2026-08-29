@@ -1,0 +1,52 @@
+<view class="page monitoring-page">
+  <app-header
+    title="监测中心"
+    subtitle="{{scope === 'DOCTOR' ? '查看患者监测摘要、趋势和告警' : '查看我的监测摘要、趋势和告警'}}"
+    showBack="{{true}}"
+    bindback="backWorkspace"
+  />
+
+  <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
+
+  <view wx:elif="{{loading}}" class="loading-panel">
+    <state-panel state="loading" title="加载中" message="正在读取监测数据" />
+  </view>
+
+  <view wx:else class="monitoring-stack">
+    <view class="summary-grid">
+      <stat-card wx:for="{{summaryCards}}" wx:key="key" title="{{item.title}}" value="{{item.value}}" caption="{{item.caption}}" tone="{{item.tone}}" />
+    </view>
+
+    <form-section title="时间范围" caption="趋势由服务端返回">
+      <choice-tile options="{{rangeOptions}}" value="{{rangeKey}}" bindchange="onRangeChange" />
+    </form-section>
+
+    <form-section title="趋势" caption="只展示服务端趋势点">
+      <view wx:if="{{!trendSections.length}}" class="empty-inline">暂无趋势数据</view>
+      <view wx:for="{{trendSections}}" wx:key="key" class="trend-block">
+        <view class="trend-title">{{item.title}}</view>
+        <view wx:if="{{!item.points.length}}" class="empty-inline">暂无 {{item.title}} 数据</view>
+        <view wx:for="{{item.points}}" wx:key="dateText" class="trend-row">
+          <text class="trend-date">{{point.dateText}}</text>
+          <text class="trend-value">{{point.value}}</text>
+          <text class="trend-caption">{{point.caption}}</text>
+        </view>
+      </view>
+    </form-section>
+
+    <form-section title="告警" caption="确认后刷新当前列表">
+      <view wx:if="{{!alerts.length}}" class="empty-inline">暂无监测告警</view>
+      <view wx:for="{{alerts}}" wx:key="id" class="alert-card">
+        <view class="alert-main">
+          <view class="alert-title">{{item.alertType}}</view>
+          <status-tag text="{{item.levelText}}" tone="{{item.levelTone}}" />
+          <view class="alert-reason">{{item.reason}}</view>
+          <view class="alert-meta">{{item.alertValueText}}</view>
+          <view wx:if="{{item.acknowledgedAt}}" class="alert-meta">已确认：{{item.acknowledgedAt}}</view>
+        </view>
+        <button wx:if="{{item.active}}" class="secondary-button alert-action" data-id="{{item.id}}" bindtap="acknowledgeAlert">确认</button>
+      </view>
+    </form-section>
+  </view>
+</view>
+

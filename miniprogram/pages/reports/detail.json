@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "报告详情",
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "form-section": "/components/form-section/form-section",
+    "state-panel": "/components/state-panel/state-panel",
+    "status-tag": "/components/status-tag/status-tag"
+  }
+}
+

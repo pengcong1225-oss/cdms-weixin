@@ -1,0 +1,68 @@
+page {
+  background: var(--cdms-background);
+}
+
+.monitoring-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding-bottom: 72rpx;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.trend-block {
+  padding: 2rpx 0 16rpx;
+}
+
+.trend-title {
+  margin-bottom: 12rpx;
+  color: var(--cdms-text);
+  font-size: 26rpx;
+  font-weight: 650;
+}
+
+.trend-row,
+.alert-card {
+  display: flex;
+  gap: 16rpx;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #edf0ee;
+}
+
+.trend-date,
+.trend-caption,
+.alert-reason,
+.alert-meta {
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+}
+
+.trend-value {
+  color: var(--cdms-text);
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.alert-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-title {
+  color: var(--cdms-text);
+  font-size: 25rpx;
+  font-weight: 650;
+  margin-bottom: 8rpx;
+}
+
+.alert-action {
+  align-self: center;
+  flex: none;
+}
+

@@ -1,0 +1,35 @@
+page {
+  background: var(--cdms-background);
+}
+
+.reports-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding-bottom: 72rpx;
+}
+
+.report-card {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #edf0ee;
+}
+
+.report-top {
+  display: flex;
+  gap: 16rpx;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.report-no {
+  color: var(--cdms-text);
+  font-size: 25rpx;
+  font-weight: 650;
+}
+
+.report-meta {
+  margin-top: 8rpx;
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+}
+
