@@ -8,6 +8,9 @@ const doctorWorkspacePath = path.join(root, 'miniprogram/pages/doctor/workspace/
 const authGuardPath = path.join(root, 'miniprogram/utils/auth-guard.js')
 const apiPath = path.join(root, 'miniprogram/utils/api.js')
 const bleManagerPath = path.join(root, 'miniprogram/services/bleManager.js')
+const statsApiPath = path.join(root, 'miniprogram/utils/stats-api.js')
+const patientApiPath = path.join(root, 'miniprogram/utils/patient-api.js')
+const doctorWorkspaceWxmlPath = path.join(root, 'miniprogram/pages/doctor/workspace/index.wxml')
 
 function installDoctorWorkspaceEnv (session = {}) {
   const pages = []
@@ -46,6 +49,8 @@ function installDoctorWorkspaceEnv (session = {}) {
   delete require.cache[authGuardPath]
   delete require.cache[apiPath]
   delete require.cache[bleManagerPath]
+  delete require.cache[statsApiPath]
+  delete require.cache[patientApiPath]
 
   require.cache[authGuardPath] = {
     id: authGuardPath,
@@ -71,6 +76,28 @@ function installDoctorWorkspaceEnv (session = {}) {
       unbind: async () => {}
     }
   }
+  require.cache[statsApiPath] = {
+    id: statsApiPath,
+    filename: statsApiPath,
+    loaded: true,
+    exports: {
+      getHomeStats: async () => ({ totalPatients: 18, todayPending: 4, todayCompleted: 6, highRiskCount: 2, upcoming3Days: 7 })
+    }
+  }
+  require.cache[patientApiPath] = {
+    id: patientApiPath,
+    filename: patientApiPath,
+    loaded: true,
+    exports: {
+      listPatients: async () => ({
+        list: [
+          { id: '768495013408443', name: '张三', visitStatus: 0, visitStatusText: '待随访', riskLevel: 3, riskLevelText: '高危', nextVisitDate: '2026-08-30' },
+          { id: '768495013408444', name: '李四', visitStatus: 1, visitStatusText: '已随访', riskLevel: 1, riskLevelText: '低危', nextVisitDate: '2026-09-02' }
+        ],
+        total: 2
+      })
+    }
+  }
 
   require(doctorWorkspacePath)
 
@@ -87,6 +114,8 @@ function installDoctorWorkspaceEnv (session = {}) {
       delete require.cache[authGuardPath]
       delete require.cache[apiPath]
       delete require.cache[bleManagerPath]
+      delete require.cache[statsApiPath]
+      delete require.cache[patientApiPath]
     }
   }
 }
@@ -212,6 +241,53 @@ test('doctor workspace records one pending patient-scoped destination before sel
   } finally {
     env.cleanup()
   }
+})
+
+test('doctor workspace loads actionable summary stats and prioritized patients', async () => {
+  const env = installDoctorWorkspaceEnv()
+  try {
+    const page = env.page
+    await page.onLoad()
+
+    assert.deepStrictEqual(page.data.summaryCards.map(item => [item.key, item.value]), [
+      ['totalPatients', '18'],
+      ['todayPending', '4'],
+      ['upcoming3Days', '7'],
+      ['highRiskCount', '2']
+    ])
+    assert.deepStrictEqual(page.data.todoPatients.map(item => item.id), ['768495013408443'])
+    assert.equal(page.data.todoPatients[0].riskLevelText, '高危')
+    assert.equal(page.data.todoPatients[0].visitStatusText, '待随访')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('doctor workspace keeps device actions in a compact secondary group', async () => {
+  const env = installDoctorWorkspaceEnv()
+  try {
+    const page = env.page
+    await page.onLoad()
+    assert.deepStrictEqual(page.data.primaryActions.map(item => item.key), ['patients', 'followups', 'monitoring', 'statistics', 'reports', 'messages'])
+    assert.deepStrictEqual(page.data.deviceActions.map(item => item.key), ['devices', 'station'])
+    const wxml = require('fs').readFileSync(doctorWorkspaceWxmlPath, 'utf8')
+    assert.ok(wxml.includes('重点患者'))
+    assert.ok(wxml.includes('设备入口'))
+    assert.ok(wxml.includes('primaryActions'))
+    assert.ok(wxml.includes('deviceActions'))
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('doctor workspace bottom navigation keeps workbench, patients, statistics and device tabs', () => {
+  const appConfig = require('../miniprogram/app.json')
+  assert.deepStrictEqual(appConfig.tabBar.list.map(item => item.pagePath), [
+    'pages/doctor/workspace/index',
+    'pages/patient-list/index',
+    'pages/statistics/index',
+    'pages/device/device'
+  ])
 })
 
 console.log('workspace-entry tests passed')

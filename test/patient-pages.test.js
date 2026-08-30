@@ -46,14 +46,26 @@ function installPageTestEnv ({ patientApi, session, wxOverrides } = {}) {
   }, wxOverrides)
 
   const apiPath = path.join(root, 'miniprogram/utils/patient-api.js')
+  const statsApiPath = path.join(root, 'miniprogram/utils/stats-api.js')
   const guardPath = path.join(root, 'miniprogram/utils/auth-guard.js')
   delete require.cache[apiPath]
+  delete require.cache[statsApiPath]
   delete require.cache[guardPath]
   require.cache[apiPath] = {
     id: apiPath,
     filename: apiPath,
     loaded: true,
-    exports: patientApi || {}
+    exports: patientApi || {
+      listPatients: async () => ({ list: [], total: 0 })
+    }
+  }
+  require.cache[statsApiPath] = {
+    id: statsApiPath,
+    filename: statsApiPath,
+    loaded: true,
+    exports: {
+      getHomeStats: async () => ({ totalPatients: 0, todayPending: 0, todayCompleted: 0, highRiskCount: 0, upcoming3Days: 0 })
+    }
   }
   require.cache[guardPath] = {
     id: guardPath,

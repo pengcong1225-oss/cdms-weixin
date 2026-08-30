@@ -38,7 +38,9 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/home/home", "text": "首页" },
+      { "pagePath": "pages/doctor/workspace/index", "text": "工作台" },
+      { "pagePath": "pages/patient-list/index", "text": "患者" },
+      { "pagePath": "pages/statistics/index", "text": "统计" },
       { "pagePath": "pages/device/device", "text": "设备" }
     ]
   }
