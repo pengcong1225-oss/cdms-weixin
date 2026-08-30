@@ -30,9 +30,14 @@ function formatFollowup (item) {
 }
 
 function friendlyError (error) {
+  if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
   if (error?.statusCode === 403) return '无权查看随访列表'
   if (error?.statusCode === 404) return '随访记录不存在'
   return '随访列表加载失败'
+}
+
+function missingPatientMessage (scope) {
+  return scope === 'DOCTOR' ? '请选择患者后再查看随访' : '请先完成建档后再查看随访'
 }
 
 function consumeDoctorPatientId (query = {}) {
@@ -73,29 +78,33 @@ Page({
   },
 
   async onLoad (query = {}) {
-    const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
-    const patientId = scope === 'DOCTOR'
-      ? consumeDoctorPatientId(query)
-      : String(session.patientRef || session.patientId || '')
-    this.setData({
-      scope,
-      scopeLabel: scope === 'DOCTOR' ? '患者随访' : '我的随访',
-      canEdit: session.activeRole === 'DOCTOR',
-      patientId,
-      headerSubtitle: scope === 'DOCTOR'
-        ? '医生在患者上下文中查看和新建随访'
-        : '患者仅查看自己的随访历史'
-    })
-    if (scope === 'DOCTOR' && !patientId) {
+    try {
+      const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
+      const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
+      const patientId = scope === 'DOCTOR'
+        ? consumeDoctorPatientId(query)
+        : String(session.patientRef || session.patientId || '')
+      this.setData({
+        scope,
+        scopeLabel: scope === 'DOCTOR' ? '患者随访' : '我的随访',
+        canEdit: session.activeRole === 'DOCTOR',
+        patientId,
+        headerSubtitle: scope === 'DOCTOR'
+          ? '医生在患者上下文中查看和新建随访'
+          : '患者仅查看自己的随访历史'
+      })
+    if (!patientId) {
       this.setData({
         loading: false,
         empty: false,
-        error: '请选择患者后再查看随访'
-      })
-      return
+        error: missingPatientMessage(scope)
+        })
+        return
+      }
+      await this.loadFollowups(true)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error), empty: false })
     }
-    await this.loadFollowups(true)
   },
 
   async loadFollowups (reset = false) {
@@ -103,10 +112,10 @@ Page({
     const pageSize = this.data.pageSize
     this.setData({ loading: true, error: '', empty: false })
     try {
-      if (this.data.scope === 'DOCTOR' && !this.data.patientId) {
+      if (!this.data.patientId) {
         this.setData({
           loading: false,
-          error: '请选择患者后再查看随访',
+          error: missingPatientMessage(this.data.scope),
           empty: false
         })
         return

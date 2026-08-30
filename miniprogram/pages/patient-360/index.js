@@ -115,6 +115,7 @@ function buildSections (data) {
 }
 
 function friendlyError (error) {
+  if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
   if (error?.statusCode === 403) return '无权查看患者360'
   if (error?.statusCode === 404) return '患者360不存在'
   return '患者360加载失败，请稍后重试'
@@ -155,10 +156,14 @@ Page({
   },
 
   async onLoad () {
-    await ensureSession({ role: 'DOCTOR' })
-    const patientId = consumeDoctorPatientId()
-    this.setData({ patientId })
-    await this.load360()
+    try {
+      await ensureSession({ role: 'DOCTOR' })
+      const patientId = consumeDoctorPatientId()
+      this.setData({ patientId })
+      await this.load360()
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error) })
+    }
   },
 
   async load360 () {

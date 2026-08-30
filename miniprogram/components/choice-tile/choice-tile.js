@@ -2,12 +2,28 @@ function includesValue (list, value) {
   return list.map(item => String(item)).includes(String(value))
 }
 
+function selectedMap (options, value, multiple) {
+  const values = multiple ? (Array.isArray(value) ? value : []) : [value]
+  return (Array.isArray(options) ? options : []).reduce((result, option) => {
+    result[option.value] = includesValue(values, option.value)
+    return result
+  }, {})
+}
+
 Component({
   properties: {
     options: { type: Array, value: [] },
     value: { type: null, value: '' },
     multiple: { type: Boolean, value: false },
     disabled: { type: Boolean, value: false }
+  },
+  data: {
+    selectedMap: {}
+  },
+  observers: {
+    'options, value, multiple': function (options, value, multiple) {
+      this.setData({ selectedMap: selectedMap(options, value, multiple) })
+    }
   },
   methods: {
     change (event) {

@@ -212,6 +212,32 @@ test('doctor followup list without patient context blocks personal fallback', as
   }
 })
 
+test('patient followup list without a linked patient stops before calling a scoped endpoint', async () => {
+  let calls = 0
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '' })
+      },
+      [followupApiPath]: {
+        listMyFollowups: async () => { calls += 1; return { list: [] } }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+
+    assert.equal(page.data.error, '请先完成建档后再查看随访')
+    assert.equal(calls, 0)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('doctor followup list consumes transient workspace patient context and clears the shared handoff', async () => {
   const doctorCalls = []
   const doctorEnv = installPageEnv({
@@ -374,6 +400,29 @@ test('doctor followup detail rejects forged query patient context without transi
   }
 })
 
+test('followup detail renders session failures instead of rejecting its lifecycle promise', async () => {
+  const expired = new Error('需要DOCTOR身份登录')
+  expired.statusCode = 401
+  const env = installPageEnv({
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => { throw expired }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+
+    assert.equal(page.data.loading, false)
+    assert.equal(page.data.error, '登录状态已失效，请重新登录')
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('followup detail blocks invalid submit, saves drafts, and uploads photos', async () => {
   const calls = []
   let allowSubmit = false
@@ -514,6 +563,63 @@ test('messages page marks one message read and refreshes unread count', async ()
       ['list'],
       ['count']
     ])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('followup detail turns photo picker and upload failures into a recoverable page error', async () => {
+  const uploadError = new Error('上传失败')
+  const env = installPageEnv({
+    session: { activeRole: 'DOCTOR', orgId: '1972545374712086529', currentPatientId: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'DOCTOR', orgId: '1972545374712086529' })
+      },
+      [followupApiPath]: {
+        uploadPhoto: async () => { throw uploadError }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/followups/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+    await page.addPhoto()
+
+    assert.equal(page.data.error, '随访保存失败，请稍后重试')
+    assert.equal(page.data.saving, false)
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('messages page turns read failures into a recoverable page error instead of an unhandled click rejection', async () => {
+  const forbidden = new Error('HTTP 403')
+  forbidden.statusCode = 403
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '768495013408443' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '768495013408443' })
+      },
+      [messageApiPath]: {
+        listMessages: async () => ({ list: [{ id: 1001, title: '复诊提醒', content: '请按时随访', read: false }], total: 1 }),
+        getUnreadCount: async () => ({ count: 1 }),
+        markMessageRead: async () => { throw forbidden }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/messages/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+    await page.onMessageTap({ currentTarget: { dataset: { id: '1001' } } })
+
+    assert.equal(page.data.error, '无权更新消息状态')
+    assert.equal(page.data.loading, false)
   } finally {
     env.cleanup()
   }

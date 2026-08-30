@@ -105,9 +105,14 @@ function formatAlerts (response) {
 }
 
 function friendlyError (error) {
+  if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
   if (error?.statusCode === 403) return '无权查看监测'
   if (error?.statusCode === 404) return '监测数据不存在'
   return '监测加载失败，请稍后重试'
+}
+
+function missingPatientMessage (scope) {
+  return scope === 'DOCTOR' ? '请选择患者后再查看监测' : '请先完成建档后再查看监测'
 }
 
 function consumeDoctorPatientId (query = {}) {
@@ -139,33 +144,37 @@ Page({
   },
 
   async onLoad (query = {}) {
-    const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
-    const patientId = scope === 'DOCTOR'
-      ? consumeDoctorPatientId(query)
-      : String(session.patientRef || session.patientId || '')
-    this.setData({
-      scope,
-      patientId,
-      rangeKey: scope === 'DOCTOR' ? '30d' : '7d',
-      rangeOptions: buildRangeOptions(scope)
-    })
-    if (scope === 'DOCTOR' && !patientId) {
+    try {
+      const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
+      const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
+      const patientId = scope === 'DOCTOR'
+        ? consumeDoctorPatientId(query)
+        : String(session.patientRef || session.patientId || '')
       this.setData({
-        error: '请选择患者后再查看监测',
-        loading: false,
-        empty: false
+        scope,
+        patientId,
+        rangeKey: scope === 'DOCTOR' ? '30d' : '7d',
+        rangeOptions: buildRangeOptions(scope)
       })
-      return
+      if (!patientId) {
+        this.setData({
+          error: missingPatientMessage(scope),
+          loading: false,
+          empty: false
+        })
+        return
+      }
+      await this.loadMonitoring(true)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error), empty: false })
     }
-    await this.loadMonitoring(true)
   },
 
   async loadMonitoring (reset = false) {
-    if (this.data.scope === 'DOCTOR' && !this.data.patientId) {
+    if (!this.data.patientId) {
       this.setData({
         loading: false,
-        error: '请选择患者后再查看监测',
+        error: missingPatientMessage(this.data.scope),
         empty: false
       })
       return

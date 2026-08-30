@@ -42,13 +42,20 @@ function safeKeyword (keyword) {
   return text
 }
 
-async function listPatients ({ page = 1, pageSize = 20, keyword = '', orgId } = {}) {
-  const query = queryString([
+async function listPatients (params = {}) {
+  const { page = 1, pageSize = 20, keyword = '', orgId } = params
+  const pairs = [
     ['page', page],
     ['pageSize', pageSize],
     ['keyword', safeKeyword(keyword)],
     ['orgId', orgId]
-  ])
+  ]
+  if (Array.isArray(params.riskLevels)) params.riskLevels.forEach(level => pairs.push(['riskLevels', level]))
+  pairs.push(['visitStatus', params.visitStatus])
+  pairs.push(['upcoming', params.upcoming])
+  pairs.push(['attentionLevel', params.attentionLevel])
+  pairs.push(['attentionOnly', params.attentionOnly])
+  const query = queryString(pairs)
   const data = normalizeIds(unwrap(await api.cdmsRequest(`/api/v1/patients${query}`, 'GET', null, accessToken())))
   const list = Array.isArray(data?.list) ? data.list : Array.isArray(data?.records) ? data.records : Array.isArray(data?.items) ? data.items : []
   return Object.assign({ list: [], total: list.length, page, pageSize }, data || {}, { list })

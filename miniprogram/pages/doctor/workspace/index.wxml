@@ -1,12 +1,14 @@
 <view class="page workspace-page">
   <app-header title="医生工作台" subtitle="患者管理、随访、监测、报告与设备工作站均从原生入口进入" showBack="{{true}}" showLogout="{{true}}" bindback="backHome" bindlogout="logout" />
 
-  <view class="stats-grid">
+  <state-panel wx:if="{{error}}" state="error" title="工作台不可用" message="{{error}}" actionText="重试" bindaction="retry" />
+
+  <view wx:else class="stats-grid">
     <stat-card wx:for="{{stats}}" wx:key="key" title="{{item.title}}" value="{{item.value}}" caption="{{item.caption}}" tone="{{item.tone}}" />
   </view>
 
-  <view class="section-title">工作入口</view>
-  <workspace-card
+  <view wx:if="{{!error}}" class="section-title">工作入口</view>
+  <workspace-card wx:if="{{!error}}"
     wx:for="{{entries}}"
     wx:key="key"
     data-index="{{index}}"
@@ -17,5 +19,5 @@
     bindselect="onEntrySelect"
   />
 
-  <state-panel state="empty" title="原生入口已就绪" message="{{stateMessage}}" />
+  <state-panel wx:if="{{!error}}" state="empty" title="原生入口已就绪" message="{{stateMessage}}" />
 </view>

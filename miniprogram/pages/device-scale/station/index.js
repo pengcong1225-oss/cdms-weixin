@@ -80,22 +80,26 @@ Page({
   },
 
   async onLoad (query = {}) {
-    const session = await ensureSession({ role: 'DOCTOR' })
-    if (session.activeRole !== 'DOCTOR') {
-      this.setData({ errorText: '请先使用医生账号登录' })
-      return
+    try {
+      const session = await ensureSession({ role: 'DOCTOR' })
+      if (session.activeRole !== 'DOCTOR') {
+        this.setData({ errorText: '请先使用医生账号登录' })
+        return
+      }
+      this.scale = new ScaleBle({
+        onState: state => this.onScaleState(state),
+        onResult: result => this.onScaleResult(result)
+      })
+      const stationId = valueText(query.stationId, '')
+      this.setData({ errorText: '', stationId })
+      if (stationId) {
+        await this.loadStation(stationId)
+        return
+      }
+      await this.createStation()
+    } catch (error) {
+      this.setData({ loading: false, creating: false, errorText: error?.statusCode === 401 ? '登录状态已失效，请重新登录' : '体脂秤工作站加载失败，请稍后重试' })
     }
-    this.scale = new ScaleBle({
-      onState: state => this.onScaleState(state),
-      onResult: result => this.onScaleResult(result)
-    })
-    const stationId = valueText(query.stationId, '')
-    this.setData({ errorText: '', stationId })
-    if (stationId) {
-      await this.loadStation(stationId)
-      return
-    }
-    await this.createStation()
   },
 
   onUnload () {
@@ -374,11 +378,17 @@ Page({
     })
   },
 
-  retry () {
-    if (!this.data.stationId) {
-      return this.createStation()
+  async retry () {
+    try {
+      if (!this.data.stationId) {
+        await this.createStation()
+        return
+      }
+      await this.refreshStation(this.data.stationId)
+      this.setData({ errorText: '' })
+    } catch (error) {
+      this.setData({ errorText: error.message || '场次加载失败' })
     }
-    return this.refreshStation(this.data.stationId)
   },
 
   backWorkspace () {

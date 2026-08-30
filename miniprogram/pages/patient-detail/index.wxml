@@ -18,8 +18,22 @@
     </view>
   </view>
 
-  <view class="action-grid">
-    <button wx:for="{{actions}}" wx:key="key" data-key="{{item.key}}" class="action-button {{item.enabled ? '' : 'disabled'}}" bindtap="onAction">{{item.text}}</button>
+  <view wx:if="{{!editMode}}" class="monitor-summary-card card" data-key="monitoring" bindtap="onAction">
+    <view class="monitor-summary-top">
+      <view>
+        <view class="monitor-summary-title">穿戴设备监测</view>
+        <view class="monitor-summary-subtitle">{{summary.monitoring.primaryAlertReason}}</view>
+      </view>
+      <text class="monitor-summary-link">查看趋势 ›</text>
+    </view>
+    <view class="monitor-summary-values">
+      <view><text>关注等级</text><text>{{summary.monitoring.attentionLevelText}}</text></view>
+      <view><text>数据状态</text><text>{{summary.monitoring.dataStatus}}</text></view>
+    </view>
+  </view>
+
+  <view wx:if="{{!editMode}}" class="action-grid">
+    <button wx:for="{{actions}}" wx:key="key" data-key="{{item.key}}" class="action-button {{item.enabled ? '' : 'disabled'}}" disabled="{{!item.enabled}}" bindtap="onAction">{{item.text}}</button>
   </view>
 
   <view wx:if="{{editMode}}" class="form-stack">

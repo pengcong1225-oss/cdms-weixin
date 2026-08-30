@@ -94,9 +94,14 @@ async function openTransientUrl (url, fileName) {
 }
 
 function friendlyError (error) {
+  if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
   if (error?.statusCode === 403) return '无权查看报告'
   if (error?.statusCode === 404) return '报告不存在'
   return '报告加载失败，请稍后重试'
+}
+
+function missingPatientMessage (scope) {
+  return scope === 'DOCTOR' ? '请选择患者后再查看报告' : '请先完成建档后再查看报告'
 }
 
 function consumePatientId (query = {}, session = {}) {
@@ -130,35 +135,43 @@ Page({
   },
 
   async onLoad (query = {}) {
-    const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
-    const mode = query.reportId
-      ? 'STANDARD'
-      : String(query.mode || '').toLowerCase() === 'org'
-        ? 'ORG_AI'
-        : 'PATIENT_AI'
-    const patientId = consumePatientId(query, session)
-    const orgId = String(query.orgId || session.orgId || '')
-    const period = String(query.period || currentMonth())
-    this.setData({
-      scope,
-      mode,
-      patientId,
-      reportId: String(query.reportId || ''),
-      orgId,
-      period,
-      confirmChecked: false,
-      doctorRemark: ''
-    })
-    if (mode === 'STANDARD' && scope === 'DOCTOR' && !patientId) {
-      this.setData({ error: '请选择患者后再查看报告' })
-      return
+    try {
+      const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
+      const scope = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
+      const mode = query.reportId
+        ? 'STANDARD'
+        : String(query.mode || '').toLowerCase() === 'org'
+          ? 'ORG_AI'
+          : 'PATIENT_AI'
+      const patientId = consumePatientId(query, session)
+      const orgId = String(query.orgId || session.orgId || '')
+      const period = String(query.period || currentMonth())
+      this.setData({
+        scope,
+        mode,
+        patientId,
+        reportId: String(query.reportId || ''),
+        orgId,
+        period,
+        confirmChecked: false,
+        doctorRemark: ''
+      })
+      if (mode === 'STANDARD' && scope === 'DOCTOR' && !patientId) {
+        this.setData({ error: '请选择患者后再查看报告' })
+        return
+      }
+      if (mode === 'ORG_AI' && !orgId) {
+        this.setData({ error: '缺少机构 ID' })
+        return
+      }
+      if (mode !== 'ORG_AI' && !patientId) {
+        this.setData({ error: missingPatientMessage(scope) })
+        return
+      }
+      await this.loadCurrent(true)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error), empty: false })
     }
-    if (mode === 'ORG_AI' && !orgId) {
-      this.setData({ error: '缺少机构 ID' })
-      return
-    }
-    await this.loadCurrent(true)
   },
 
   async loadCurrent (reset = false) {
@@ -201,6 +214,10 @@ Page({
   },
 
   async loadAiReport (reset = false) {
+    if (this.data.mode === 'PATIENT_AI' && !this.data.patientId) {
+      this.setData({ error: missingPatientMessage(this.data.scope), loading: false, empty: false })
+      return
+    }
     this.setData({ loading: true, error: '', empty: false })
     try {
       const report = this.data.mode === 'ORG_AI'

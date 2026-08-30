@@ -112,16 +112,20 @@ Page({
   },
 
   async onLoad () {
-    const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    const mode = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
-    const rangeKey = mode === 'DOCTOR' ? 'month' : '30d'
-    this.setData({
-      mode,
-      rangeKey,
-      rangeLabel: rangeLabel(mode, rangeKey),
-      rangeOptions: buildRangeOptions(mode)
-    })
-    await this.loadStats(true)
+    try {
+      const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
+      const mode = session.activeRole === 'DOCTOR' ? 'DOCTOR' : 'PATIENT'
+      const rangeKey = mode === 'DOCTOR' ? 'month' : '30d'
+      this.setData({
+        mode,
+        rangeKey,
+        rangeLabel: rangeLabel(mode, rangeKey),
+        rangeOptions: buildRangeOptions(mode)
+      })
+      await this.loadStats(true)
+    } catch (error) {
+      this.setData({ loading: false, error: error?.statusCode === 401 ? '登录状态已失效，请重新登录' : '统计加载失败' })
+    }
   },
 
   async loadStats (reset = false) {

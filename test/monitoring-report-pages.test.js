@@ -282,6 +282,90 @@ test('monitoring page rejects forged query patient context without transient han
   }
 })
 
+test('monitoring page renders session failures instead of rejecting its lifecycle promise', async () => {
+  const expired = new Error('需要DOCTOR身份登录')
+  expired.statusCode = 401
+  const env = installPageEnv({
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => { throw expired }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/monitoring/index.js')
+    const page = env.pages[0]
+
+    await page.onLoad()
+
+    assert.equal(page.data.loading, false)
+    assert.equal(page.data.error, '登录状态已失效，请重新登录')
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('patient monitoring and reports pages stop before calling an invalid empty-patient endpoint', async () => {
+  const calls = []
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '' })
+      },
+      [monitoringApiPath]: {
+        getMonitoringSummary: async () => { calls.push('monitoring'); return {} },
+        getMonitoringTrends: async () => { calls.push('trends'); return {} },
+        getMonitoringAlerts: async () => { calls.push('alerts'); return {} }
+      },
+      [reportApiPath]: {
+        listPatientReports: async () => { calls.push('reports'); return { items: [] } }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/monitoring/index.js')
+    loadPage('miniprogram/pages/reports/index.js')
+    const monitoringPage = env.pages[0]
+    const reportsPage = env.pages[1]
+
+    await monitoringPage.onLoad()
+    await reportsPage.onLoad()
+
+    assert.equal(monitoringPage.data.error, '请先完成建档后再查看监测')
+    assert.equal(reportsPage.data.error, '请先完成建档后再查看报告')
+    assert.deepStrictEqual(calls, [])
+  } finally {
+    env.cleanup()
+  }
+})
+
+test('patient AI report detail stops before calling the service with an empty patient id', async () => {
+  let calls = 0
+  const env = installPageEnv({
+    session: { activeRole: 'PATIENT', patientRef: '' },
+    stubs: {
+      [authGuardPath]: {
+        ensureSession: async () => ({ activeRole: 'PATIENT', patientRef: '' })
+      },
+      [reportApiPath]: {
+        getAiReport: async () => { calls += 1; return null }
+      }
+    }
+  })
+  try {
+    loadPage('miniprogram/pages/reports/detail.js')
+    const page = env.pages[0]
+
+    await page.onLoad({ mode: 'patient' })
+
+    assert.equal(page.data.error, '请先完成建档后再查看报告')
+    assert.equal(calls, 0)
+  } finally {
+    env.cleanup()
+  }
+})
+
 test('monitoring trend rows bind the point item explicitly in WXML', () => {
   const wxml = fs.readFileSync(path.join(root, 'miniprogram/pages/monitoring/index.wxml'), 'utf8')
   assert.match(wxml, /wx:for="\{\{item\.points\}\}"\s+wx:for-item="point"/)

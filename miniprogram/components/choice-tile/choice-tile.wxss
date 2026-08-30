@@ -15,6 +15,15 @@
   opacity: 0.6;
 }
 
+.choice-tile--selected {
+  border-color: var(--cdms-primary);
+  background: var(--cdms-primary-soft);
+}
+
+.choice-tile--selected .choice-title {
+  color: var(--cdms-primary);
+}
+
 .choice-title {
   color: var(--cdms-text);
   font-size: 26rpx;

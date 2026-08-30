@@ -30,6 +30,61 @@ page {
   margin-top: 18rpx;
 }
 
+.monitor-summary-card {
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.monitor-summary-top,
+.monitor-summary-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.monitor-summary-title {
+  color: var(--cdms-heading);
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.monitor-summary-subtitle,
+.monitor-summary-values text:first-child {
+  color: var(--cdms-muted);
+  font-size: 21rpx;
+}
+
+.monitor-summary-subtitle {
+  margin-top: 8rpx;
+}
+
+.monitor-summary-link {
+  flex: none;
+  color: var(--cdms-primary);
+  font-size: 22rpx;
+}
+
+.monitor-summary-values {
+  margin-top: 20rpx;
+}
+
+.monitor-summary-values view {
+  flex: 1;
+  padding: 14rpx;
+  border-radius: 16rpx;
+  background: #f7fbf9;
+}
+
+.monitor-summary-values text {
+  display: block;
+}
+
+.monitor-summary-values text + text {
+  margin-top: 6rpx;
+  color: var(--cdms-text);
+  font-size: 24rpx;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

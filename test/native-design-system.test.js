@@ -84,6 +84,13 @@ test('choice-tile ignores taps while disabled', () => {
   }
 })
 
+test('choice-tile exposes the selected state needed by native filters', () => {
+  const wxml = read('miniprogram/components/choice-tile/choice-tile.wxml')
+  const wxss = read('miniprogram/components/choice-tile/choice-tile.wxss')
+  assert.match(wxml, /selectedMap\[item\.value\]/)
+  assert.match(wxss, /choice-tile--selected/)
+})
+
 test('doctor and patient workspace pages share native visual components', () => {
   const doctor = readJson('miniprogram/pages/doctor/workspace/index.json')
   const patient = readJson('miniprogram/pages/patient/workspace/index.json')

@@ -1,5 +1,27 @@
 <view class="page patient-list-page">
-  <app-header title="患者管理" subtitle="服务端按当前医生机构范围返回患者" showBack="{{true}}" bindback="backWorkspace" />
+  <app-header title="患者管理" subtitle="{{subtitle}}" showBack="{{true}}" bindback="backWorkspace" />
+
+  <view wx:if="{{selectionMode}}" class="selection-hint card">选择患者后将继续进入对应工作内容</view>
+
+  <scroll-view class="filter-scroll" scroll-x="true" show-scrollbar="false">
+    <view class="filter-row">
+      <view wx:for="{{quickFilters}}" wx:key="value" class="filter-chip {{item.value == currentFilter ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onQuickFilter">{{item.label}}</view>
+      <view class="filter-chip filter-chip-more {{showAdvancedFilter ? 'active' : ''}}" bindtap="toggleAdvancedFilter">筛选</view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{showAdvancedFilter}}" class="advanced-filter card">
+    <form-section title="高级筛选" caption="筛选条件由服务端执行">
+      <view class="filter-label">风险等级</view>
+      <choice-tile options="{{riskOptions}}" value="{{riskLevels}}" multiple="{{true}}" data-field="riskLevels" bindchange="onAdvancedFilterChange" />
+      <view class="filter-label">随访状态</view>
+      <choice-tile options="{{visitStatusOptions}}" value="{{visitStatus}}" data-field="visitStatus" bindchange="onAdvancedFilterChange" />
+      <view class="advanced-actions">
+        <button class="secondary-button" bindtap="resetFilters">重置</button>
+        <button class="primary-button" bindtap="onApplyFilter">确定</button>
+      </view>
+    </form-section>
+  </view>
 
   <view class="search-card card">
     <input class="search-input" value="{{keyword}}" placeholder="搜索患者姓名、手机号或证件号" bindinput="onKeywordInput" confirm-type="search" bindconfirm="onSearch" />

@@ -25,7 +25,9 @@ function formatMessage (item) {
   })
 }
 
-function friendlyError (error) {
+function friendlyError (error, action = 'load') {
+  if (action === 'read' && error?.statusCode === 403) return '无权更新消息状态'
+  if (action === 'read' && error?.statusCode === 401) return '登录状态已失效，请重新登录'
   if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
   return '消息加载失败'
 }
@@ -51,8 +53,12 @@ Page({
   },
 
   async onLoad () {
-    await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    await this.loadMessages(true)
+    try {
+      await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
+      await this.loadMessages(true)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error) })
+    }
   },
 
   async loadMessages (reset = false) {
@@ -95,13 +101,27 @@ Page({
   async onMessageTap (event) {
     const id = String(event.currentTarget.dataset.id || '')
     if (!id) return
-    await messageApi.markMessageRead(id)
-    await this.loadMessages(true)
+    this.setData({ error: '', readingId: id })
+    try {
+      await messageApi.markMessageRead(id)
+      await this.loadMessages(true)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error, 'read') })
+    } finally {
+      this.setData({ readingId: '' })
+    }
   },
 
   async markAllRead () {
-    await messageApi.markAllMessagesRead()
-    await this.loadMessages(true)
+    this.setData({ error: '', markingAll: true })
+    try {
+      await messageApi.markAllMessagesRead()
+      await this.loadMessages(true)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error, 'read') })
+    } finally {
+      this.setData({ markingAll: false })
+    }
   },
 
   retry () {

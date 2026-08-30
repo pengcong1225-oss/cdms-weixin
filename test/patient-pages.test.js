@@ -149,6 +149,35 @@ test('patient list keeps fixed state, paginates server results, and does not cli
   assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-detail/index' }])
 })
 
+test('patient list uses native H5-equivalent quick and advanced filters through server params', async () => {
+  const calls = []
+  const env = installPageTestEnv({
+    patientApi: {
+      listPatients: async params => {
+        calls.push(params)
+        return { list: [], page: 1, pageSize: 20, total: 0 }
+      }
+    }
+  })
+  loadPage('miniprogram/pages/patient-list/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  page.onQuickFilter({ currentTarget: { dataset: { value: 'high' } } })
+  await page.onAdvancedFilterChange({ currentTarget: { dataset: { field: 'riskLevels' } }, detail: { value: [3, 4] } })
+  await page.onAdvancedFilterChange({ currentTarget: { dataset: { field: 'visitStatus' } }, detail: { value: 0 } })
+  await page.onApplyFilter()
+
+  assert.equal(page.data.currentFilter, 'high')
+  assert.deepStrictEqual(calls.at(-1), {
+    page: 1,
+    pageSize: 20,
+    keyword: '',
+    riskLevels: [3, 4],
+    visitStatus: 0
+  })
+})
+
 test('patient list shows permission errors and retry reloads first page', async () => {
   let calls = 0
   const forbidden = new Error('HTTP 403')
@@ -280,6 +309,73 @@ test('patient detail enables native followups action through transient context a
 
   assert.equal(env.app.globalData.currentPatientId, '768495013408443')
   assert.deepStrictEqual(env.navigations, [{ url: '/pages/followups/index' }])
+})
+
+test('patient detail enables monitoring and reports actions and preserves the selected patient context', async () => {
+  const env = installPageTestEnv({
+    session: { currentPatientId: '768495013408443' },
+    patientApi: {
+      getPatient: async id => ({
+        id,
+        basicInfo: { name: '测试患者2', gender: 1, age: 35 },
+        orgInfo: {},
+        smokeInfo: {},
+        lungFunction: {},
+        copdInfo: {},
+        allergies: [],
+        dustExposures: []
+      })
+    }
+  })
+  loadPage('miniprogram/pages/patient-detail/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  assert.equal(page.data.actions.find(item => item.key === 'monitoring').enabled, true)
+  assert.equal(page.data.actions.find(item => item.key === 'reports').enabled, true)
+
+  page.onAction({ currentTarget: { dataset: { key: 'monitoring' } } })
+  page.onAction({ currentTarget: { dataset: { key: 'reports' } } })
+
+  assert.equal(env.app.globalData.currentPatientId, '768495013408443')
+  assert.deepStrictEqual(env.navigations, [
+    { url: '/pages/monitoring/index' },
+    { url: '/pages/reports/index' }
+  ])
+  assert.deepStrictEqual(env.toasts, [])
+})
+
+test('patient detail exposes native followup history and monitoring summary interactions from the H5 workflow', async () => {
+  const env = installPageTestEnv({
+    session: { currentPatientId: '768495013408443' },
+    patientApi: {
+      getPatient: async id => ({
+        id,
+        basicInfo: { name: '测试患者2', gender: 1, age: 35 },
+        orgInfo: {},
+        monitoringSummary: { attentionLevelText: '高危', dataStatus: 'ACTIVE', primaryAlertReason: '夜间血氧偏低' },
+        smokeInfo: {},
+        lungFunction: {},
+        copdInfo: {},
+        allergies: [],
+        dustExposures: []
+      })
+    }
+  })
+  loadPage('miniprogram/pages/patient-detail/index.js')
+  const page = env.pages[0]
+
+  await page.onLoad()
+  assert.equal(page.data.actions.some(item => item.key === 'history'), true)
+  assert.equal(page.data.summary.monitoring.attentionLevelText, '高危')
+
+  page.onAction({ currentTarget: { dataset: { key: 'history' } } })
+  page.onAction({ currentTarget: { dataset: { key: 'monitoring' } } })
+
+  assert.deepStrictEqual(env.navigations, [
+    { url: '/pages/followups/index' },
+    { url: '/pages/monitoring/index' }
+  ])
 })
 
 test('patient detail handles save permission errors without logging raw identity values', async () => {

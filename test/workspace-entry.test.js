@@ -162,11 +162,11 @@ test('doctor workspace navigates native entries without patientId in urls and us
     assert.deepStrictEqual(env.navigations, [
       { url: '/pages/patient-list/index' },
       { url: '/pages/device-scale/station/index' },
-      { url: '/pages/followups/index' },
-      { url: '/pages/monitoring/index' },
+      { url: '/pages/patient-list/index?selection=1' },
+      { url: '/pages/patient-list/index?selection=1' },
       { url: '/pages/messages/index' },
       { url: '/pages/statistics/index' },
-      { url: '/pages/reports/index' },
+      { url: '/pages/patient-list/index?selection=1' },
       { url: '/pages/device/device' }
     ])
     assert.deepStrictEqual(env.toasts, [])
@@ -195,6 +195,22 @@ test('doctor workspace navigates native entries without patientId in urls and us
     assert.equal(scopedEnv.app.globalData.currentPatientId, '768495013408443')
   } finally {
     scopedEnv.cleanup()
+  }
+})
+
+test('doctor workspace records one pending patient-scoped destination before selecting a patient', async () => {
+  const env = installDoctorWorkspaceEnv()
+  try {
+    const page = env.page
+    await page.onLoad()
+    const monitoringIndex = page.data.entries.findIndex(item => item.key === 'monitoring')
+
+    page.onEntrySelect({ currentTarget: { dataset: { index: monitoringIndex } } })
+
+    assert.equal(env.app.globalData.pendingDoctorEntry, 'monitoring')
+    assert.deepStrictEqual(env.navigations, [{ url: '/pages/patient-list/index?selection=1' }])
+  } finally {
+    env.cleanup()
   }
 })
 

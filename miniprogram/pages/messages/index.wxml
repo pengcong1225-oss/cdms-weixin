@@ -7,7 +7,7 @@
   </view>
 
   <view class="toolbar">
-    <button class="secondary-button toolbar-button" bindtap="markAllRead">全部已读</button>
+    <button class="secondary-button toolbar-button" loading="{{markingAll}}" disabled="{{markingAll}}" bindtap="markAllRead">全部已读</button>
   </view>
 
   <state-panel wx:if="{{error}}" state="error" title="加载失败" message="{{error}}" actionText="重试" bindaction="retry" />
@@ -19,6 +19,7 @@
       wx:key="id"
       class="message-card card"
       data-id="{{item.id}}"
+      data-reading="{{readingId === item.id}}"
       bindtap="onMessageTap"
     >
       <view class="message-top">

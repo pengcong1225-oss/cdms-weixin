@@ -18,6 +18,7 @@
     "pages/device/device",
     "pages/device-mfa1/index",
     "pages/device-sunvou/index",
+    "pages/firmware-upgrade/firmware-upgrade",
     "pages/search/search",
     "pages/history/history",
     "pages/workout/workout",

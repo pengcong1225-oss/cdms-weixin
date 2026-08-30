@@ -45,6 +45,25 @@ test('listPatients encodes query params and keeps org id as string', async () =>
   assert.equal(typeof spy.last.url.match(/orgId=([^&]+)/)[1], 'string')
 })
 
+test('listPatients carries H5 patient filters to the server without moving identity into the url', async () => {
+  const spy = createRequestSpy({ data: { list: [], page: 1, pageSize: 20, total: 0 } })
+  const { listPatients } = loadPatientApi(spy)
+
+  await listPatients({
+    page: 1,
+    pageSize: 20,
+    keyword: '测试',
+    riskLevels: [3, 4],
+    visitStatus: 0,
+    upcoming: true,
+    attentionOnly: true
+  })
+
+  assert.equal(spy.last.url, '/api/v1/patients?page=1&pageSize=20&keyword=%E6%B5%8B%E8%AF%95&riskLevels=3&riskLevels=4&visitStatus=0&upcoming=true&attentionOnly=true')
+  assert.equal(spy.last.url.includes('phone'), false)
+  assert.equal(spy.last.url.includes('idCard'), false)
+})
+
 test('listPatients omits phone or id-card shaped keywords from URL queries', async () => {
   const spy = createRequestSpy({ data: { list: [], page: 1, pageSize: 20, total: 0 } })
   const { listPatients } = loadPatientApi(spy)

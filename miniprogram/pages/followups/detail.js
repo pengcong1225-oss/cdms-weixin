@@ -120,6 +120,7 @@ function buildEmptyForm (patientId) {
 }
 
 function friendlyError (error) {
+  if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
   if (error?.statusCode === 403) return '无权操作随访'
   if (error?.statusCode === 404) return '随访记录不存在'
   return '随访保存失败，请稍后重试'
@@ -160,25 +161,29 @@ Page({
   },
 
   async onLoad (query = {}) {
-    const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
-    const canEdit = session.activeRole === 'DOCTOR'
-    const patientId = consumePatientId(query, session)
-    const followupId = String(query.followupId || '')
-    this.setData({
-      canEdit,
-      patientId,
-      followupId,
-      form: patientId ? buildEmptyForm(patientId) : buildEmptyForm('')
-    })
-    if (followupId) {
-      await this.loadFollowup(followupId)
-      return
+    try {
+      const session = await ensureSession({ role: getApp()?.globalData?.activeRole || 'PATIENT' })
+      const canEdit = session.activeRole === 'DOCTOR'
+      const patientId = consumePatientId(query, session)
+      const followupId = String(query.followupId || '')
+      this.setData({
+        canEdit,
+        patientId,
+        followupId,
+        form: patientId ? buildEmptyForm(patientId) : buildEmptyForm('')
+      })
+      if (followupId) {
+        await this.loadFollowup(followupId)
+        return
+      }
+      if (!patientId) {
+        this.setData({ error: '缺少患者 ID' })
+        return
+      }
+      this.setData({ loading: false, error: '' })
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error) })
     }
-    if (!patientId) {
-      this.setData({ error: '缺少患者 ID' })
-      return
-    }
-    this.setData({ loading: false, error: '' })
   },
 
   async loadFollowup (id) {
@@ -220,31 +225,35 @@ Page({
 
   async addPhoto () {
     if (!this.data.canEdit) return
-    const chooseResult = await new Promise((resolve, reject) => {
-      wx.chooseMedia({
-        count: 3,
-        mediaType: ['image'],
-        sourceType: ['album', 'camera'],
-        success: resolve,
-        fail: reject
+    try {
+      const chooseResult = await new Promise((resolve, reject) => {
+        wx.chooseMedia({
+          count: 3,
+          mediaType: ['image'],
+          sourceType: ['album', 'camera'],
+          success: resolve,
+          fail: reject
+        })
       })
-    })
-    const tempFiles = Array.isArray(chooseResult?.tempFiles) ? chooseResult.tempFiles : []
-    if (!tempFiles.length) return
-    const nextPhotos = this.data.form.photos.slice()
-    for (const file of tempFiles) {
-      const uploaded = await followupApi.uploadPhoto(file.tempFilePath)
-      nextPhotos.push({
-        fileName: uploaded.fileName || file.fileName || '随访照片',
-        fileUrl: uploaded.url || uploaded.fileUrl || '',
-        url: uploaded.url || uploaded.fileUrl || '',
-        fileSize: uploaded.fileSize || file.size || 0
-      })
+      const tempFiles = Array.isArray(chooseResult?.tempFiles) ? chooseResult.tempFiles : []
+      if (!tempFiles.length) return
+      const nextPhotos = this.data.form.photos.slice()
+      for (const file of tempFiles) {
+        const uploaded = await followupApi.uploadPhoto(file.tempFilePath)
+        nextPhotos.push({
+          fileName: uploaded.fileName || file.fileName || '随访照片',
+          fileUrl: uploaded.url || uploaded.fileUrl || '',
+          url: uploaded.url || uploaded.fileUrl || '',
+          fileSize: uploaded.fileSize || file.size || 0
+        })
+      }
+      const form = JSON.parse(JSON.stringify(this.data.form))
+      form.photos = nextPhotos
+      this.setData({ form, error: '' })
+      wx.showToast({ title: '照片已添加', icon: 'success' })
+    } catch (error) {
+      this.setData({ error: friendlyError(error) })
     }
-    const form = JSON.parse(JSON.stringify(this.data.form))
-    form.photos = nextPhotos
-    this.setData({ form })
-    wx.showToast({ title: '照片已添加', icon: 'success' })
   },
 
   removePhoto (event) {

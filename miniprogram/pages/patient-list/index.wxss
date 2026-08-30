@@ -6,6 +6,66 @@ page {
   padding-bottom: 72rpx;
 }
 
+.selection-hint {
+  margin-bottom: 18rpx;
+  padding: 18rpx 22rpx;
+  color: var(--cdms-primary);
+  font-size: 23rpx;
+}
+
+.filter-scroll {
+  width: 100%;
+  margin-bottom: 18rpx;
+  white-space: nowrap;
+}
+
+.filter-row {
+  display: inline-flex;
+  gap: 12rpx;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 58rpx;
+  padding: 0 22rpx;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: 999rpx;
+  background: #fff;
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+  line-height: 58rpx;
+}
+
+.filter-chip.active {
+  border-color: var(--cdms-primary);
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+}
+
+.advanced-filter {
+  margin-bottom: 20rpx;
+  padding: 4rpx 20rpx 20rpx;
+}
+
+.filter-label {
+  margin: 18rpx 0 8rpx;
+  color: var(--cdms-heading);
+  font-size: 23rpx;
+  font-weight: 650;
+}
+
+.advanced-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+
+.advanced-actions button {
+  margin: 0;
+}
+
 .search-card {
   display: flex;
   align-items: center;

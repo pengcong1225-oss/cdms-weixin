@@ -42,6 +42,7 @@ test('native workspace routes are registered and h5 webview route is removed', (
   assert.ok(appConfig.pages.includes('pages/reports/index'))
   assert.ok(appConfig.pages.includes('pages/device-mfa1/index'))
   assert.ok(appConfig.pages.includes('pages/device-sunvou/index'))
+  assert.ok(appConfig.pages.includes('pages/firmware-upgrade/firmware-upgrade'))
   assert.equal(appConfig.pages.some(page => page.includes('pages/h5')), false)
 })
 

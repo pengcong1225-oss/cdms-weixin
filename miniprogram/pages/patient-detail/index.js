@@ -96,7 +96,12 @@ function buildSummary (detail) {
     gold: detail?.lungFunction?.goldGradeText || '-',
     cat: detail?.lungFunction?.catScore == null ? '-' : String(detail.lungFunction.catScore),
     lastVisitDate: detail?.followupSummary?.lastVisitDate || '-',
-    nextVisitDate: detail?.followupSummary?.nextVisitDate || '-'
+    nextVisitDate: detail?.followupSummary?.nextVisitDate || '-',
+    monitoring: {
+      attentionLevelText: detail?.monitoringSummary?.attentionLevelText || detail?.monitoringSummary?.attentionLevel || '暂无等级',
+      dataStatus: detail?.monitoringSummary?.dataStatus || '暂无数据',
+      primaryAlertReason: detail?.monitoringSummary?.primaryAlertReason || '暂无活动告警'
+    }
   }
 }
 
@@ -142,8 +147,8 @@ function buildPatientSavePayload (form) {
 }
 
 function friendlyError (error) {
-  if (error?.statusCode === 403) return '无权保存患者档案'
   if (error?.statusCode === 401) return '登录状态已失效，请重新登录'
+  if (error?.statusCode === 403) return '无权保存患者档案'
   return '患者档案保存失败，请稍后重试'
 }
 
@@ -167,20 +172,31 @@ function persistDoctorPatientId (patientId) {
   delete app.globalData.currentPatientId
 }
 
+const ACTION_ROUTES = {
+  patient360: '/pages/patient-360/index',
+  followups: '/pages/followups/index',
+  history: '/pages/followups/index',
+  monitoring: '/pages/monitoring/index',
+  reports: '/pages/reports/index'
+}
+
+const PATIENT_CONTEXT_ACTIONS = new Set(Object.keys(ACTION_ROUTES))
+
 Page({
   data: {
     patientId: '',
     loading: false,
     saving: false,
     editMode: true,
-    detail: null,
+      detail: null,
     summary: buildSummary(null),
     form: emptyForm(),
     error: '',
     duplicate: null,
     actions: [
       { key: 'edit', text: '档案编辑', enabled: true },
-      { key: 'followups', text: '随访', enabled: false },
+      { key: 'followups', text: '开始随访', enabled: false },
+      { key: 'history', text: '随访历史', enabled: false },
       { key: 'monitoring', text: '监测', enabled: false },
       { key: 'reports', text: '报告', enabled: false },
       { key: 'patient360', text: '患者360', enabled: true }
@@ -188,10 +204,14 @@ Page({
   },
 
   async onLoad () {
-    await ensureSession({ role: 'DOCTOR' })
-    const patientId = consumeDoctorPatientId()
-    this.setData({ patientId, editMode: !patientId })
-    if (patientId) await this.loadPatient(patientId)
+    try {
+      await ensureSession({ role: 'DOCTOR' })
+      const patientId = consumeDoctorPatientId()
+      this.setData({ patientId, editMode: !patientId })
+      if (patientId) await this.loadPatient(patientId)
+    } catch (error) {
+      this.setData({ loading: false, error: friendlyError(error) })
+    }
   },
 
   async loadPatient (patientId) {
@@ -199,9 +219,9 @@ Page({
     try {
       const detail = await patientApi.getPatient(patientId)
       this.setData({
-        actions: this.data.actions.map(item => item.key === 'followups'
-          ? Object.assign({}, item, { enabled: true })
-          : item),
+        actions: this.data.actions.map(item => Object.assign({}, item, {
+          enabled: item.key === 'edit' || PATIENT_CONTEXT_ACTIONS.has(item.key)
+        })),
         detail,
         summary: buildSummary(detail),
         form: mergeForm(detail),
@@ -277,17 +297,16 @@ Page({
       this.edit()
       return
     }
-    if (key === 'patient360' && this.data.patientId) {
-      persistDoctorPatientId(this.data.patientId)
-      wx.navigateTo({ url: '/pages/patient-360/index' })
+    if (PATIENT_CONTEXT_ACTIONS.has(key) && !this.data.patientId) {
+      wx.showToast({ title: '请选择患者后再操作', icon: 'none' })
       return
     }
-    if (key === 'followups' && this.data.patientId) {
+    if (ACTION_ROUTES[key]) {
       persistDoctorPatientId(this.data.patientId)
-      wx.navigateTo({ url: '/pages/followups/index' })
+      wx.navigateTo({ url: ACTION_ROUTES[key] })
       return
     }
-    wx.showToast({ title: '后续任务接入', icon: 'none' })
+    wx.showToast({ title: '当前操作不可用', icon: 'none' })
   },
 
   backList () {
@@ -295,4 +314,4 @@ Page({
   }
 })
 
-module.exports = { emptyForm, buildPatientSavePayload, maskPhone, maskIdCard, buildSummary }
+module.exports = { ACTION_ROUTES, buildPatientSavePayload, buildSummary, emptyForm, maskIdCard, maskPhone }

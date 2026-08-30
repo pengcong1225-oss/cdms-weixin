@@ -13,6 +13,11 @@ const DOCTOR_ENTRY_ROUTES = [
   { key: 'devices', title: '设备工作站', subtitle: '指环、MFA-1 和 Sunvou 原生入口', icon: '设', url: '/pages/device/device' }
 ]
 
+const PATIENT_SCOPED_ENTRY_ROUTES = DOCTOR_ENTRY_ROUTES.reduce((routes, entry) => {
+  if (entry.requiresPatientContext) routes[entry.key] = entry.url
+  return routes
+}, {})
+
 function buildStats () {
   return [
     { key: 'patients', title: '患者入口', value: '3', caption: '列表、建档与患者360', tone: 'success' },
@@ -49,6 +54,17 @@ function persistTransientPatientContext (patientId) {
   delete app.globalData.currentPatientId
 }
 
+function persistPendingDoctorEntry (entryKey) {
+  const app = typeof getApp === 'function' ? getApp() : null
+  if (!app?.globalData) return
+  const key = String(entryKey || '').trim()
+  if (key && PATIENT_SCOPED_ENTRY_ROUTES[key]) {
+    app.globalData.pendingDoctorEntry = key
+    return
+  }
+  delete app.globalData.pendingDoctorEntry
+}
+
 function buildStateMessage (patientId) {
   if (String(patientId || '').trim()) {
     return '患者管理、随访、监测、消息、统计、报告、体脂秤和设备工作站均可进入；当前患者上下文仅保存在本次小程序内存中，不进入路由地址。'
@@ -59,6 +75,7 @@ function buildStateMessage (patientId) {
 Page({
   data: {
     currentPatientId: '',
+    error: '',
     stateMessage: buildStateMessage(''),
     stats: buildStats(),
     entries: normalizeEntries()
@@ -78,16 +95,29 @@ Page({
       const currentPatientId = resolveCurrentPatientId(query, session, this.data.currentPatientId)
       this.setData({
         currentPatientId,
+        error: '',
         stateMessage: buildStateMessage(currentPatientId),
         stats: buildStats(),
         entries: normalizeEntries()
       })
-    } catch (_) {}
+    } catch (error) {
+      this.setData({
+        currentPatientId: '',
+        error: error?.statusCode === 401 ? '登录状态已失效，请重新登录' : '医生工作台加载失败，请稍后重试',
+        entries: []
+      })
+    }
   },
 
   onEntrySelect (event) {
     const entry = this.data.entries[event.currentTarget.dataset.index]
     if (!entry || entry.disabled) return
+    if (entry.requiresPatientContext && !this.data.currentPatientId) {
+      persistPendingDoctorEntry(entry.key)
+      wx.navigateTo({ url: '/pages/patient-list/index?selection=1' })
+      return
+    }
+    persistPendingDoctorEntry('')
     persistTransientPatientContext(entry.requiresPatientContext ? this.data.currentPatientId : '')
     const url = buildEntryUrl(entry, this.data.currentPatientId)
     if (!url) return
@@ -96,6 +126,10 @@ Page({
 
   backHome () {
     wx.switchTab({ url: '/pages/home/home' })
+  },
+
+  retry () {
+    return this.ensureDoctor()
   },
 
   logout () {
@@ -129,6 +163,8 @@ module.exports = {
   buildStateMessage,
   buildStats,
   normalizeEntries,
+  persistPendingDoctorEntry,
   persistTransientPatientContext,
-  resolveCurrentPatientId
+  resolveCurrentPatientId,
+  PATIENT_SCOPED_ENTRY_ROUTES
 }
