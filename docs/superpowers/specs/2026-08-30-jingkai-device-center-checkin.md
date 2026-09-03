@@ -26,9 +26,24 @@
 4. 医生“下一位”叫号，服务端返回脱敏患者摘要（性别/年龄/身高），自动下发体脂秤用户信息帧。
 5. 测量结果先保存草稿（`RESULT_PENDING`），医生二次确认后才写入正式记录并完成队列项；支持跳过、重排、关闭场次。
 
+## MFA-1 与 Sunvou 工作站
+
+- `pages/device-mfa1`：采集会话工作站（创建/读取/签发 WSS 令牌/取消/重试）。会话与 WSS 令牌只保存在页面内存，退出即清理；走医生 JWT 鉴权的 `/api/v1/miniapp/iot/acquisition-sessions` facade，小程序不持有 IoT 密钥、不做 HMAC 签名。
+- `pages/device-sunvou`：标准报告查询与短时访问地址打开（`wx.downloadFile` + `wx.openDocument`，图片走 `wx.previewImage`）。访问地址只在页面内存保持，不落盘。
+- `utils/report-api.js` 本次只移植 Sunvou 所需的三个能力（患者报告列表、报告/附件短时地址）。AI 报告及其 SSE 流式部分随报告页迁移（参考工程 Task 4）再加入，避免携带未接入页面的死代码。
+- 参考工程两个页面均缺 `.json` 文件，移植时已补齐导航标题与 `usingComponents`。
+- 医生设备目录中 MFA-1、Sunvou 入口已从占位提示改为真实导航。
+
+## 修复的基线运行时缺陷
+
+- `utils/api.js` 的 `module.exports` 漏导出 `cdmsRequest`：基线的 H5 handoff 调用链未使用该导出所以此前未暴露，但 station-api 等新适配器在真机上会直接 TypeError。已补导出并由测试锁定。
+
 ## 服务端依赖（复用参考工程契约，需后端同形可用）
 
 `/api/v1/miniapp/scale/stations` 系列：创建/查询场次、签到、队列、叫号、跳过、重排、草稿、确认、关闭。所有写请求携带 `idempotencyKey`。
+
+- `/api/v1/miniapp/iot/acquisition-sessions` 系列：MFA-1 会话创建/查询/WSS 令牌/取消（医生 JWT facade）。
+- `/api/v1/patients/{id}/reports` 系列与 `access-url`：Sunvou 报告列表与短时地址。
 
 ## 新增文件
 

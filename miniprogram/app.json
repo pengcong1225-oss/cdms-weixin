@@ -4,6 +4,8 @@
     "pages/h5/index",
     "pages/home/home",
     "pages/device/device",
+    "pages/device-mfa1/index",
+    "pages/device-sunvou/index",
     "pages/device-scale/mode/index",
     "pages/device-scale/index",
     "pages/device-scale/station/index",

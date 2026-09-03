@@ -1,0 +1,53 @@
+.device-sunvou-page .workspace-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.patient-row,
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.field-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 80rpx;
+  padding: 0 24rpx;
+  border-radius: 18rpx;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.report-card,
+.report-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  border-radius: 24rpx;
+  background: #f7faf8;
+}
+
+.report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.report-title,
+.report-detail-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1f2d36;
+}
+
+.report-meta,
+.report-detail-meta {
+  font-size: 26rpx;
+  color: #60707b;
+}

@@ -168,11 +168,11 @@ Page({
       return;
     }
     if (entry.key === "mfa1") {
-      wx.showToast({ title: "MFA-1 工作站即将开放", icon: "none" });
+      wx.navigateTo({ url: "/pages/device-mfa1/index" });
       return;
     }
     if (entry.key === "sunvou") {
-      wx.showToast({ title: "Sunvou 报告查询即将开放", icon: "none" });
+      wx.navigateTo({ url: "/pages/device-sunvou/index" });
     }
   },
 

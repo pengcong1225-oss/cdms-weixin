@@ -41,10 +41,18 @@ for (const route of [
   'pages/device-scale/mode/index',
   'pages/device-scale/index',
   'pages/device-scale/station/index',
-  'pages/scale-checkin/index'
+  'pages/scale-checkin/index',
+  'pages/device-mfa1/index',
+  'pages/device-sunvou/index'
 ]) {
   assert.ok(appJson.pages.includes(route), `missing route: ${route}`)
 }
+
+// 目录项必须导航到真实工作站页面，不允许占位提示
+assert.ok(deviceJs.includes('/pages/device-mfa1/index'))
+assert.ok(deviceJs.includes('/pages/device-sunvou/index'))
+assert.ok(!deviceJs.includes('即将开放'))
+
 
 // ---- 组件声明（防止引用未注册组件） ----
 
@@ -54,6 +62,10 @@ assert.ok(usingComponents('pages/device-scale/mode/index.json')['state-panel'])
 assert.ok(usingComponents('pages/device-scale/station/index.json')['form-section'])
 assert.ok(usingComponents('pages/device-scale/station/index.json')['status-tag'])
 assert.ok(usingComponents('pages/scale-checkin/index.json')['app-header'])
+assert.ok(usingComponents('pages/device-mfa1/index.json')['form-section'])
+assert.ok(usingComponents('pages/device-mfa1/index.json')['status-tag'])
+assert.ok(usingComponents('pages/device-sunvou/index.json')['form-section'])
+assert.ok(usingComponents('pages/device-sunvou/index.json')['status-tag'])
 
 // ---- 患者扫码签到 ----
 
@@ -80,6 +92,18 @@ for (const rel of [
   'components/state-panel/state-panel.js',
   'components/form-section/form-section.js',
   'components/status-tag/status-tag.js'
+]) {
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'miniprogram', rel)), `missing file: ${rel}`)
+}
+
+// MFA-1 / Sunvou 页面文件本体必须存在（app.json 已注册路由）
+for (const rel of [
+  'pages/device-mfa1/index.js',
+  'pages/device-mfa1/index.wxml',
+  'pages/device-mfa1/index.wxss',
+  'pages/device-sunvou/index.js',
+  'pages/device-sunvou/index.wxml',
+  'pages/device-sunvou/index.wxss'
 ]) {
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'miniprogram', rel)), `missing file: ${rel}`)
 }
