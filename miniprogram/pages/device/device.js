@@ -2,6 +2,40 @@ const bleManager = require("../../services/bleManager");
 const { getSettings } = require("../../utils/capabilities");
 const { SensorRawControl } = require("../../sdk/rw-ble-sdk.min.js");
 
+// 医生端可连接/可操作的设备目录。医生设备中心不管理患者家用设备。
+const doctorEntries = [
+  {
+    key: "scale",
+    title: "花潮身高体脂秤",
+    subtitle: "扫码轮测或选择患者直接测量",
+    icon: "秤",
+    protocol: "SCALE_BLE",
+    category: "蓝牙测量设备",
+    status: "已接入",
+    disabled: false,
+  },
+  {
+    key: "mfa1",
+    title: "MFA-1 血糖仪",
+    subtitle: "为当前患者创建采集会话并上传结果",
+    icon: "血",
+    protocol: "MFA1_BLE",
+    category: "蓝牙测量设备",
+    status: "已接入",
+    disabled: false,
+  },
+  {
+    key: "sunvou",
+    title: "Sunvou 呼气报告",
+    subtitle: "查询厂商系统生成的标准报告",
+    icon: "报",
+    protocol: "SUNVOU",
+    category: "厂商报告接入",
+    status: "已接入",
+    disabled: false,
+  },
+];
+
 function choose(itemList) {
   return new Promise((resolve) => {
     wx.showActionSheet({
@@ -87,11 +121,14 @@ Page({
     settings: [],
     firmwareText: "--",
     modelText: "--",
-    powerText: "--"
+    powerText: "--",
+    activeRole: "PATIENT",
+    doctorEntries: []
   },
 
   onLoad() {
     this.settingValues = {};
+    this.syncRoleState();
     this.unsubscribe = bleManager.subscribe((state) => {
       this.applyState(state);
       this.bindDeviceEvent();
@@ -99,6 +136,7 @@ Page({
   },
 
   onShow() {
+    this.syncRoleState();
     this.applyState(bleManager.snapshot());
   },
 
@@ -107,6 +145,35 @@ Page({
     if (this.deviceEventUnsubscribe) this.deviceEventUnsubscribe();
     this.deviceEventUnsubscribe = null;
     this.deviceEventSdk = null;
+  },
+
+  syncRoleState() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const activeRole = app?.globalData?.activeRole === "DOCTOR" ? "DOCTOR" : "PATIENT";
+    this.setData({
+      activeRole,
+      doctorEntries: activeRole === "DOCTOR" ? doctorEntries : []
+    });
+  },
+
+  isPatientDeviceScope() {
+    return this.data.activeRole === "PATIENT";
+  },
+
+  onDoctorEntrySelect(event) {
+    const entry = this.data.doctorEntries[event.currentTarget.dataset.index];
+    if (!entry || entry.disabled) return;
+    if (entry.key === "scale") {
+      wx.navigateTo({ url: "/pages/device-scale/mode/index" });
+      return;
+    }
+    if (entry.key === "mfa1") {
+      wx.showToast({ title: "MFA-1 工作站即将开放", icon: "none" });
+      return;
+    }
+    if (entry.key === "sunvou") {
+      wx.showToast({ title: "Sunvou 报告查询即将开放", icon: "none" });
+    }
   },
 
   bindDeviceEvent() {
@@ -146,6 +213,10 @@ Page({
   },
 
   openSearch() {
+    if (!this.isPatientDeviceScope()) {
+      wx.showToast({ title: "医生端请从测量工作站进入", icon: "none" });
+      return;
+    }
     wx.navigateTo({ url: "/pages/search/search" });
   },
 
@@ -154,6 +225,7 @@ Page({
   },
 
   async reconnect() {
+    if (!this.isPatientDeviceScope()) return;
     if (this.data.busy) return;
     this.setData({ busy: true });
     wx.showLoading({ title: "连接中", mask: true });
@@ -169,10 +241,12 @@ Page({
   },
 
   async disconnect() {
+    if (!this.isPatientDeviceScope()) return;
     await bleManager.disconnect();
   },
 
   unbind() {
+    if (!this.isPatientDeviceScope()) return;
     wx.showModal({
       title: "解除绑定",
       content: "解除绑定只会断开当前设备，不会删除该患者已有的健康记录。之后可重新搜索并绑定设备。",
@@ -192,6 +266,7 @@ Page({
   },
 
   async refreshPower() {
+    if (!this.isPatientDeviceScope()) return;
     try {
       await bleManager.refreshPower();
       wx.showToast({ title: "电量已更新", icon: "success" });
@@ -201,6 +276,7 @@ Page({
   },
 
   async tapSetting(event) {
+    if (!this.isPatientDeviceScope()) return;
     const id = event.currentTarget.dataset.id;
     const setting = this.data.settings.find((item) => item.id === id);
     if (!setting) return;
@@ -235,8 +311,8 @@ Page({
       ppgMonitoring: "ppg",
     };
     if (monitoringTypes[id]) {
-      const values = [0, 30, 60];
-      const index = await choose(["关闭", "每 30 分钟", "每 60 分钟"]);
+      const values = [0, 1, 30, 60];
+      const index = await choose(["关闭", "每 1 分钟", "每 30 分钟", "每 60 分钟"]);
       if (index === null) return;
       const interval = values[index];
       await sdk.setMonitoring(monitoringTypes[id], {
@@ -310,13 +386,13 @@ Page({
         run: (value) => sdk.controlCamera(value),
       },
       heartRateAlert: {
-        labels: ["关闭", "上限 120 bpm", "上限 140 bpm", "上限 160 bpm"],
-        values: [0, 120, 140, 160],
+        labels: ["关闭", "上限 50 bpm", "上限 120 bpm", "上限 140 bpm", "上限 160 bpm"],
+        values: [0, 50, 120, 140, 160],
         run: (value) => sdk.setHeartRateAlert(value > 0, value || 140, 0xff),
       },
       bloodOxygenAlert: {
-        labels: ["关闭", "下限 90%", "下限 92%", "下限 94%"],
-        values: [0, 90, 92, 94],
+        labels: ["关闭", "下限 50%", "下限 90%", "下限 92%", "下限 94%"],
+        values: [0, 50, 90, 92, 94],
         run: (value) => sdk.setBloodOxygenAlert(value > 0, value || 94),
       },
       vibrationCount: {

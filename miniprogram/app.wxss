@@ -2,9 +2,24 @@
 page {
   --cdms-primary: #0c9b6c;
   --cdms-primary-soft: #e5f6ee;
+  --cdms-background: #f3f7f5;
   --cdms-surface: #ffffff;
   --cdms-text: #20352e;
+  --cdms-text-secondary: #527166;
+  --cdms-heading: #29453b;
   --cdms-muted: #8a9a93;
+  --cdms-caption: #91a099;
+  --cdms-border: #e4eeea;
+  --cdms-chevron: #a8b9b1;
+  --cdms-radius-card: 28rpx;
+  --cdms-shadow-card: 0 12rpx 30rpx rgba(33, 75, 59, .06);
+  --cdms-status-success: #0c9b6c;
+  --cdms-status-warning: #b7791f;
+  --cdms-status-danger: #cf3f3f;
+  --cdms-status-neutral: #7f9088;
+  --cdms-status-warning-soft: #fff4df;
+  --cdms-status-danger-soft: #ffe9e9;
+  --cdms-status-neutral-soft: #edf1ef;
 }
 
 .container {
@@ -148,4 +163,56 @@ page {
   margin-left: 18rpx;
   color: #52685e;
   font-size: 23rpx;
+}
+
+
+/* 设备中心 / 体脂秤工作站 / 扫码签到共用状态与按钮样式。 */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  font-size: 21rpx;
+  line-height: 42rpx;
+}
+
+.status-pill.success {
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-status-success);
+}
+
+.status-pill.warning {
+  background: var(--cdms-status-warning-soft);
+  color: var(--cdms-status-warning);
+}
+
+.status-pill.danger {
+  background: var(--cdms-status-danger-soft);
+  color: var(--cdms-status-danger);
+}
+
+.status-pill.neutral {
+  background: var(--cdms-status-neutral-soft);
+  color: var(--cdms-status-neutral);
+}
+
+.cdms-action-link {
+  color: var(--cdms-primary);
+  font-size: 23rpx;
+}
+
+.cdms-muted-text {
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+}
+
+.secondary-button {
+  min-height: 70rpx;
+  padding: 0 26rpx;
+  border-radius: 999rpx;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 25rpx;
+  line-height: 70rpx;
 }

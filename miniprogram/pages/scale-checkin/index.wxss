@@ -1,0 +1,8 @@
+.checkin-page { padding-bottom: 40rpx; }
+.checkin-card, .success-card { text-align: center; padding: 60rpx 36rpx; }
+.scan-illustration, .success-icon { width: 136rpx; height: 136rpx; border-radius: 50%; margin: 0 auto 28rpx; display: flex; align-items: center; justify-content: center; color: #087553; background: #dff7ed; font-size: 44rpx; font-weight: 800; }
+.success-icon { color: #fff; background: #0c9b6c; font-size: 58rpx; }
+.checkin-title, .success-title { color: #14352b; font-size: 36rpx; font-weight: 800; }
+.checkin-text, .success-text { color: #718078; font-size: 26rpx; line-height: 1.7; margin: 18rpx auto 34rpx; max-width: 590rpx; }
+.status-text { color: #718078; font-size: 24rpx; margin-top: 22rpx; }
+.queue-number { display: inline-block; padding: 14rpx 24rpx; margin: 4rpx 0 30rpx; border-radius: 999rpx; color: #087553; background: #eefaf5; font-size: 30rpx; font-weight: 800; }

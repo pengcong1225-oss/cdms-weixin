@@ -1,0 +1,9 @@
+<view class="form-section">
+  <view class="form-heading">
+    <view class="form-title">{{title}}</view>
+    <view wx:if="{{caption}}" class="form-caption">{{caption}}</view>
+  </view>
+  <view class="form-body">
+    <slot></slot>
+  </view>
+</view>

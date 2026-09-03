@@ -1,0 +1,18 @@
+<view class="page checkin-page">
+  <app-header title="体脂秤扫码签到" subtitle="只提交二维码中的场次凭证，不提交患者 ID" showBack="{{true}}" bindback="goBack" />
+  <state-panel wx:if="{{errorText}}" state="error" title="签到失败" message="{{errorText}}" actionText="重新扫码" bindaction="scanAgain" />
+  <view wx:if="{{checkedIn}}" class="success-card card">
+    <view class="success-icon">✓</view>
+    <view class="success-title">已加入测量队列</view>
+    <view class="success-text">请在现场等待医生叫号，医生确认后测量结果会写入你的健康档案。</view>
+    <view wx:if="{{queueNo}}" class="queue-number">排队号 {{queueNo}}</view>
+    <button class="primary-button" bindtap="scanAgain">扫描其他场次</button>
+  </view>
+  <view wx:else class="checkin-card card">
+    <view class="scan-illustration">秤</view>
+    <view class="checkin-title">扫描工作站二维码</view>
+    <view class="checkin-text">二维码由医生在体脂秤工作站生成，签到后无需填写患者信息。</view>
+    <button class="primary-button" loading="{{scanning || submitting}}" bindtap="scanCode">打开相机扫码</button>
+    <view class="status-text">{{statusText}}</view>
+  </view>
+</view>

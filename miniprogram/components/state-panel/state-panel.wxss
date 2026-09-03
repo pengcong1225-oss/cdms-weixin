@@ -1,0 +1,58 @@
+.state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 260rpx;
+  padding: 34rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+  text-align: center;
+}
+
+.state-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 70rpx;
+  height: 70rpx;
+  border-radius: 50%;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 42rpx;
+}
+
+.state-panel.error .state-mark {
+  background: var(--cdms-status-danger-soft);
+  color: var(--cdms-status-danger);
+}
+
+.state-title {
+  margin-top: 17rpx;
+  color: var(--cdms-heading);
+  font-size: 27rpx;
+  font-weight: 700;
+}
+
+.state-message {
+  margin-top: 7rpx;
+  color: var(--cdms-caption);
+  font-size: 22rpx;
+  line-height: 34rpx;
+}
+
+.state-action {
+  min-width: 190rpx;
+  height: 70rpx;
+  margin: 22rpx 0 0;
+  padding: 0 30rpx;
+  border-radius: 999rpx;
+  background: var(--cdms-primary);
+  color: #fff;
+  font-size: 25rpx;
+  line-height: 70rpx;
+  box-shadow: 0 10rpx 22rpx rgba(12, 155, 108, .18);
+}

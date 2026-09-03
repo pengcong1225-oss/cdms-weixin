@@ -1,0 +1,19 @@
+<view class="app-header {{compact ? 'app-header-compact' : ''}}">
+  <view wx:if="{{showBack}}" class="header-action" bindtap="back">‹</view>
+  <view class="header-copy">
+    <view class="header-title">{{title}}</view>
+    <view wx:if="{{subtitle}}" class="header-subtitle">{{subtitle}}</view>
+  </view>
+  <view wx:if="{{iconActions}}" class="header-actions header-actions-icon">
+    <view wx:if="{{showSearch}}" class="header-icon-button" hover-class="header-icon-button-active" bindtap="search" aria-label="搜索患者">
+      <view class="header-icon header-icon-search"></view>
+    </view>
+    <view wx:if="{{showMessages}}" class="header-icon-button" hover-class="header-icon-button-active" bindtap="messages" aria-label="消息">
+      <view class="header-icon header-icon-message"></view>
+    </view>
+    <view wx:if="{{showLogout}}" class="header-icon-button" hover-class="header-icon-button-active" bindtap="logout" aria-label="退出登录">
+      <view class="header-icon header-icon-logout"></view>
+    </view>
+  </view>
+  <view wx:elif="{{showLogout}}" class="header-logout" bindtap="logout">退出</view>
+</view>

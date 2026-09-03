@@ -108,3 +108,105 @@
   padding-top: 48rpx;
   padding-bottom: 48rpx;
 }
+/* 医生端设备目录 */
+.iot-device-list {
+  margin-top: 4rpx;
+}
+
+.iot-device-card {
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  border: 1rpx solid var(--cdms-border);
+  border-radius: var(--cdms-radius-card);
+  background: var(--cdms-surface);
+  box-shadow: var(--cdms-shadow-card);
+}
+
+.iot-device-card.disabled {
+  opacity: .58;
+}
+
+.iot-device-top {
+  display: flex;
+  align-items: center;
+}
+
+.iot-device-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68rpx;
+  height: 68rpx;
+  flex: none;
+  border-radius: 20rpx;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.iot-device-copy {
+  min-width: 0;
+  flex: 1;
+  margin-left: 18rpx;
+}
+
+.iot-device-title {
+  color: var(--cdms-text);
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.iot-device-category,
+.iot-device-subtitle,
+.iot-device-note {
+  color: var(--cdms-muted);
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.iot-device-category {
+  margin-top: 5rpx;
+}
+
+.iot-device-status {
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  background: var(--cdms-primary-soft);
+  color: var(--cdms-primary);
+  font-size: 21rpx;
+  white-space: nowrap;
+}
+
+.iot-device-protocol {
+  margin-top: 20rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 14rpx;
+  background: var(--cdms-background);
+  color: var(--cdms-text-secondary);
+  font-size: 22rpx;
+}
+
+.iot-device-subtitle {
+  margin-top: 14rpx;
+}
+
+.iot-device-action {
+  margin-top: 18rpx;
+  color: var(--cdms-primary);
+  font-size: 24rpx;
+  font-weight: 600;
+  text-align: right;
+}
+
+.iot-device-action text {
+  margin-left: 6rpx;
+  font-size: 32rpx;
+  font-weight: 300;
+  vertical-align: -2rpx;
+}
+
+.iot-device-note {
+  margin: 4rpx 8rpx 24rpx;
+  text-align: center;
+}
