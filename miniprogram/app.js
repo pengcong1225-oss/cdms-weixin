@@ -33,14 +33,26 @@ App({
   onLaunch (options) {
     this.restoreAuth()
     this.applyBridgeQuery(options?.query)
-    if (wx.cloud) {
-      const cloudOptions = { traceUser: true }
-      if (this.globalData.cloudEnv) cloudOptions.env = this.globalData.cloudEnv
-      wx.cloud.init(cloudOptions)
-    } else {
-      console.warn('[CDMS Cloud] wx.cloud unavailable; continuing with IoT API mode')
-    }
+    this.initCloud()
     bleManager.init().catch(error => console.warn('[CDMS BLE] adapter init failed', error))
+  },
+
+  // 云开发只服务于遗留 quickstart 模板；CDMS/IoT 链路走 HTTPS，不依赖云环境。
+  // 当前 appid 未绑定云环境或开发者工具身份上下文缺失时，静默跳过，不阻塞启动。
+  initCloud () {
+    if (typeof wx === 'undefined' || !wx.cloud) {
+      console.warn('[CDMS Cloud] wx.cloud unavailable; continuing with IoT API mode')
+      return
+    }
+    if (!this.globalData.cloudEnv) {
+      console.warn('[CDMS Cloud] cloudEnv not configured; skip cloud init')
+      return
+    }
+    try {
+      wx.cloud.init({ traceUser: true, env: this.globalData.cloudEnv })
+    } catch (error) {
+      console.warn('[CDMS Cloud] cloud init failed; continuing with IoT API mode', error)
+    }
   },
   onShow (options) {
     this.applyBridgeQuery(options?.query)
