@@ -11,12 +11,6 @@
     </view>
   </view>
 
-  <view wx:if="{{activeRole}}" class="role-pill" bindtap="switchRole">
-    <view class="role-dot"></view>
-    <text>当前身份：{{activeRole === 'DOCTOR' ? '医生' : '患者'}}</text>
-    <text class="role-switch">切换身份 ›</text>
-  </view>
-
   <view wx:if="{{workspaceEntries.length}}" class="workspace-section">
     <view class="section-heading workspace-heading">
       <view>

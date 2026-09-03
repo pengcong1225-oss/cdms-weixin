@@ -143,31 +143,6 @@ Page({
     wx.navigateTo({ url: `/pages/history/history?type=${type}` });
   },
 
-  async switchRole () {
-    const app = getApp()
-    const roles = app.globalData.roles || []
-    if (!roles.length) return
-    const labels = roles.map(role => role.roleType === 'DOCTOR' ? '医生' : '患者')
-    wx.showActionSheet({ itemList: labels, success: async result => {
-      const role = roles[result.tapIndex]
-      if (!role || role.roleType === app.globalData.activeRole) return
-      try {
-        const response = await api.switchRole(role.roleType)
-        const session = response?.data || response
-        app.saveAuth(session)
-        if (getRoleEntry(session.activeRole).type === 'H5') {
-          await this.redirectDoctorWorkspace()
-          return
-        }
-        this.setData({
-          activeRole: app.globalData.activeRole,
-          workspaceEntries: getWorkspaceEntries(app.globalData.activeRole)
-        })
-        wx.showToast({ title: '身份已切换', icon: 'success' })
-      } catch (error) { wx.showToast({ title: error.message || '切换失败', icon: 'none' }) }
-    }})
-  },
-
   async openCdmsWorkspace () {
     const app = getApp()
     if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) {
