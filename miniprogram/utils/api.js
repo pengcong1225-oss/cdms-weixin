@@ -157,9 +157,12 @@ async function releasePatientWearableSession (deviceRef) {
   return cdmsRequest(`/api/v1/miniapp/iot/wearable-session?deviceRef=${encodedDeviceRef}`, 'DELETE', null, app.globalData.accessToken)
 }
 
-async function listDoctorPatients ({ page = 1, pageSize = 100 } = {}) {
+async function listDoctorPatients ({ page = 1, pageSize = 100, keyword = '' } = {}) {
   const app = getApp()
-  return cdmsRequest(`/api/v1/patients?page=${page}&pageSize=${pageSize}`, 'GET', null, app.globalData.accessToken)
+  const query = ['page=' + encodeURIComponent(String(page)), 'pageSize=' + encodeURIComponent(String(pageSize))]
+  const kw = String(keyword || '').trim()
+  if (kw) query.push('keyword=' + encodeURIComponent(kw))
+  return cdmsRequest('/api/v1/patients?' + query.join('&'), 'GET', null, app.globalData.accessToken)
 }
 
 async function getDoctorPatient (patientId) {

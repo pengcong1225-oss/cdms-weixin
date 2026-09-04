@@ -7,7 +7,7 @@ const labels = {
 }
 
 Page({
-  data: { patients: [], patientNames: [], patientIndex: -1, selectedPatient: null, devices: [], deviceNames: [], deviceIndex: -1, connected: false, scanning: false, connecting: false, measuring: false, metrics: [], gender: '', age: '', height: '', canConfirm: false, statusText: '待设备匹配', errorText: '' },
+  data: { patients: [], patientNames: [], patientIndex: -1, selectedPatient: null, keyword: '', searching: false, patientPage: 1, patientHasMore: true, devices: [], deviceNames: [], deviceIndex: -1, connected: false, scanning: false, connecting: false, measuring: false, metrics: [], gender: '', age: '', height: '', canConfirm: false, statusText: '待设备匹配', errorText: '' },
   onLoad (query) {
     this.initialPatientId = Number(query?.patientId || 0)
     this.scale = new ScaleBle({ onState: state => this.onScaleState(state), onResult: result => this.onScaleResult(result) })
@@ -17,16 +17,39 @@ Page({
   },
   goBack () { wx.navigateBack({ delta: 1 }) },
   onUnload () { if (this.scale) { this.scale.disconnect().catch(() => {}); this.scale.destroy() } },
-  async loadPatients () {
-    this.setData({ errorText: '' })
+  async loadPatients (reset = true) {
+    if (this.data.searching) return
+    const nextPage = reset ? 1 : this.data.patientPage + 1
+    this.setData({ searching: true, errorText: '', patientPage: nextPage })
     try {
-      const response = await api.listDoctorPatients({ page: 1, pageSize: 100 })
+      const response = await api.listDoctorPatients({ page: nextPage, pageSize: 20, keyword: this.data.keyword })
       const page = response?.data || response || {}
-      const patients = (page.list || []).filter(item => item?.id != null)
-      let index = patients.findIndex(item => Number(item.id) === this.initialPatientId)
-      if (index < 0 && patients.length) index = 0
-      this.setData({ patients, patientNames: patients.map(item => item.name || `患者${item.id}`), patientIndex: index }, () => index >= 0 && this.selectPatient(index))
-    } catch (error) { this.setData({ errorText: error.message || '患者列表加载失败' }) }
+      const incoming = (page.list || []).filter(item => item?.id != null)
+      const patients = reset ? incoming : this.data.patients.concat(incoming)
+      // 去重（按 id）
+      const seen = new Set()
+      const deduped = patients.filter(item => { const k = String(item.id); if (seen.has(k)) return false; seen.add(k); return true })
+      const hasMore = incoming.length === 20
+      let index = deduped.findIndex(item => Number(item.id) === this.initialPatientId)
+      if (index < 0 && deduped.length) index = reset ? 0 : -1
+      const patch = { patients: deduped, patientNames: deduped.map(item => item.name || `患者${item.id}`), patientHasMore: hasMore }
+      if (index >= 0) patch.patientIndex = index
+      this.setData(patch, () => {
+        if (index >= 0 && reset) this.selectPatient(index)
+      })
+    } catch (error) { this.setData({ errorText: error.message || '患者列表加载失败' }) } finally { this.setData({ searching: false }) }
+  },
+
+  onKeyword (event) { this.setData({ keyword: String(event.detail.value || '') }) },
+
+  searchPatients () {
+    this.initialPatientId = 0
+    this.setData({ patientHasMore: true })
+    this.loadPatients(true)
+  },
+
+  loadMorePatients () {
+    if (this.data.patientHasMore && !this.data.searching) this.loadPatients(false)
   },
   async selectPatient (event) {
     const index = typeof event === 'number' ? event : Number(event.detail.value)
