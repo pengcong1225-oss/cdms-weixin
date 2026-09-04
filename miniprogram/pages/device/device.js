@@ -17,7 +17,7 @@ const doctorEntries = [
   {
     key: "mfa1",
     title: "MFA-1 血糖仪",
-    subtitle: "为当前患者创建采集会话并上传结果",
+    subtitle: "扫码签到后现场采血测血糖",
     icon: "血",
     protocol: "MFA1_BLE",
     category: "蓝牙测量设备",

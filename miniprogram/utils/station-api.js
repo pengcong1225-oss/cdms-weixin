@@ -85,6 +85,7 @@ function normalizeStation (response) {
     orgId: toId(data.orgId),
     status: toText(data.status || 'OPEN'),
     stationName: toText(data.stationName),
+    deviceType: toText(data.deviceType, 'SCALE'),
     checkinToken: toText(data.checkinToken),
     tokenExpiresAt: toText(data.tokenExpiresAt),
     currentQueueItemId: toId(data.currentQueueItemId),
@@ -116,7 +117,10 @@ function normalizeQueueList (response) {
 }
 
 async function createStation (payload = {}) {
-  return normalizeStation(await api.cdmsRequest('/api/v1/miniapp/scale/stations', 'POST', writePayload(payload, 'station-create'), currentAccessToken()))
+  const body = writePayload(payload, 'station-create')
+  // 设备类型（SCALE / MFA1）原样透传给服务端枚举校验，缺省由服务端按 SCALE 处理
+  if (body.deviceType !== undefined && body.deviceType !== null) body.deviceType = toText(body.deviceType)
+  return normalizeStation(await api.cdmsRequest('/api/v1/miniapp/scale/stations', 'POST', body, currentAccessToken()))
 }
 
 async function getStation (stationId) {

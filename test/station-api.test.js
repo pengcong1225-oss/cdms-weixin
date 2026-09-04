@@ -10,6 +10,7 @@ const station = stationApi.normalizeStation({
     id: '1972545374712086529',
     orgId: '9001',
     status: 'OPEN',
+    deviceType: 'MFA1',
     checkinToken: 'tok-1',
     tokenExpiresAt: '2026-08-30T10:00:00',
     queue: [{
@@ -27,6 +28,8 @@ const station = stationApi.normalizeStation({
 assert.strictEqual(station.id, '1972545374712086529')
 assert.strictEqual(String(Number(station.id)) === station.id, false, 'snowflake id must not round-trip through Number')
 assert.strictEqual(station.orgId, '9001')
+// 设备类型字段透传保留（SCALE / MFA1 共用一套场次状态机）
+assert.strictEqual(station.deviceType, 'MFA1')
 assert.strictEqual(station.queue[0].id, '551')
 assert.strictEqual(station.queue[0].queueNo, 3)
 assert.deepStrictEqual(station.queue[0].patientSummary, {
@@ -40,6 +43,7 @@ assert.strictEqual(station.queue[0].patientId, undefined)
 const empty = stationApi.normalizeStation({})
 assert.strictEqual(empty.status, 'OPEN')
 assert.strictEqual(empty.id, '')
+assert.strictEqual(empty.deviceType, 'SCALE')
 assert.deepStrictEqual(empty.queue, [])
 
 const wrapped = stationApi.normalizeStation({ data: null })
@@ -68,6 +72,8 @@ assert.notStrictEqual(keyA, keyB)
     assert.strictEqual(calls[0].path, '/api/v1/miniapp/scale/stations')
     assert.strictEqual(calls[0].method, 'POST')
     assert.ok(calls[0].body.idempotencyKey.startsWith('station-create-'))
+    // 未显式指定设备类型时不携带 deviceType 字段，由服务端缺省 SCALE
+    assert.strictEqual(calls[0].body.deviceType, undefined)
 
     await stationApi.createCheckin('197', 'tok-xyz')
     assert.strictEqual(calls[1].path, '/api/v1/miniapp/scale/stations/197/checkins')
@@ -104,6 +110,12 @@ assert.notStrictEqual(keyA, keyB)
     await stationApi.closeStation('197', { discardDraftIds: ['900', '', null] })
     assert.strictEqual(calls[8].path, '/api/v1/miniapp/scale/stations/197/close')
     assert.deepStrictEqual(calls[8].body.discardDraftIds, ['900'])
+
+    await stationApi.createStation({ stationName: 'MFA-1 血糖轮测场次', deviceType: 'MFA1' })
+    assert.strictEqual(calls[9].path, '/api/v1/miniapp/scale/stations')
+    assert.strictEqual(calls[9].body.deviceType, 'MFA1', 'createStation 必须透传 deviceType')
+    assert.ok(calls[9].body.idempotencyKey.startsWith('station-create-'))
+
   } finally {
     api.cdmsRequest = originalCdmsRequest
   }

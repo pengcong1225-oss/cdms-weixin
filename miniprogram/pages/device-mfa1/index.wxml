@@ -1,62 +1,81 @@
-<view class="page device-mfa1-page">
+<view class="page mfa1-station-page">
   <app-header
-    title="MFA-1 会话工作站"
-    subtitle="会话与 WSS 令牌仅保存在当前页面内存中"
+    title="MFA-1 血糖工作站"
+    subtitle="场次令牌只用于扫码签到，患者身份由服务端派生"
     showBack="{{true}}"
     bindback="backWorkspace"
   />
 
-  <state-panel wx:if="{{errorText}}" state="error" title="操作失败" message="{{errorText}}" actionText="重试" bindaction="retrySession" />
+  <state-panel wx:if="{{errorText}}" state="error" title="操作失败" message="{{errorText}}" actionText="重试" bindaction="retry" />
 
-  <view wx:elif="{{loading || refreshing}}" class="loading-panel">
-    <state-panel state="loading" title="加载中" message="正在读取 MFA-1 会话" />
+  <view wx:elif="{{loading}}" class="loading-panel">
+    <state-panel state="loading" title="加载中" message="正在读取 MFA-1 场次" />
   </view>
 
-  <view wx:else class="workspace-stack">
-    <form-section title="会话参数" caption="业务会话、机构和患者由服务端校验">
-      <view class="field-grid">
-        <view class="field-card">
-          <view class="field-label">业务会话 ID</view>
-          <input class="field-input" value="{{businessSessionId}}" data-field="businessSessionId" bindinput="updateField" placeholder="mfa1-..." />
+  <view wx:else class="station-stack">
+    <form-section title="场次" caption="二维码仅包含场次和不透明签到令牌，不包含患者信息">
+      <view class="station-summary">
+        <view wx:if="{{qrPayload}}" class="qr-panel">
+          <canvas class="station-qr" canvas-id="mfa1Qr" style="width: 240px; height: 240px;"></canvas>
+          <view class="qr-hint">患者使用微信扫一扫加入血糖测量队列</view>
         </view>
-        <view class="field-card">
-          <view class="field-label">机构 ID</view>
-          <input class="field-input" value="{{orgId}}" data-field="orgId" bindinput="updateField" placeholder="机构 ID" />
+        <view class="station-main">
+          <view class="station-title">场次 {{stationId || '未创建'}}</view>
+          <view class="station-meta">状态：{{stationStatus}}</view>
+          <view wx:if="{{tokenExpiresAt}}" class="station-meta">过期：{{tokenExpiresAt}}</view>
         </view>
-        <view class="field-card">
-          <view class="field-label">患者编号</view>
-          <input class="field-input" value="{{patientRef}}" data-field="patientRef" bindinput="updateField" placeholder="患者编号" />
-        </view>
-        <view class="field-card">
-          <view class="field-label">追踪 ID</view>
-          <input class="field-input" value="{{traceId}}" data-field="traceId" bindinput="updateField" placeholder="traceId" />
-        </view>
-        <view class="field-card">
-          <view class="field-label">过期秒数</view>
-          <input class="field-input" type="number" value="{{expiresInSeconds}}" data-field="expiresInSeconds" bindinput="updateField" placeholder="600" />
+        <view class="station-side">
+          <button class="secondary-button" bindtap="copyToken" wx:if="{{qrPayload}}">复制签到信息</button>
+          <button class="primary-button" loading="{{creating}}" bindtap="createStation">创建场次</button>
         </view>
       </view>
-      <view class="action-row">
-        <button class="primary-button" loading="{{creating}}" bindtap="createSession">创建会话</button>
-        <button class="secondary-button" loading="{{refreshing}}" bindtap="loadSession">读取会话</button>
-        <button class="secondary-button" loading="{{launching}}" bindtap="launchSession">签发 WSS 令牌</button>
-        <button class="secondary-button" loading="{{cancelling}}" bindtap="cancelSession">取消会话</button>
+      <view class="station-actions">
+        <button class="secondary-button" bindtap="callNext">下一位</button>
+        <button class="secondary-button" bindtap="skipCurrent">跳过</button>
+        <button class="secondary-button" bindtap="requeueCurrent">重排</button>
+        <button class="secondary-button" loading="{{saving}}" bindtap="confirmMeasurement">确认并提交</button>
+        <button class="secondary-button" bindtap="closeStation">关闭场次</button>
       </view>
     </form-section>
 
-    <form-section title="会话状态" caption="仅展示服务端回传信息">
-      <view class="status-summary">
-        <status-tag text="{{sessionStatus}}" tone="{{sessionTone}}" />
-        <view class="status-line">会话 ID：{{sessionId || '未创建'}}</view>
-        <view class="status-line">捕获 ID：{{captureId || '-'}}</view>
-        <view class="status-line">过期时间：{{sessionExpiresAtText}}</view>
-        <view class="status-line">失败码：{{failureCode || '-'}}</view>
-        <view class="status-line">失败原因：{{failureMessage || '-'}}</view>
-        <view class="status-line">WSS 状态：{{tokenStateText}}</view>
-        <view class="status-line">WSS 过期：{{tokenExpiresAtText}}</view>
+    <form-section title="当前患者" caption="仅展示服务端脱敏摘要">
+      <view wx:if="{{currentQueueItem}}" class="patient-card">
+        <view class="patient-name">{{currentQueueItem.patientSummary.maskedName}}</view>
+        <view class="patient-meta">状态：{{currentQueueItem.status}}</view>
+        <view wx:if="{{currentQueueItem.patientSummary.genderText || currentQueueItem.patientSummary.gender}}" class="patient-meta">性别：{{currentQueueItem.patientSummary.genderText || currentQueueItem.patientSummary.gender}}</view>
+        <view wx:if="{{currentQueueItem.patientSummary.age}}" class="patient-meta">年龄：{{currentQueueItem.patientSummary.age}}</view>
+        <view wx:if="{{currentDraft}}" class="patient-meta">草稿：{{currentDraft.id}} / {{currentDraft.status}}</view>
       </view>
-      <view class="action-row">
-        <button class="secondary-button" bindtap="retrySession">重试会话</button>
+      <view wx:else class="empty-inline">暂无当前患者</view>
+    </form-section>
+
+    <form-section title="MFA-1 血糖仪" caption="Mfa1Ble 独立通道，结果帧 0x78 由设备主动推送">
+      <view class="station-actions">
+        <button class="secondary-button" loading="{{scanning}}" bindtap="scanDevice">扫描 MFA-1</button>
+        <button class="secondary-button" loading="{{connecting}}" bindtap="connectDevice">连接并同步时间</button>
+      </view>
+      <view class="station-meta">连接状态：{{connected ? '已连接' : '未连接'}}</view>
+      <view class="station-meta">电量：{{batteryText || '未知'}}</view>
+      <view class="station-meta">测量状态：{{statusText}}</view>
+      <view wx:if="{{metrics.length}}" class="metric-list">
+        <view wx:for="{{metrics}}" wx:key="name" class="metric-card">
+          <text class="metric-label">{{item.label}}{{item.state ? '（' + item.state + '）' : ''}}</text>
+          <text class="metric-value">{{item.value}} {{item.unit}}</text>
+        </view>
+      </view>
+      <button wx:if="{{canConfirm}}" class="primary-button" loading="{{saving}}" bindtap="confirmMeasurement">确认并提交</button>
+    </form-section>
+
+    <form-section title="候测队列" caption="服务端是唯一状态来源">
+      <view wx:if="{{!queue.length}}" class="empty-inline">暂无候测队列</view>
+      <view wx:for="{{queue}}" wx:key="id" class="queue-card">
+        <view class="queue-row">
+          <view class="queue-main">
+            <view class="queue-name">{{item.patientSummary.maskedName}}</view>
+            <view class="queue-meta">#{{item.queueNo}} · {{item.status}}</view>
+          </view>
+          <status-tag text="{{item.status}}" tone="{{item.status === 'COMPLETED' ? 'success' : item.status === 'RESULT_PENDING' ? 'warning' : 'neutral'}}" />
+        </view>
       </view>
     </form-section>
   </view>

@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "MFA-1 会话工作站",
+  "navigationBarTitleText": "MFA-1 血糖工作站",
   "usingComponents": {
     "app-header": "/components/app-header/app-header",
     "state-panel": "/components/state-panel/state-panel",

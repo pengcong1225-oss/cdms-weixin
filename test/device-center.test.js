@@ -112,4 +112,39 @@ for (const rel of [
 const shim = read('services/scaleBle.js')
 assert.ok(shim.includes("require('./scale/scaleBle')"))
 
+// ---- MFA-1 场次流工作站契约 ----
+
+// services/mfa1Ble 必须只是转发独立实现（不与 scale/bleManager 共用状态）
+const mfa1Shim = read('services/mfa1Ble.js')
+assert.ok(mfa1Shim.includes("require('./mfa1/mfa1Ble')"))
+assert.ok(fs.existsSync(path.join(__dirname, '..', 'miniprogram', 'services/mfa1/mfa1Ble.js')), 'missing file: services/mfa1/mfa1Ble.js')
+
+// 页面重写为场次流：以 deviceType=MFA1 创建场次，复用签到二维码与叫号/确认端点
+const mfa1Js = read('pages/device-mfa1/index.js')
+assert.ok(mfa1Js.includes("deviceType: 'MFA1'"), 'device-mfa1 必须以 MFA1 类型创建场次')
+assert.ok(mfa1Js.includes("require('../../utils/station-api')"))
+assert.ok(mfa1Js.includes('createCheckinPayload'))
+assert.ok(mfa1Js.includes('callNext'))
+assert.ok(mfa1Js.includes('confirmMeasurement'))
+assert.ok(mfa1Js.includes('saveMeasurementDraft'))
+assert.ok(mfa1Js.includes('closeStation'))
+// 旧错误模式不得残留：医生手填业务会话/机构/患者
+assert.ok(!mfa1Js.includes('acquisition-api'), 'device-mfa1 不得再走手动采集会话')
+assert.ok(!mfa1Js.includes('patientRef'))
+
+// wxml：无手动患者输入框，二维码走 canvas 渲染
+const mfa1Wxml = read('pages/device-mfa1/index.wxml')
+assert.ok(!mfa1Wxml.includes('patientRef'), '不得保留患者编号手动输入框')
+assert.ok(!mfa1Wxml.includes('businessSessionId'))
+assert.ok(mfa1Wxml.includes('canvas-id="mfa1Qr"'))
+
+// 组件声明齐全
+for (const name of ['app-header', 'state-panel', 'form-section', 'status-tag']) {
+  assert.ok(usingComponents('pages/device-mfa1/index.json')[name], `missing component: ${name}`)
+}
+
+// 设备目录副标题与扫码轮测定位一致
+assert.ok(deviceJs.includes('扫码签到后现场采血测血糖'))
+assert.ok(deviceJs.includes('protocol: "MFA1_BLE"') || deviceJs.includes("protocol: 'MFA1_BLE'"))
+
 console.log('device center tests passed')
