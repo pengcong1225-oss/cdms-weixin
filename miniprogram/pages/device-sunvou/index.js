@@ -1,5 +1,29 @@
+const api = require('../../utils/api')
 const sunvouApi = require('../../utils/sunvou-api')
 const { ensureSession } = require('../../utils/auth-guard')
+
+// 呼气报告 canonical 指标（iot 侧 SunvouRecordParser 产出）：FVC/FEV1 单位 L、FEV1/FVC 百分比。
+const SPIRO_METRIC_LABELS = {
+  FVC_L: 'FVC（用力肺活量）',
+  FEV1_L: 'FEV1（第一秒用力呼气量）',
+  FEV1_FVC_PCT: 'FEV1/FVC（一秒率）'
+}
+
+function metricDisplay (item) {
+  const code = String(item?.name || item?.type || item?.code || '').trim()
+  if (!code) return null
+  // 兼容小驼峰写法（fvcL/fev1L/fev1FvcPct → FVC_L/FEV1_L/FEV1_FVC_PCT）
+  const upper = code.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()
+  const label = SPIRO_METRIC_LABELS[code] || SPIRO_METRIC_LABELS[upper] || code
+  const value = item?.value === null || item?.value === undefined ? '' : String(item.value)
+  const unit = String(item?.unit || '')
+  return { key: code, label, value, unit, text: value ? value + (unit ? ' ' + unit : '') : '-' }
+}
+
+function formatReportMetrics (report) {
+  const source = Array.isArray(report?.metrics) ? report.metrics : []
+  return source.map(metricDisplay).filter(Boolean)
+}
 
 function valueText (value, fallback = '') {
   return value === null || value === undefined || value === '' ? fallback : String(value)
@@ -20,7 +44,9 @@ function formatReport (item) {
     reportNo: valueText(item.reportNo, '标准报告'),
     categoryText: valueText(item.category, '标准报告'),
     createdAtText: formatDateTime(item.createdAt),
-    statusText: item.downloadAvailable ? '可下载' : '已归档'
+    statusText: item.downloadAvailable ? '可下载' : '已归档',
+    // 报告带 metrics 数组则渲染 FVC/FEV1/FEV1%；没有就保持原样，不编造数值
+    displayMetrics: formatReportMetrics(item)
   })
 }
 
@@ -76,6 +102,14 @@ Page({
   data: {
     activeRole: 'DOCTOR',
     patientId: '',
+    keyword: '',
+    patients: [],
+    patientNames: [],
+    patientIndex: -1,
+    selectedPatient: null,
+    searching: false,
+    patientPage: 1,
+    patientHasMore: true,
     loading: false,
     loadingMore: false,
     opening: false,
@@ -98,8 +132,10 @@ Page({
       }
       this.setData({
         activeRole: session.activeRole || 'DOCTOR',
-        patientId: valueText(query.patientId || query.patientRef || session.patientRef || session.patientId || '')
+        patientId: valueText(query.patientId || query.patientRef || '')
       })
+      // 搜索选人（与体脂秤单人直测一致）：patientId 不再手填
+      await this.loadPatients(true)
       if (this.data.patientId) {
         await this.loadReports(true)
       }
@@ -242,8 +278,62 @@ Page({
     }
   },
 
-  updatePatientId (event) {
-    this.setData({ patientId: String(event.detail.value || '') })
+  // ---- 患者搜索选人（复用 device-scale 单人直测模式，api.listDoctorPatients 支持 keyword）----
+
+  async loadPatients (reset = true) {
+    if (this.data.searching) return
+    const nextPage = reset ? 1 : this.data.patientPage + 1
+    this.setData({ searching: true, patientPage: nextPage })
+    try {
+      const response = await api.listDoctorPatients({ page: nextPage, pageSize: 20, keyword: this.data.keyword })
+      const page = response?.data || response || {}
+      const incoming = (page.list || []).filter(item => item?.id != null)
+      const patients = reset ? incoming : this.data.patients.concat(incoming)
+      // 去重按字符串 id（雪花 ID 一律字符串处理，不 Number 化）
+      const seen = new Set()
+      const deduped = patients.filter(item => { const key = String(item.id); if (seen.has(key)) return false; seen.add(key); return true })
+      const hasMore = incoming.length === 20
+      const initialId = this.data.patientId
+      let index = initialId ? deduped.findIndex(item => String(item.id) === initialId) : -1
+      if (index < 0 && deduped.length) index = reset ? 0 : -1
+      const patch = { patients: deduped, patientNames: deduped.map(item => item.name || `患者${item.id}`), patientHasMore: hasMore }
+      if (index >= 0) patch.patientIndex = index
+      this.setData(patch, () => {
+        if (index >= 0 && reset) this.selectPatient(index)
+      })
+    } catch (error) {
+      this.setData({ errorText: error.message || '患者列表加载失败' })
+    } finally {
+      this.setData({ searching: false })
+    }
+  },
+
+  onKeyword (event) {
+    this.setData({ keyword: String(event.detail.value || '') })
+  },
+
+  searchPatients () {
+    this.setData({ patientHasMore: true })
+    this.loadPatients(true)
+  },
+
+  loadMorePatients () {
+    if (this.data.patientHasMore && !this.data.searching) this.loadPatients(false)
+  },
+
+  selectPatient (event) {
+    const index = typeof event === 'number' ? event : Number(event.detail.value)
+    const patient = this.data.patients[index]
+    if (!patient) return
+    // patientId 保持字符串：绝不做数值转换
+    this.setData({
+      patientIndex: index,
+      selectedPatient: patient,
+      patientId: String(patient.id),
+      reports: [],
+      selectedReport: null
+    })
+    this.loadReports(true)
   },
 
   async retry () {

@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "Sunvou 报告工作站",
+  "navigationBarTitleText": "Sunvou 呼气报告（仅查看）",
   "usingComponents": {
     "app-header": "/components/app-header/app-header",
     "state-panel": "/components/state-panel/state-panel",

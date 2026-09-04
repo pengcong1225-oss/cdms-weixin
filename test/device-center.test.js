@@ -147,4 +147,36 @@ for (const name of ['app-header', 'state-panel', 'form-section', 'status-tag']) 
 assert.ok(deviceJs.includes('扫码签到后现场采血测血糖'))
 assert.ok(deviceJs.includes('protocol: "MFA1_BLE"') || deviceJs.includes("protocol: 'MFA1_BLE'"))
 
+// ---- Sunvou 呼气报告：厂商推送、医生只读查看 ----
+
+const sunvouJs = read('pages/device-sunvou/index.js')
+const sunvouWxml = read('pages/device-sunvou/index.wxml')
+const sunvouJson = read('pages/device-sunvou/index.json')
+
+// 语义纠正：绝不在小程序发起设备测试，也不出现「工作站」暗示
+assert.ok(!sunvouWxml.includes('工作站'), 'sunvou wxml 不得再出现工作站')
+assert.ok(!sunvouJs.includes('工作站'), 'sunvou js 不得再出现工作站')
+assert.ok(!sunvouJson.includes('工作站'), 'sunvou json 标题不得再出现工作站')
+// 文案体现厂商推送 + 仅查看 + IoT 数据来源
+assert.ok(sunvouWxml.includes('厂商推送') || sunvouWxml.includes('由设备厂商推送同步'), '应说明报告由厂商推送同步')
+assert.ok(sunvouWxml.includes('仅供医生查看') || sunvouWxml.includes('仅查看'), '应明确只读查看定位')
+assert.ok(sunvouWxml.includes('尚沃呼气分析仪经 IoT 平台同步'), '顶部应有数据来源说明')
+assert.ok(sunvouWxml.includes('不发起设备测试'), '应明确医生端不发起设备测试')
+// 空态文案
+assert.ok(sunvouWxml.includes('该患者暂无已同步的呼气报告'), '空态提示已同步报告缺失场景')
+assert.ok(sunvouWxml.includes('报告由现场检查后自动上传'), '空态提示自动上传机制')
+// 患者选择：搜索选人（listDoctorPatients keyword），不再手填 patientId input
+assert.ok(sunvouJs.includes('listDoctorPatients'), '应通过 listDoctorPatients 搜索患者')
+assert.ok(sunvouJs.includes('keyword'), '应支持 keyword 搜索参数')
+assert.ok(sunvouJs.includes('searchPatients'), '应有搜索入口处理函数')
+assert.ok(sunvouWxml.includes('bindtap="searchPatients"'), 'wxml 应有搜索按钮')
+assert.ok(sunvouWxml.includes('picker'), 'wxml 应使用 picker 选患者')
+assert.ok(!sunvouWxml.includes('bindinput="updatePatientId"'), '不得保留 patientId 手填输入框')
+// canonical 肺功能指标展示（有 metrics 才渲染，不编造数值）
+assert.ok(sunvouJs.includes('FVC_L') && sunvouJs.includes('FEV1_L') && sunvouJs.includes('FEV1_FVC_PCT'), '应识别 FVC/FEV1/FEV1% canonical 指标')
+assert.ok(sunvouWxml.includes('displayMetrics'), '列表与详情按 metrics 数组渲染')
+// 禁止 web-view/H5 与误改依赖
+assert.ok(!sunvouWxml.includes('web-view'), '不得引入 web-view')
+assert.ok(!sunvouJs.includes('acquisition-api'), '不得引用采集会话 API')
+
 console.log('device center tests passed')

@@ -51,3 +51,97 @@
   font-size: 26rpx;
   color: #60707b;
 }
+.source-notice {
+  margin: 20rpx 24rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 16rpx;
+  background: #eef5f1;
+  color: #4c6357;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.search-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 18rpx;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  padding: 0 24rpx;
+  border-radius: 16rpx;
+  background: #f4f7f5;
+  box-sizing: border-box;
+  font-size: 26rpx;
+}
+
+.search-btn {
+  margin: 0;
+  height: 72rpx;
+  line-height: 72rpx;
+  padding: 0 26rpx;
+  border-radius: 16rpx;
+  background: #e5f6ee;
+  color: #0c9b6c;
+  font-size: 24rpx;
+}
+
+.picker {
+  border: 1rpx solid #dce8e2;
+  border-radius: 14rpx;
+  padding: 24rpx;
+  color: #527166;
+  display: flex;
+  justify-content: space-between;
+}
+
+.loadmore {
+  margin-top: 14rpx;
+  text-align: center;
+  color: #0c9b6c;
+  font-size: 24rpx;
+  padding: 10rpx 0;
+}
+
+.metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.metric-chip {
+  padding: 8rpx 16rpx;
+  border-radius: 12rpx;
+  background: #e8f4ee;
+  color: #23584a;
+  font-size: 22rpx;
+}
+
+.metric-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.metric-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 14rpx;
+  background: #eff7f2;
+}
+
+.metric-label {
+  font-size: 26rpx;
+  color: #40564c;
+}
+
+.metric-value {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1f2d36;
+}

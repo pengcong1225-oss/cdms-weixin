@@ -1,33 +1,42 @@
 <view class="page device-sunvou-page">
   <app-header
-    title="Sunvou 报告工作站"
-    subtitle="标准报告与短时访问地址仅保存在当前页面内存中"
+    title="Sunvou 呼气报告（仅查看）"
+    subtitle="呼气报告由设备厂商推送同步，此处仅供医生查看已入库报告"
     showBack="{{true}}"
     bindback="backWorkspace"
   />
 
+  <view class="source-notice">数据来源：尚沃呼气分析仪经 IoT 平台同步；医生端不发起设备测试，现场检查完成后报告自动上传。</view>
+
   <state-panel wx:if="{{errorText}}" state="error" title="操作失败" message="{{errorText}}" actionText="重试" bindaction="retry" />
 
   <view wx:elif="{{loading || loadingMore}}" class="loading-panel">
-    <state-panel state="loading" title="加载中" message="正在读取标准报告" />
+    <state-panel state="loading" title="加载中" message="正在读取厂商同步的标准报告" />
   </view>
 
   <view wx:else class="workspace-stack">
-    <form-section title="患者" caption="医生请先选择要查看的患者">
-      <view class="patient-row">
-        <input class="field-input" value="{{patientId}}" bindinput="updatePatientId" placeholder="患者编号" />
-        <button class="primary-button" bindtap="loadReports">加载报告</button>
+    <form-section title="患者" caption="搜索并选择要查看报告的患者（不支持手填编号）">
+      <view class="search-row">
+        <input class="search-input" placeholder="搜索姓名 / 身份证 / 手机号" value="{{keyword}}" bindinput="onKeyword" confirm-type="search" bindconfirm="searchPatients" />
+        <button class="search-btn" size="mini" loading="{{searching}}" bindtap="searchPatients">搜索</button>
       </view>
+      <picker mode="selector" range="{{patientNames}}" value="{{patientIndex}}" bindchange="selectPatient">
+        <view class="picker">{{selectedPatient ? selectedPatient.name : '请选择患者（共 ' + patientNames.length + ' 人）'}} <text>⌄</text></view>
+      </picker>
+      <view wx:if="{{patientHasMore}}" class="loadmore" bindtap="loadMorePatients">{{searching ? '加载中…' : '加载更多患者'}}</view>
     </form-section>
 
-    <form-section title="报告列表" caption="点选后再打开报告或附件">
-      <view wx:if="{{!reports.length}}" class="empty-inline">暂无报告</view>
+    <form-section title="报告列表" caption="厂商推送的已同步报告，点选后再打开">
+      <view wx:if="{{!reports.length}}" class="empty-inline">该患者暂无已同步的呼气报告，报告由现场检查后自动上传</view>
       <view wx:for="{{reports}}" wx:key="reportId" class="report-card" data-report-id="{{item.reportId}}" bindtap="selectReport">
         <view class="report-head">
           <view class="report-title">{{item.reportNo}}</view>
           <status-tag text="{{item.statusText}}" tone="{{item.downloadAvailable ? 'success' : 'neutral'}}" />
         </view>
         <view class="report-meta">{{item.categoryText}} · {{item.createdAtText}}</view>
+        <view wx:if="{{item.displayMetrics.length}}" class="metric-chips">
+          <view wx:for="{{item.displayMetrics}}" wx:for-item="metric" wx:key="key" class="metric-chip">{{metric.label}} {{metric.value}}{{metric.unit ? ' ' + metric.unit : ''}}</view>
+        </view>
       </view>
       <view wx:if="{{hasMore}}" class="action-row">
         <button class="secondary-button" bindtap="loadMore">加载更多</button>
@@ -39,6 +48,12 @@
         <view class="report-detail-title">{{selectedReport.reportNo}}</view>
         <view class="report-detail-meta">报告 ID：{{selectedReport.reportId}}</view>
         <view class="report-detail-meta">患者：{{selectedReport.patientId || patientId}}</view>
+        <view wx:if="{{selectedReport.displayMetrics.length}}" class="metric-list">
+          <view wx:for="{{selectedReport.displayMetrics}}" wx:for-item="metric" wx:key="key" class="metric-card">
+            <text class="metric-label">{{metric.label}}</text>
+            <text class="metric-value">{{metric.value}}{{metric.unit ? ' ' + metric.unit : ''}}</text>
+          </view>
+        </view>
         <view class="report-detail-meta">附件：{{selectedReport.fileId || '无'}}</view>
         <view class="report-detail-meta">当前访问状态：{{accessStateText}}</view>
         <view class="report-detail-meta">有效时长：{{accessExpiresAtText}}</view>
