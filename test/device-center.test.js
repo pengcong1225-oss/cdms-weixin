@@ -96,6 +96,14 @@ for (const rel of [
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'miniprogram', rel)), `missing file: ${rel}`)
 }
 
+// 医生业务工作台在 H5 web-view（无 tabBar），容器页必须提供设备中心原生入口
+const h5Js = read('pages/h5/index.js')
+const h5Wxml = read('pages/h5/index.wxml')
+assert.ok(h5Js.includes("goDeviceCenter"))
+assert.ok(h5Js.includes("activeRole === 'DOCTOR'"))
+assert.ok(h5Wxml.includes('goDeviceCenter'))
+assert.ok(h5Wxml.includes('isDoctor'))
+
 // MFA-1 / Sunvou 页面文件本体必须存在（app.json 已注册路由）
 for (const rel of [
   'pages/device-mfa1/index.js',

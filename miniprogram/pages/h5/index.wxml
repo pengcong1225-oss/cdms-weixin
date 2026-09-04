@@ -1,1 +1,5 @@
 <web-view src="{{src}}"></web-view>
+<view wx:if="{{isDoctor}}" class="h5-device-fab" bindtap="goDeviceCenter">
+  <view class="h5-device-fab-icon">设</view>
+  <view class="h5-device-fab-text">设备中心</view>
+</view>
