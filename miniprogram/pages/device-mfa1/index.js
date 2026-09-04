@@ -13,6 +13,12 @@ function metricLabel (name) {
     glucose: '血糖',
     uricAcid: '血尿酸',
     tc: '总胆固醇',
+    hdl: '高密度脂蛋白',
+    tg: '甘油三酯',
+    ldl: '低密度脂蛋白',
+    systolic: '收缩压',
+    diastolic: '舒张压',
+    heartRate: '心率',
     battery: '电量'
   }
   return labels[name] || name
@@ -24,6 +30,7 @@ function metricText (metric) {
     value: metric?.value,
     unit: valueText(metric?.unit),
     state: valueText(metric?.state),
+    partial: !!metric?.partial, // 血脂多帧未凑满时降级上报的标记（透传给 wxml）
     label: metricLabel(metric?.name || metric?.type)
   }
 }
@@ -256,18 +263,27 @@ Page({
       this.setData({ errorText: '设备返回错误应答，请重新测量' })
       return
     }
-    if (result?.type !== 'result' || !result.metric) return
+    if (result?.type === 'lipidPending') {
+      // 血脂多帧聚合中：仅提示等待续帧，不产结果
+      this.setData({ statusText: '血脂结果传输中，等待续帧…' })
+      return
+    }
+    if (result?.type !== 'result') return
+    // 二期：血压/血脂完整结果带 metrics 数组；GLU/UA 一期只有单 metric，保持兼容
+    const incoming = Array.isArray(result.metrics) && result.metrics.length ? result.metrics : [result.metric]
+    if (!incoming.length || !incoming[0]) return
     if (result.metric.name === 'battery') {
       this.batteryLevel = Number(result.metric.value)
       this.setData({ batteryText: `${result.metric.value}%` })
       return
     }
-    const metrics = [metricText(result.metric)]
+    const metrics = incoming.map(metricText)
+    const suffix = metrics.length > 1 ? `${metrics.length} 项指标` : metrics[0].label
     this.setData({
       metrics,
       measuring: false,
       canConfirm: true,
-      statusText: `测量完成（${metrics[0].label}${metrics[0].state ? ' · ' + metrics[0].state : ''}），请确认后提交`
+      statusText: `测量完成（${suffix}${metrics[0].state ? ' · ' + metrics[0].state : ''}${metrics.some(item => item.partial) ? ' · 部分指标' : ''}），请确认后提交`
     })
     await this.saveMeasurementDraft(metrics)
   },

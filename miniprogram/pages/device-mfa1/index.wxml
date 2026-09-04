@@ -60,7 +60,7 @@
       <view wx:if="{{metrics.length}}" class="metric-list">
         <view wx:for="{{metrics}}" wx:key="name" class="metric-card">
           <text class="metric-label">{{item.label}}{{item.state ? '（' + item.state + '）' : ''}}</text>
-          <text class="metric-value">{{item.value}} {{item.unit}}</text>
+          <text class="metric-value">{{item.value}} {{item.unit}}{{item.partial ? '（部分）' : ''}}</text>
         </view>
       </view>
       <button wx:if="{{canConfirm}}" class="primary-button" loading="{{saving}}" bindtap="confirmMeasurement">确认并提交</button>
