@@ -1,0 +1,48 @@
+<view class="page cat-page">
+  <block wx:if="{{!finished}}">
+    <view class="cat-progress-bar">
+      <view class="cat-progress-inner" style="width: {{(currentIndex + 1) / questions.length * 100}}%"></view>
+    </view>
+    <view class="cat-progress-text">{{progressText}} · 共 {{questions.length}} 题</view>
+
+    <view class="card cat-question-card">
+      <view class="cat-question-label">问题的答案从「无影响」到「影响极大」请选择最符合您实际情况的分数</view>
+      <view class="cat-question-text">{{questions[currentIndex].question}}</view>
+      <view class="cat-worst-hint">对应「{{questions[currentIndex].worst}}」打 5 分</view>
+    </view>
+
+    <view class="cat-options">
+      <view
+        wx:for="{{options}}"
+        wx:key="score"
+        class="cat-option {{selected === item.score ? 'selected' : ''}}"
+        data-score="{{item.score}}"
+        bindtap="selectOption"
+      >
+        <view class="cat-option-score">{{item.score}}</view>
+        <view class="cat-option-label">{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="cat-nav">
+      <button wx:if="{{currentIndex > 0}}" class="secondary-button" bindtap="prevQuestion">上一题</button>
+      <view wx:else></view>
+      <view class="cat-nav-tip">{{selected >= 0 ? '已选择 ' + selected + ' 分' : '请选择一项'}}</view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="card result-card {{result.isHighRisk ? 'danger' : ''}}">
+      <view class="result-badge">{{result.score}} 分</view>
+      <view class="result-level">分级：{{result.range}} · {{result.level}}</view>
+      <view wx:if="{{result.isHighRisk}}" class="result-risk">⚠ 高危提示</view>
+      <view class="result-text">{{result.advice}}</view>
+      <view wx:if="{{result.isHighRisk}}" class="result-home-tip">建议尽快联系您的医生，获取进一步评估与治疗调整。</view>
+    </view>
+    <view class="result-actions">
+      <button class="primary-button" bindtap="goHome">返回首页</button>
+      <button class="secondary-button" bindtap="goHistory">查看自测历史</button>
+      <button class="outline-button" bindtap="restart">重新测试</button>
+    </view>
+  </block>
+</view>

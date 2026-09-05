@@ -1,0 +1,13 @@
+.assess-history-page { padding-bottom: 40rpx; }
+.history-list { padding: 6rpx 24rpx; }
+.history-cell { display: flex; align-items: center; padding: 24rpx 8rpx; border-bottom: 1rpx solid #edf0ee; }
+.history-cell:last-child { border-bottom: none; }
+.history-type {
+  display: flex; align-items: center; justify-content: center;
+  width: 92rpx; height: 92rpx; flex: none; border-radius: 20rpx;
+  background: #e5f6ee; color: #0c9b6c; font-size: 24rpx; font-weight: 800;
+}
+.history-main { min-width: 0; flex: 1; margin-left: 20rpx; }
+.history-summary { color: #29483d; font-size: 27rpx; font-weight: 650; }
+.history-time { margin-top: 7rpx; color: #8a9a93; font-size: 21rpx; }
+.clear-button { margin-top: 34rpx; color: #cf3f3f; font-size: 24rpx; background: transparent; }

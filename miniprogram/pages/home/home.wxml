@@ -25,11 +25,12 @@
       data-key="{{item.key}}"
       bindtap="openWorkspaceEntry"
     >
-      <view class="workspace-icon">{{item.key === 'device' ? '设' : item.key === 'patients' ? '患' : '随'}}</view>
+      <view class="workspace-icon">{{item.icon}}</view>
       <view class="workspace-copy">
         <view class="workspace-title">{{item.title}}</view>
         <view class="workspace-subtitle">{{item.subtitle}}</view>
       </view>
+      <view wx:if="{{item.key === 'messages' && messagesUnread > 0}}" class="workspace-badge">{{messagesUnread}}</view>
       <text class="workspace-arrow">›</text>
     </view>
   </view>

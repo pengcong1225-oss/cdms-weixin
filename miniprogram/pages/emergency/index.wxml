@@ -1,0 +1,18 @@
+<view class="page emergency-page">
+  <view class="emergency-guide">
+    <view class="emergency-guide-title">紧急求助</view>
+    <view class="emergency-guide-text">一键呼叫您的建档医生</view>
+  </view>
+
+  <view class="emergency-button-wrap">
+    <button class="emergency-button" loading="{{busy}}" disabled="{{busy}}" bindtap="callDoctor">紧急求助</button>
+    <view class="emergency-note">仅用于紧急情况；如病情危重请拨打 120。</view>
+  </view>
+
+  <view class="card emergency-info">
+    <view class="emergency-info-title">呼叫前请确认</view>
+    <view class="emergency-info-item">· 本功能仅用于紧急情况，请勿随意拨打。</view>
+    <view class="emergency-info-item">· 呼叫前会向您确认医生姓名与号码。</view>
+    <view class="emergency-info-item">· 如病情危重，请立即拨打 120 急救电话。</view>
+  </view>
+</view>

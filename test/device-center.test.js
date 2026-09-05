@@ -71,13 +71,48 @@ assert.ok(usingComponents('pages/device-sunvou/index.json')['status-tag'])
 
 const checkinJs = read('pages/scale-checkin/index.js')
 assert.ok(checkinJs.includes("ensureSession({ role: 'PATIENT' })"))
-// 签到只提交场次令牌，不提交患者 ID
+// 场次签到只提交场次令牌；通用签到从 /me 解析 patientId（患者身份由服务端授权，禁止从二维码载荷读取）
 assert.ok(checkinJs.includes('createCheckin(payload.stationId, payload.checkinToken)'))
-assert.ok(!checkinJs.includes('patientId'))
+assert.ok(!checkinJs.includes('payload.patientId'), '不得从二维码载荷读取 patientId')
+assert.ok(checkinJs.includes('/api/v1/miniapp/auth/me'), '通用签到应从 /me 获取 patientId')
+assert.ok(checkinJs.includes('/api/v1/checkins?patientId='), '通用签到应调用 checkins?patientId= 端点')
 
 // 工作站二维码走 canvas 渲染
 const stationWxml = read('pages/device-scale/station/index.wxml')
 assert.ok(stationWxml.includes('canvas-id="stationQr"'))
+
+// ---- 医生端患者签到展码（通用签到码） ----
+
+// 设备目录首位为患者签到入口
+assert.ok(deviceJs.includes('key: "checkin"'))
+assert.ok(deviceJs.includes('生成签到二维码，患者扫码登记到场'))
+assert.ok(deviceJs.includes('protocol: "CHECKIN"') || deviceJs.includes("protocol: 'CHECKIN'"))
+// 目录项导航到真实展码页面
+assert.ok(deviceJs.includes('/pages/doctor-checkin/index'))
+assert.ok(appJson.pages.includes('pages/doctor-checkin/index'))
+// 页面四件套齐全
+for (const ext of ['js', 'json', 'wxml', 'wxss']) {
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'miniprogram', 'pages/doctor-checkin/index.' + ext)), 'missing file: pages/doctor-checkin/index.' + ext)
+}
+const doctorCheckinJs = read('pages/doctor-checkin/index.js')
+const doctorCheckinWxml = read('pages/doctor-checkin/index.wxml')
+// 只允许医生身份进入
+assert.ok(doctorCheckinJs.includes("ensureSession({ role: 'DOCTOR' })"))
+// 从 /me 取 orgId 生成通用签到码，未取得机构信息时给出明确提示
+assert.ok(doctorCheckinJs.includes('/api/v1/miniapp/auth/me'))
+assert.ok(doctorCheckinJs.includes('createGenericCheckinPayload'))
+assert.ok(doctorCheckinJs.includes('未取得机构信息'))
+// 今日队列按状态文本展示，失败静默为空
+assert.ok(doctorCheckinJs.includes('/api/v1/checkins/today'))
+assert.ok(doctorCheckinJs.includes('待处理') && doctorCheckinJs.includes('进行中') && doctorCheckinJs.includes('已完成'))
+assert.ok(doctorCheckinWxml.includes('暂无签到记录'))
+assert.ok(doctorCheckinWxml.includes('请患者扫码签到'))
+// 展码走 canvas 渲染
+assert.ok(doctorCheckinWxml.includes('canvas-id="checkinQr"'))
+// 提供刷新与复制能力
+assert.ok(doctorCheckinWxml.includes('bindtap="refresh"'))
+assert.ok(doctorCheckinWxml.includes('bindtap="copyPayload"'))
+assert.ok(doctorCheckinJs.includes('wx.setClipboardData'))
 
 // ---- 依赖模块存在 ----
 

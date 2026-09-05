@@ -1,9 +1,20 @@
 const bleManager = require("../../services/bleManager");
 const { getSettings } = require("../../utils/capabilities");
 const { SensorRawControl } = require("../../sdk/rw-ble-sdk.min.js");
+const deviceSettings = require("../../utils/device-settings");
 
 // 医生端可连接/可操作的设备目录。医生设备中心不管理患者家用设备。
 const doctorEntries = [
+  {
+    key: "checkin",
+    title: "患者签到",
+    subtitle: "生成签到二维码，患者扫码登记到场",
+    icon: "签",
+    protocol: "CHECKIN",
+    category: "签到管理",
+    status: "已接入",
+    disabled: false,
+  },
   {
     key: "scale",
     title: "花潮身高体脂秤",
@@ -128,6 +139,14 @@ Page({
 
   onLoad() {
     this.settingValues = {};
+    // 回显已持久化的设备设置：已有保存值即显示“已保存”
+    const bound = bleManager.snapshot().boundDevice;
+    if (bound && bound.deviceId) {
+      const saved = deviceSettings.load(bound.deviceId);
+      Object.keys(saved || {}).forEach((key) => {
+        this.settingValues[key] = "已保存";
+      });
+    }
     this.syncRoleState();
     this.unsubscribe = bleManager.subscribe((state) => {
       this.applyState(state);
@@ -138,6 +157,8 @@ Page({
   onShow() {
     this.syncRoleState();
     this.applyState(bleManager.snapshot());
+    // 设备连接后回读真实设置并写回本地存储与界面
+    this.readbackSettings();
   },
 
   onUnload() {
@@ -163,6 +184,10 @@ Page({
   onDoctorEntrySelect(event) {
     const entry = this.data.doctorEntries[event.currentTarget.dataset.index];
     if (!entry || entry.disabled) return;
+    if (entry.key === "checkin") {
+      wx.navigateTo({ url: "/pages/doctor-checkin/index" });
+      return;
+    }
     if (entry.key === "scale") {
       wx.navigateTo({ url: "/pages/device-scale/mode/index" });
       return;
@@ -296,6 +321,34 @@ Page({
     this.applyState(bleManager.snapshot());
   },
 
+  // 设置成功后落盘（accumulated = load() + 本次值），并将该行显示为“已保存”
+  persistSetting(id, value) {
+    this.settingValues = this.settingValues || {};
+    const device = this.data && this.data.boundDevice;
+    if (!device || !device.deviceId) return;
+    try {
+      deviceSettings.save(device.deviceId, { [id]: value });
+    } catch (error) {
+      console.warn("[CDMS] 保存设备设置失败", error);
+    }
+    this.updateSettingValue(id, "已保存");
+  },
+
+  // 回读设备真实设置并回显（仅读取已持久化的 key，避免覆盖用户未设置项）
+  async readbackSettings() {
+    const device = this.data.boundDevice;
+    if (!device || !device.deviceId || !this.data.connected) return;
+    try {
+      const actual = await bleManager.readDeviceSettings(device.deviceId);
+      Object.keys(actual || {}).forEach((key) => {
+        if (actual[key]) this.settingValues[key] = "已保存";
+      });
+      this.applyState(bleManager.snapshot());
+    } catch (error) {
+      console.warn("[CDMS] 设备设置回读失败", error);
+    }
+  },
+
   async executeSetting(id) {
     const sdk = bleManager.getSdk();
     if (!sdk) throw new Error("请先连接设备");
@@ -315,15 +368,16 @@ Page({
       const index = await choose(["关闭", "每 1 分钟", "每 30 分钟", "每 60 分钟"]);
       if (index === null) return;
       const interval = values[index];
-      await sdk.setMonitoring(monitoringTypes[id], {
+      const schedule = {
         enabled: interval > 0,
         startHour: 0,
         startMinute: 0,
         endHour: 23,
         endMinute: 59,
         intervalMinutes: interval || 60,
-      });
-      this.updateSettingValue(id, interval ? `${interval} 分钟` : "已关闭");
+      };
+      await sdk.setMonitoring(monitoringTypes[id], schedule);
+      this.persistSetting(id, schedule);
       wx.showToast({ title: "设置成功", icon: "success" });
       return;
     }
@@ -436,7 +490,15 @@ Page({
     const index = await choose(operation.labels);
     if (index === null) return;
     await operation.run(operation.values[index]);
-    this.updateSettingValue(id, operation.labels[index]);
+    if (id === "heartRateAlert") {
+      const value = operation.values[index];
+      this.persistSetting(id, { enabled: value > 0, high: value || 140, low: 0xff });
+    } else if (id === "bloodOxygenAlert") {
+      const value = operation.values[index];
+      this.persistSetting(id, { enabled: value > 0, low: value || 94 });
+    } else {
+      this.updateSettingValue(id, operation.labels[index]);
+    }
     wx.showToast({ title: "设置成功", icon: "success" });
   },
 

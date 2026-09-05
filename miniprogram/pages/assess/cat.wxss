@@ -1,0 +1,29 @@
+.cat-page { padding-bottom: 40rpx; }
+.cat-progress-bar { overflow: hidden; height: 10rpx; margin: 32rpx 4rpx 12rpx; border-radius: 999rpx; background: #dfece6; }
+.cat-progress-inner { height: 100%; border-radius: 999rpx; background: linear-gradient(90deg, #0c9b6c, #67cba6); transition: width 180ms ease; }
+.cat-progress-text { margin: 0 4rpx 18rpx; color: #8a9a93; font-size: 22rpx; }
+.cat-question-card { padding: 34rpx 28rpx; }
+.cat-question-label { color: #8a9a93; font-size: 22rpx; line-height: 1.6; }
+.cat-question-text { margin-top: 16rpx; color: #20352e; font-size: 33rpx; line-height: 1.6; font-weight: 700; }
+.cat-worst-hint { margin-top: 14rpx; color: #b7791f; font-size: 21rpx; }
+.cat-options { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12rpx; margin-top: 22rpx; }
+.cat-option {
+  padding: 18rpx 4rpx; text-align: center; border: 2rpx solid #e4eeea; border-radius: 22rpx;
+  background: #fff; color: #527166;
+}
+.cat-option.selected { border-color: #0c9b6c; background: #e5f6ee; color: #0c9b6c; }
+.cat-option-score { font-size: 34rpx; font-weight: 800; line-height: 40rpx; }
+.cat-option-label { margin-top: 6rpx; font-size: 19rpx; line-height: 1.35; }
+.cat-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 28rpx; }
+.cat-nav-tip { color: #8a9a93; font-size: 22rpx; }
+.result-card { margin-top: 40rpx; padding: 44rpx 30rpx; text-align: center; }
+.result-card.danger { border-color: #f2c9c9; background: #fffafa; }
+.result-badge { color: #0c9b6c; font-size: 76rpx; font-weight: 800; line-height: 90rpx; }
+.result-card.danger .result-badge { color: #cf3f3f; }
+.result-level { margin-top: 10rpx; color: #426056; font-size: 28rpx; font-weight: 650; }
+.result-risk { display: inline-block; margin-top: 18rpx; padding: 8rpx 22rpx; border-radius: 999rpx; background: #ffe9e9; color: #cf3f3f; font-size: 24rpx; font-weight: 700; }
+.result-text { margin-top: 18rpx; color: #6f8178; font-size: 24rpx; line-height: 1.7; }
+.result-home-tip { margin-top: 12rpx; color: #cf3f3f; font-size: 23rpx; line-height: 1.6; }
+.result-actions { display: flex; flex-direction: column; align-items: center; margin-top: 30rpx; }
+.result-actions .primary-button, .result-actions .secondary-button, .result-actions .outline-button { width: 100%; margin-top: 18rpx; }
+.outline-button { min-height: 70rpx; border: 2rpx solid #cfe2d9; border-radius: 999rpx; background: #fff; color: #527166; font-size: 25rpx; line-height: 66rpx; }

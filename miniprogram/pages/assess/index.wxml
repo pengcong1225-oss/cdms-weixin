@@ -1,0 +1,37 @@
+<view class="page assess-page">
+  <view class="assess-heading">
+    <view class="assess-heading-title">健康自测</view>
+    <view class="assess-heading-sub">根据近两周感受作答，结果只保存在本机</view>
+  </view>
+
+  <view class="card assess-card" bindtap="openCat">
+    <view class="assess-icon">CAT</view>
+    <view class="assess-copy">
+      <view class="assess-title">CAT 问卷</view>
+      <view class="assess-text">8 个问题 · 每项 0-5 分，评估症状对生活的影响</view>
+      <view class="assess-hint">得分 &gt; 16 分提示高风险，建议联系医生</view>
+    </view>
+    <text class="chevron">›</text>
+  </view>
+
+  <view class="card assess-card" bindtap="openMmrc">
+    <view class="assess-icon">M</view>
+    <view class="assess-copy">
+      <view class="assess-title">mMRC 分级</view>
+      <view class="assess-text">单选 0-4 级，评估呼吸困难程度</view>
+      <view class="assess-hint">2 级及以上呼吸困难明显，建议就医</view>
+    </view>
+    <text class="chevron">›</text>
+  </view>
+
+  <view class="card assess-card" bindtap="openHistory">
+    <view class="assess-icon">史</view>
+    <view class="assess-copy">
+      <view class="assess-title">自测历史</view>
+      <view class="assess-text">查看以往 CAT 与 mMRC 记录及结果解读</view>
+    </view>
+    <text class="chevron">›</text>
+  </view>
+
+  <view class="assess-note">本自测结果不能替代专业诊断，如有不适请及时就医。</view>
+</view>

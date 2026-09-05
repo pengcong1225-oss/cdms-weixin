@@ -1,0 +1,20 @@
+.mmrc-page { padding-bottom: 40rpx; }
+.mmrc-intro { padding: 36rpx 4rpx 20rpx; }
+.mmrc-intro-title { color: #29453b; font-size: 36rpx; line-height: 50rpx; font-weight: 750; }
+.mmrc-intro-text { margin-top: 8rpx; color: #91a099; font-size: 23rpx; }
+.mmrc-list { padding: 6rpx 24rpx; }
+.mmrc-item { padding: 24rpx 8rpx; border-bottom: 1rpx solid #edf0ee; }
+.mmrc-item:last-child { border-bottom: none; }
+.mmrc-item.selected { background: #f2fbf7; border-radius: 16rpx; }
+.mmrc-grade { color: #0c9b6c; font-size: 26rpx; font-weight: 700; }
+.mmrc-text { margin-top: 6rpx; color: #527166; font-size: 24rpx; line-height: 1.6; }
+.result-card { margin-top: 40rpx; padding: 44rpx 30rpx; text-align: center; }
+.result-card.danger { border-color: #f2c9c9; background: #fffafa; }
+.result-badge { color: #0c9b6c; font-size: 48rpx; font-weight: 800; line-height: 60rpx; }
+.result-card.danger .result-badge { color: #cf3f3f; }
+.result-level { margin-top: 10rpx; color: #426056; font-size: 28rpx; font-weight: 650; }
+.result-risk { display: inline-block; margin-top: 18rpx; padding: 8rpx 22rpx; border-radius: 999rpx; background: #ffe9e9; color: #cf3f3f; font-size: 24rpx; font-weight: 700; }
+.result-text { margin-top: 18rpx; color: #6f8178; font-size: 24rpx; line-height: 1.7; }
+.result-actions { display: flex; flex-direction: column; align-items: center; margin-top: 30rpx; }
+.result-actions .primary-button, .result-actions .secondary-button, .result-actions .outline-button { width: 100%; margin-top: 18rpx; }
+.outline-button { min-height: 70rpx; border: 2rpx solid #cfe2d9; border-radius: 999rpx; background: #fff; color: #527166; font-size: 25rpx; line-height: 66rpx; }

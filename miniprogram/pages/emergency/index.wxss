@@ -1,0 +1,14 @@
+.emergency-page { padding-bottom: 40rpx; }
+.emergency-guide { padding: 40rpx 4rpx 30rpx; text-align: center; }
+.emergency-guide-title { color: #29453b; font-size: 40rpx; line-height: 54rpx; font-weight: 750; }
+.emergency-guide-text { margin-top: 8rpx; color: #91a099; font-size: 24rpx; }
+.emergency-button-wrap { padding: 30rpx 0 10rpx; }
+.emergency-button {
+  height: 150rpx; border-radius: 36rpx; background: linear-gradient(135deg, #e05555, #cf3f3f);
+  color: #fff; font-size: 42rpx; font-weight: 800; line-height: 150rpx;
+  box-shadow: 0 16rpx 34rpx rgba(207, 63, 63, .28);
+}
+.emergency-note { margin-top: 20rpx; text-align: center; color: #8a9a93; font-size: 22rpx; }
+.emergency-info { margin-top: 36rpx; padding: 30rpx 26rpx; }
+.emergency-info-title { color: #29483d; font-size: 27rpx; font-weight: 700; }
+.emergency-info-item { margin-top: 16rpx; color: #6f8178; font-size: 23rpx; line-height: 1.6; }

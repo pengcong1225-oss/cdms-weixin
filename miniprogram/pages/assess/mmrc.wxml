@@ -1,0 +1,35 @@
+<view class="page mmrc-page">
+  <view class="mmrc-intro">
+    <view class="mmrc-intro-title">呼吸困难程度自评</view>
+    <view class="mmrc-intro-text">请选择最符合您最近情况的描述（mMRC 0-4 级）</view>
+  </view>
+
+  <block wx:if="{{!finished}}">
+    <view class="card mmrc-list">
+      <view
+        wx:for="{{options}}"
+        wx:key="grade"
+        class="mmrc-item {{selected === item.grade ? 'selected' : ''}}"
+        data-grade="{{item.grade}}"
+        bindtap="selectOption"
+      >
+        <view class="mmrc-grade">mMRC {{item.label}}</view>
+        <view class="mmrc-text">{{item.text}}</view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="card result-card {{result.isHighRisk ? 'danger' : ''}}">
+      <view class="result-badge">mMRC {{result.grade}} 级</view>
+      <view class="result-level">分级：{{result.level}}</view>
+      <view wx:if="{{result.isHighRisk}}" class="result-risk">⚠ 就医提示</view>
+      <view class="result-text">{{result.advice}}</view>
+    </view>
+    <view class="result-actions">
+      <button class="primary-button" bindtap="goHome">返回首页</button>
+      <button class="secondary-button" bindtap="goHistory">查看自测历史</button>
+      <button class="outline-button" bindtap="restart">重新测试</button>
+    </view>
+  </block>
+</view>

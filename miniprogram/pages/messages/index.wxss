@@ -1,0 +1,26 @@
+.messages-page { padding-bottom: 40rpx; }
+.messages-topbar { display: flex; align-items: center; justify-content: space-between; padding: 36rpx 4rpx 8rpx; }
+.messages-title { color: #29453b; font-size: 42rpx; line-height: 56rpx; font-weight: 750; }
+.read-all { padding: 10rpx 20rpx; border-radius: 999rpx; background: #e5f6ee; color: #0c9b6c; font-size: 23rpx; }
+.reminder-banner { display: flex; align-items: center; margin: 16rpx 0 6rpx; padding: 24rpx; border: 1rpx solid #f0dfc4; border-radius: 24rpx; background: #fff8ec; }
+.reminder-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 62rpx; height: 62rpx; flex: none; border-radius: 20rpx;
+  background: #ffe9c9; color: #b7791f; font-size: 26rpx; font-weight: 800;
+}
+.reminder-copy { min-width: 0; flex: 1; margin-left: 18rpx; }
+.reminder-title { color: #8a5a1d; font-size: 25rpx; font-weight: 700; }
+.reminder-text { margin-top: 6rpx; color: #a67830; font-size: 23rpx; }
+.message-list { padding: 6rpx 24rpx; }
+.message-cell { position: relative; padding: 26rpx 4rpx 26rpx 26rpx; border-bottom: 1rpx solid #edf0ee; }
+.message-cell:last-child { border-bottom: none; }
+.message-dot { position: absolute; left: 0; top: 34rpx; width: 12rpx; height: 12rpx; border-radius: 50%; background: #e1e8e5; }
+.message-dot.active { background: #cf3f3f; box-shadow: 0 0 0 5rpx rgba(207, 63, 63, .12); }
+.message-main { min-width: 0; }
+.message-head { display: flex; align-items: center; justify-content: space-between; }
+.message-type { color: #8a9a93; font-size: 21rpx; }
+.message-time { color: #a8b4af; font-size: 20rpx; }
+.message-title { margin-top: 8rpx; color: #527166; font-size: 27rpx; line-height: 1.5; }
+.message-title.strong { color: #20352e; font-weight: 700; }
+.message-content { margin-top: 8rpx; color: #6f8178; font-size: 23rpx; line-height: 1.6; }
+.loading-text { margin-top: 40rpx; text-align: center; color: #8a9a93; font-size: 23rpx; }

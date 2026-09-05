@@ -5,6 +5,30 @@ const api = require("../../utils/api");
 const { getRoleEntry } = require("../../utils/role-entry");
 const { getWorkspaceEntries } = require("../../utils/workspace-entry");
 
+// 业务入口图标（与 workspace-entry.js 中 PATIENT/DOCTOR 的 key 对应）
+const WORKSPACE_ICONS = {
+  profile: "档",
+  followups: "随",
+  assess: "测",
+  checkin: "扫",
+  messages: "信",
+  emergency: "急",
+  patients: "患",
+  device: "设",
+};
+
+// tabBar 页面使用 switchTab，其余原生页面使用 navigateTo
+const TAB_PAGES = ["/pages/home/home", "/pages/device/device"];
+
+// 距上次同步超过 15 分钟即在 onShow 时触发一次自动同步
+const AUTO_SYNC_STALE_MS = 15 * 60 * 1000;
+
+function unwrapData (response) {
+  return response && typeof response === "object" && Object.prototype.hasOwnProperty.call(response, "data")
+    ? response.data
+    : response;
+}
+
 Page({
   workspaceOpening: false,
   data: {
@@ -18,13 +42,19 @@ Page({
     cdmsQueue: 0,
     cdmsStatus: "",
     activeRole: "",
-    workspaceEntries: []
+    workspaceEntries: [],
+    messagesUnread: 0
   },
 
   onLoad() {
     const app = getApp()
     const activeRole = app.globalData.activeRole || ''
-    this.setData({ activeRole, workspaceEntries: getWorkspaceEntries(activeRole) })
+    this.setData({
+      activeRole,
+      workspaceEntries: getWorkspaceEntries(activeRole).map((item) => Object.assign({}, item, {
+        icon: WORKSPACE_ICONS[item.key] || "随",
+      })),
+    })
     if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
       this.redirectDoctorWorkspace()
       return
@@ -63,10 +93,39 @@ Page({
     }
     const state = bleManager.snapshot();
     this.setData({ healthCards: getHealthCards(state.boundDevice, state.realtimeHealth) });
+    // 消息未读数角标
+    this.refreshUnreadCount();
+    // 定时同步：前台期间按 15 分钟周期静默同步
+    bleManager.scheduleAutoSync();
+    const bound = state.boundDevice;
+    if (bound && !state.healthSyncing) {
+      const lastAt = bound.lastHealthSyncAt || state.lastHealthSyncAt || 0;
+      if (!lastAt || Date.now() - lastAt > AUTO_SYNC_STALE_MS) {
+        bleManager.safeAutoSync().catch(() => {});
+      }
+    }
+  },
+
+  onHide() {
+    bleManager.stopAutoSync();
   },
 
   onUnload() {
+    bleManager.stopAutoSync();
     if (this.unsubscribe) this.unsubscribe();
+  },
+
+  async refreshUnreadCount () {
+    const app = getApp()
+    if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) return
+    try {
+      const response = await api.cdmsRequest('/api/v1/messages/unread-count', 'GET', null, app.globalData.accessToken)
+      const data = unwrapData(response)
+      const count = data && typeof data.count === 'number' ? data.count : 0
+      this.setData({ messagesUnread: count > 0 ? count : 0 })
+    } catch (error) {
+      console.warn('[CDMS] 未读消息数获取失败', error)
+    }
   },
 
   async onPullDownRefresh() {
@@ -159,11 +218,13 @@ Page({
       wx.showToast({ title: error.message || '打开业务工作台失败', icon: 'none' })
     }
   },
+
   async openWorkspaceEntry (event) {
     const entry = (this.data.workspaceEntries || []).find(item => item.key === event.currentTarget.dataset.key)
     if (!entry) return
     if (entry.type === 'NATIVE') {
-      wx.switchTab({ url: entry.url })
+      if (TAB_PAGES.includes(entry.url)) wx.switchTab({ url: entry.url })
+      else wx.navigateTo({ url: entry.url })
       return
     }
     const app = getApp()
@@ -172,7 +233,17 @@ Page({
       return
     }
     try {
-      const response = await api.createHandoff(entry.targetPath)
+      // 个人档案：先用 /me 拿 patientId，再拼接 360 档案地址（其余 H5 入口保持原 targetPath）
+      let targetPath = entry.targetPath
+      if (entry.key === 'profile') {
+        const meResponse = await api.cdmsRequest('/api/v1/miniapp/auth/me', 'GET', null, app.globalData.accessToken)
+        const me = unwrapData(meResponse)
+        const patientId = me && me.patientId
+        if (!patientId) throw new Error('未取得患者档案信息')
+        targetPath = `/patient/${patientId}/360`
+      }
+      if (!targetPath) throw new Error('该入口暂不可用')
+      const response = await api.createHandoff(targetPath)
       const handoff = response?.data || response
       if (!handoff?.handoffUrl) throw new Error('未取得 H5 安全地址')
       wx.navigateTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
@@ -180,6 +251,7 @@ Page({
       wx.showToast({ title: error.message || '打开业务入口失败', icon: 'none' })
     }
   },
+
   async redirectDoctorWorkspace () {
     if (this.workspaceOpening) return
     const app = getApp()

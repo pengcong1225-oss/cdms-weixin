@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "体脂秤扫码签到",
+  "navigationBarTitleText": "扫码签到",
   "usingComponents": {
     "app-header": "/components/app-header/app-header",
     "state-panel": "/components/state-panel/state-panel"

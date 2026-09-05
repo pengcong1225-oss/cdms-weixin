@@ -1,0 +1,44 @@
+<view class="page messages-page">
+  <view class="messages-topbar">
+    <view class="messages-title">消息中心</view>
+    <view class="read-all" bindtap="readAll">全部已读</view>
+  </view>
+
+  <view wx:if="{{hasReminder}}" class="reminder-banner">
+    <view class="reminder-icon">随</view>
+    <view class="reminder-copy">
+      <view class="reminder-title">随访提醒</view>
+      <view class="reminder-text">{{reminderText}}</view>
+    </view>
+  </view>
+
+  <view class="section-title">消息列表<text class="section-caption">{{total ? total + ' 条' : '仅展示最近 20 条'}}</text></view>
+
+  <view wx:if="{{messages.length}}" class="card message-list">
+    <view
+      wx:for="{{messages}}"
+      wx:key="id"
+      class="message-cell"
+      data-id="{{item.id}}"
+      bindtap="markRead"
+    >
+      <view class="message-dot {{item.read ? '' : 'active'}}"></view>
+      <view class="message-main">
+        <view class="message-head">
+          <view class="message-type">{{item.typeLabel}}</view>
+          <view class="message-time">{{item.timeText}}</view>
+        </view>
+        <view class="message-title {{item.read ? '' : 'strong'}}">{{item.title || item.typeLabel}}</view>
+        <view class="message-content">{{item.content}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="card empty-card">
+    <view class="empty-illustration">信</view>
+    <view class="empty-title">暂无消息</view>
+    <view class="empty-text">随访提醒与系统通知会显示在这里</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-text">加载中…</view>
+</view>

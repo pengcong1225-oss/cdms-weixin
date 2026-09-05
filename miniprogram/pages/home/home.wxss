@@ -428,3 +428,19 @@ page {
   color: #b27b2f;
   font-size: 21rpx;
 }
+.workspace-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34rpx;
+  height: 34rpx;
+  margin-left: 14rpx;
+  padding: 0 9rpx;
+  box-sizing: border-box;
+  border-radius: 999rpx;
+  background: #cf3f3f;
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+}

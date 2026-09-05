@@ -2,6 +2,7 @@ const { RingSdk } = require("../sdk/rw-ble-sdk.min.js");
 const storage = require("../utils/storage");
 const { getWorkoutTypeName, formatWorkoutDuration } = require("../utils/workout");
 const cdmsBridge = require("../utils/cdms-bridge");
+const deviceSettings = require("../utils/device-settings");
 
 const SCAN_TIMEOUT_MS = 10000;
 const HEALTH_MEASUREMENT_TIMEOUT_MS = 120000;
@@ -93,6 +94,7 @@ class BleManager {
     this.healthMeasurementTimer = null;
     this.intentionalDisconnectIds = new Set();
     this.initialized = false;
+    this.autoSyncTimer = null;
     this.state = {
       adapterAvailable: false,
       scanning: false,
@@ -377,6 +379,10 @@ class BleManager {
       if (!previousBoundDevice) connectedState.workoutReports = [];
       this.patch(connectedState);
       this.log("设备初始化完成");
+      // 连接成功后重放已持久化的指环设置（失败静默，不影响连接）
+      this.replayDeviceSettings(boundDevice.deviceId).catch((error) => {
+        console.warn("[CDMS BLE] 设备设置重放失败", error && error.message ? error.message : error);
+      });
       return boundDevice;
     } catch (error) {
       const bleError = createBleError(
@@ -395,6 +401,139 @@ class BleManager {
 
   async reconnect() {
     return this.connect(this.state.boundDevice);
+  }
+
+  /**
+   * 定时同步（一期）：前台期间按 intervalMinutes 周期静默同步全部健康数据。
+   * 注意 syncAllHealthData 内部已包含 cdmsBridge.enqueueAndFlush（与首页下拉同步同一链路），
+   * 因此这里直接复用，不重复上传，避免产生重复批次。
+   */
+  scheduleAutoSync(intervalMinutes = 15) {
+    this.stopAutoSync();
+    const intervalMs = Math.max(1, Number(intervalMinutes) || 15) * 60 * 1000;
+    this.autoSyncTimer = setInterval(() => {
+      this.safeAutoSync();
+    }, intervalMs);
+  }
+
+  stopAutoSync() {
+    if (this.autoSyncTimer) {
+      clearInterval(this.autoSyncTimer);
+      this.autoSyncTimer = null;
+    }
+  }
+
+  // 静默自动同步：未连接 / 未绑定 / 正在同步时不触发，出错静默记录
+  async safeAutoSync() {
+    if (!this.state.connected || !this.state.boundDevice || this.state.healthSyncing) return;
+    try {
+      await this.syncAllHealthData();
+    } catch (error) {
+      console.warn("[CDMS BLE] 自动同步失败", error && error.message ? error.message : error);
+    }
+  }
+
+  /**
+   * 连接成功后重放已持久化的设置（仅 key 存在时下发，避免覆盖用户未设置项）。
+   * 每个下发单独 try/catch，失败静默，不影响连接。
+   */
+  async replayDeviceSettings(deviceId) {
+    const sdk = this.sdk;
+    if (!sdk || !deviceId) return;
+    const saved = deviceSettings.load(deviceId);
+    if (!saved || typeof saved !== "object") return;
+    const typeMap = deviceSettings.MONITORING_TYPE_MAP || {};
+    for (const key of Object.keys(typeMap)) {
+      const value = saved[key];
+      if (!value || typeof value !== "object") continue;
+      try {
+        await sdk.setMonitoring(typeMap[key], {
+          enabled: !!value.enabled,
+          startHour: value.startHour,
+          startMinute: value.startMinute,
+          endHour: value.endHour,
+          endMinute: value.endMinute,
+          intervalMinutes: value.intervalMinutes,
+        });
+      } catch (error) {
+        console.warn(`[CDMS BLE] 重放 ${key} 失败`, error && error.message ? error.message : error);
+      }
+    }
+    if (saved.heartRateAlert && typeof saved.heartRateAlert === "object") {
+      try {
+        await sdk.setHeartRateAlert(
+          !!saved.heartRateAlert.enabled,
+          saved.heartRateAlert.high,
+          saved.heartRateAlert.low
+        );
+      } catch (error) {
+        console.warn("[CDMS BLE] 重放 heartRateAlert 失败", error && error.message ? error.message : error);
+      }
+    }
+    if (saved.bloodOxygenAlert && typeof saved.bloodOxygenAlert === "object") {
+      try {
+        await sdk.setBloodOxygenAlert(
+          !!saved.bloodOxygenAlert.enabled,
+          saved.bloodOxygenAlert.low
+        );
+      } catch (error) {
+        console.warn("[CDMS BLE] 重放 bloodOxygenAlert 失败", error && error.message ? error.message : error);
+      }
+    }
+  }
+
+  /**
+   * 回读设备真实设置并写回本地存储（仅读取已持久化的 key）。
+   * SDK getter 见 sdk/index.d.ts：getMonitoring(type) / getHeartRateAlert() / getBloodOxygenAlert()。
+   * 若 SDK 版本不支持 getter，会走 try/catch 静默跳过，仅保留持久化 + 重放。
+   */
+  async readDeviceSettings(deviceId) {
+    const sdk = this.sdk;
+    if (!sdk || !deviceId) return {};
+    const saved = deviceSettings.load(deviceId) || {};
+    const updated = {};
+    const typeMap = deviceSettings.MONITORING_TYPE_MAP || {};
+    for (const key of Object.keys(typeMap)) {
+      if (!saved[key]) continue;
+      if (typeof sdk.getMonitoring !== "function") break;
+      try {
+        const info = await sdk.getMonitoring(typeMap[key]);
+        if (info && typeof info === "object") {
+          updated[key] = {
+            enabled: !!info.enabled,
+            startHour: info.startHour,
+            startMinute: info.startMinute,
+            endHour: info.endHour,
+            endMinute: info.endMinute,
+            intervalMinutes: info.intervalMinutes,
+          };
+        }
+      } catch (error) {
+        console.warn(`[CDMS BLE] 回读 ${key} 失败`, error && error.message ? error.message : error);
+      }
+    }
+    try {
+      if (saved.heartRateAlert && typeof sdk.getHeartRateAlert === "function") {
+        const info = await sdk.getHeartRateAlert();
+        if (info && typeof info === "object") {
+          updated.heartRateAlert = { enabled: !!info.enabled, high: info.upperValue, low: info.lowerValue };
+        }
+      }
+    } catch (error) {
+      console.warn("[CDMS BLE] 回读 heartRateAlert 失败", error && error.message ? error.message : error);
+    }
+    try {
+      if (saved.bloodOxygenAlert && typeof sdk.getBloodOxygenAlert === "function") {
+        const info = await sdk.getBloodOxygenAlert();
+        if (info && typeof info === "object") {
+          updated.bloodOxygenAlert = { enabled: !!info.enabled, low: info.lowerValue };
+        }
+      }
+    } catch (error) {
+      console.warn("[CDMS BLE] 回读 bloodOxygenAlert 失败", error && error.message ? error.message : error);
+    }
+    if (Object.keys(updated).length) deviceSettings.save(deviceId, updated);
+    return Object.assign({}, saved, updated);
   }
 
   async disconnect() {

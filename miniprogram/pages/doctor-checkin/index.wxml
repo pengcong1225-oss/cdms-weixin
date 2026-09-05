@@ -1,0 +1,49 @@
+<view class="page doctor-checkin-page">
+  <app-header
+    title="患者签到"
+    subtitle="生成通用签到二维码，患者扫码登记到场"
+    showBack="{{true}}"
+    bindback="backWorkspace"
+  />
+
+  <state-panel wx:if="{{errorText}}" state="error" title="签到码加载失败" message="{{errorText}}" actionText="重试" bindaction="refresh" />
+
+  <view wx:elif="{{loading}}" class="loading-panel">
+    <state-panel state="loading" title="加载中" message="正在生成签到二维码" />
+  </view>
+
+  <view wx:else class="checkin-stack">
+    <form-section title="签到二维码" caption="二维码仅包含机构标识，不包含患者信息">
+      <view class="checkin-hero">
+        <view class="checkin-title">请患者扫码签到</view>
+        <view class="checkin-qr-panel">
+          <canvas class="checkin-qr" canvas-id="checkinQr" style="width: 240px; height: 240px;"></canvas>
+        </view>
+        <view class="checkin-qr-hint">使用微信「扫一扫」对准上方二维码</view>
+        <view class="checkin-desc">患者扫码后登记到场，可在下方查看今日签到队列</view>
+      </view>
+
+      <view wx:if="{{qrPayload}}" class="payload-row">
+        <text class="payload-label">签到码文本</text>
+        <text class="payload-value" selectable>{{qrPayload}}</text>
+      </view>
+
+      <view class="checkin-actions">
+        <button class="secondary-button" loading="{{refreshing}}" bindtap="refresh">刷新</button>
+        <button class="secondary-button" bindtap="copyPayload">复制签到码文本</button>
+      </view>
+    </form-section>
+
+    <form-section title="今日签到队列" caption="来自患者到场签到登记">
+      <view wx:if="{{!queueFetched}}" class="empty-inline">加载中…</view>
+      <view wx:elif="{{!queue.length}}" class="empty-inline">暂无签到记录</view>
+      <view wx:for="{{queue}}" wx:key="key" class="checkin-item">
+        <view class="checkin-item-main">
+          <view class="checkin-item-name">{{item.patientName}}</view>
+          <view class="checkin-item-meta" wx:if="{{item.createTime}}">{{item.createTime}}</view>
+        </view>
+        <status-tag text="{{item.statusText || item.status}}" tone="{{item.status === 'COMPLETED' ? 'success' : item.status === 'IN_PROGRESS' ? 'warning' : 'neutral'}}" />
+      </view>
+    </form-section>
+  </view>
+</view>
