@@ -126,6 +126,7 @@ function formatAlarmList(alarms) {
 Page({
   data: {
     boundDevice: null,
+    foreignDevice: false,
     connectionState: "disconnected",
     connected: false,
     busy: false,
@@ -144,7 +145,11 @@ Page({
     if (bound && bound.deviceId) {
       const saved = deviceSettings.load(bound.deviceId);
       Object.keys(saved || {}).forEach((key) => {
-        this.settingValues[key] = "已保存";
+        if (key === "syncIntervalMinutes") {
+          this.settingValues[key] = `已保存·每 ${Number(saved[key]) || 15} 分钟`;
+        } else {
+          this.settingValues[key] = "已保存";
+        }
       });
     }
     this.syncRoleState();
@@ -221,6 +226,7 @@ Page({
     const firmware = device && device.firmware;
     this.setData({
       boundDevice: device,
+      foreignDevice: !!state.foreignDevice,
       connectionState: state.connectionState,
       connected: state.connected,
       settings: getSettings(device && device.supportMenu).map((item) => Object.assign(
@@ -305,7 +311,8 @@ Page({
     const id = event.currentTarget.dataset.id;
     const setting = this.data.settings.find((item) => item.id === id);
     if (!setting) return;
-    if (!this.data.connected) {
+    // 数据同步间隔为纯本地设置，无需设备连接
+    if (id !== "syncIntervalMinutes" && !this.data.connected) {
       wx.showToast({ title: "请先连接设备", icon: "none" });
       return;
     }
@@ -350,6 +357,23 @@ Page({
   },
 
   async executeSetting(id) {
+    // 数据同步间隔：纯本地配置，落盘后立即重启定时器
+    if (id === "syncIntervalMinutes") {
+      const labels = ["5 分钟", "15 分钟", "30 分钟", "60 分钟"];
+      const values = [5, 15, 30, 60];
+      const index = await choose(labels);
+      if (index === null) return;
+      const value = values[index];
+      const device = this.data.boundDevice;
+      if (device && device.deviceId) {
+        deviceSettings.save(device.deviceId, { syncIntervalMinutes: value });
+      }
+      this.updateSettingValue(id, `已保存·每 ${value} 分钟`);
+      bleManager.scheduleAutoSync(value);
+      wx.showToast({ title: `已保存·每 ${value} 分钟`, icon: "none" });
+      return;
+    }
+
     const sdk = bleManager.getSdk();
     if (!sdk) throw new Error("请先连接设备");
 

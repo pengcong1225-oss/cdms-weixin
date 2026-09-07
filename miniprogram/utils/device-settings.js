@@ -7,6 +7,9 @@
 // }
 const STORAGE_PREFIX = 'rw.device.settings.'
 
+// 数据自动同步间隔默认值（分钟）：患者端本地个性化，与后端/IoT 无关
+const DEFAULT_SYNC_INTERVAL_MINUTES = 15
+
 // device.js monitoringTypes 的 id → SDK 监测类型（用于持久化与重放/回读）
 const MONITORING_TYPE_MAP = {
   heartRateMonitoring: 'heartRate',
@@ -53,4 +56,20 @@ function clear (deviceId) {
   }
 }
 
-module.exports = { MONITORING_TYPE_MAP, STORAGE_PREFIX, load, save, clear }
+// 读取数据自动同步间隔（分钟）：取不到或非法时回落到默认 15
+function getSyncIntervalMinutes (deviceId) {
+  const saved = deviceId ? load(deviceId) : {};
+  const value = Number(saved && saved.syncIntervalMinutes);
+  if (Number.isFinite(value) && value > 0) return value;
+  return DEFAULT_SYNC_INTERVAL_MINUTES;
+}
+
+module.exports = {
+  MONITORING_TYPE_MAP,
+  STORAGE_PREFIX,
+  DEFAULT_SYNC_INTERVAL_MINUTES,
+  load,
+  save,
+  clear,
+  getSyncIntervalMinutes
+}

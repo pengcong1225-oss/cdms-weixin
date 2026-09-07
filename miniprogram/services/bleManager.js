@@ -3,6 +3,7 @@ const storage = require("../utils/storage");
 const { getWorkoutTypeName, formatWorkoutDuration } = require("../utils/workout");
 const cdmsBridge = require("../utils/cdms-bridge");
 const deviceSettings = require("../utils/device-settings");
+const capabilities = require("../utils/capabilities");
 
 const SCAN_TIMEOUT_MS = 10000;
 const HEALTH_MEASUREMENT_TIMEOUT_MS = 120000;
@@ -101,6 +102,7 @@ class BleManager {
       scanRemainingSeconds: 0,
       connectionState: "disconnected",
       boundDevice,
+      foreignDevice: false,
       devices: [],
       logs: [],
       error: "",
@@ -115,12 +117,15 @@ class BleManager {
       workoutReports: [],
       workoutRevision: 0,
       lastHealthSyncAt: boundDevice ? boundDevice.lastHealthSyncAt || 0 : 0,
+      healthAlertText: "",
     };
   }
 
   init() {
     if (this.initialized) return Promise.resolve();
     this.initialized = true;
+    // Task A：启动时按当前登录患者比对绑定归属，异患者绑定不复用（不删除绑定记录）。
+    this.refreshBoundDeviceOwnership();
     wx.onBluetoothAdapterStateChange((result) => {
       if (!result.discovering) {
         if (this.scanTicker) clearInterval(this.scanTicker);
@@ -153,6 +158,54 @@ class BleManager {
       connected: this.state.connectionState === "connected",
       sdkReady: this.state.connectionState === "connected" && !!this.sdk,
     });
+  }
+
+  getContextRole() {
+    try {
+      const app = typeof getApp === "function" ? getApp() : null;
+      return String(app && app.globalData && app.globalData.activeRole || "");
+    } catch (_) { return ""; }
+  }
+
+  getContextPatientRef() {
+    try {
+      const app = typeof getApp === "function" ? getApp() : null;
+      return String(app && app.globalData && app.globalData.patientRef || "").trim();
+    } catch (_) { return ""; }
+  }
+
+  // Task A：当前存储的绑定是否属于其他患者账号（异设备）。
+  // 仅 PATIENT 角色且已有 patientRef 时才做归属隔离；医生端 / 未登录 / 旧数据（无 ownerPatientRef）保持现状。
+  isBoundDeviceForeignFor(boundDevice) {
+    if (!boundDevice || !boundDevice.deviceId) return false;
+    if (this.getContextRole() !== "PATIENT") return false;
+    if (!this.getContextPatientRef()) return false;
+    return !storage.isBoundDeviceOwnedByPatient(boundDevice, this.getContextPatientRef());
+  }
+
+  isBoundDeviceForeign() {
+    return this.isBoundDeviceForeignFor(storage.getBoundDevice());
+  }
+
+  // Task A：按当前登录患者刷新绑定归属状态。
+  // 异患者绑定：展示层面置为未绑定（boundDevice=null + foreignDevice=true），
+  // 不删除绑定记录、不清健康历史；切回本人登录后再调用即可恢复展示。
+  async refreshBoundDeviceOwnership() {
+    const boundDevice = storage.getBoundDevice();
+    const foreign = this.isBoundDeviceForeignFor(boundDevice);
+    const patch = { foreignDevice: !!foreign };
+    if (foreign) {
+      if (this.activeDeviceId) this.markIntentionalDisconnect(this.activeDeviceId);
+      patch.boundDevice = null;
+      patch.connectionState = "disconnected";
+      this.disposeRuntime("绑定设备属于其他账号");
+      this.activeDeviceId = "";
+      this.log("该绑定设备属于其他患者账号，已隐藏（绑定记录未删除，登录本人账号后可恢复）");
+    } else {
+      patch.boundDevice = boundDevice ? boundDevice : null;
+    }
+    this.patch(patch);
+    return foreign;
   }
 
   getSdk() {
@@ -408,12 +461,23 @@ class BleManager {
    * 注意 syncAllHealthData 内部已包含 cdmsBridge.enqueueAndFlush（与首页下拉同步同一链路），
    * 因此这里直接复用，不重复上传，避免产生重复批次。
    */
-  scheduleAutoSync(intervalMinutes = 15) {
+  scheduleAutoSync(intervalMinutes) {
     this.stopAutoSync();
-    const intervalMs = Math.max(1, Number(intervalMinutes) || 15) * 60 * 1000;
+    // 未显式传值时，从当前绑定设备的本地配置读取同步间隔（取不到/非法回落到默认 15）
+    let minutes = intervalMinutes;
+    if (minutes === undefined || minutes === null) {
+      const bound = this.state.boundDevice;
+      minutes = deviceSettings.getSyncIntervalMinutes(bound && bound.deviceId);
+    }
+    const intervalMs = Math.max(1, Number(minutes) || deviceSettings.DEFAULT_SYNC_INTERVAL_MINUTES) * 60 * 1000;
     this.autoSyncTimer = setInterval(() => {
       this.safeAutoSync();
     }, intervalMs);
+  }
+
+  // 读取当前绑定设备的同步间隔（分钟），非设备场景/取不到时回落默认 15
+  getSyncIntervalMinutes(deviceId) {
+    return deviceSettings.getSyncIntervalMinutes(deviceId || (this.state.boundDevice && this.state.boundDevice.deviceId));
   }
 
   stopAutoSync() {
@@ -753,7 +817,14 @@ class BleManager {
         uploadError = error;
         this.log(`CDMS 数据暂未上传：${error.message || error}`);
       }
-      return { recordCount, failedTypes, uploadError, result };
+      // 本地预警提醒：基于本次同步最新心率/血氧记录与本地阈值判断，仅在确有超阈值时提醒
+      const alert = capabilities.evaluateHealthAlerts(result.records, deviceSettings.load(deviceId));
+      const healthAlertText = alert.text || "";
+      this.patch({ healthAlertText });
+      if (healthAlertText && wx.showToast) {
+        wx.showToast({ title: healthAlertText, icon: "none", duration: 2500 });
+      }
+      return { recordCount, failedTypes, uploadError, result, healthAlertText };
     }).finally(() => {
       this.healthSyncPromise = null;
       this.patch({ healthSyncing: false });

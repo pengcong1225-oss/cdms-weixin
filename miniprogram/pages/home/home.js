@@ -4,11 +4,13 @@ const { formatTime } = require("../../utils/format");
 const api = require("../../utils/api");
 const { getRoleEntry } = require("../../utils/role-entry");
 const { getWorkspaceEntries } = require("../../utils/workspace-entry");
+const deviceSettings = require("../../utils/device-settings");
 
 // 业务入口图标（与 workspace-entry.js 中 PATIENT/DOCTOR 的 key 对应）
 const WORKSPACE_ICONS = {
   profile: "档",
   followups: "随",
+  mymonitoring: "监",
   assess: "测",
   checkin: "扫",
   messages: "信",
@@ -20,9 +22,6 @@ const WORKSPACE_ICONS = {
 // tabBar 页面使用 switchTab，其余原生页面使用 navigateTo
 const TAB_PAGES = ["/pages/home/home", "/pages/device/device"];
 
-// 距上次同步超过 15 分钟即在 onShow 时触发一次自动同步
-const AUTO_SYNC_STALE_MS = 15 * 60 * 1000;
-
 function unwrapData (response) {
   return response && typeof response === "object" && Object.prototype.hasOwnProperty.call(response, "data")
     ? response.data
@@ -33,6 +32,7 @@ Page({
   workspaceOpening: false,
   data: {
     boundDevice: null,
+    foreignDevice: false,
     connectionState: "disconnected",
     healthCards: [],
     connected: false,
@@ -43,7 +43,8 @@ Page({
     cdmsStatus: "",
     activeRole: "",
     workspaceEntries: [],
-    messagesUnread: 0
+    messagesUnread: 0,
+    syncAlertText: ""
   },
 
   onLoad() {
@@ -66,6 +67,7 @@ Page({
     this.unsubscribe = bleManager.subscribe((state) => {
       this.setData({
         boundDevice: state.boundDevice,
+        foreignDevice: !!state.foreignDevice,
         connectionState: state.connectionState,
         connected: state.connected,
         healthCards: getHealthCards(state.boundDevice, state.realtimeHealth),
@@ -76,7 +78,8 @@ Page({
           ? `正在同步 ${state.healthSyncProgress}%`
           : state.boundDevice && state.boundDevice.lastHealthSyncAt
             ? `上次同步 ${formatTime(state.boundDevice.lastHealthSyncAt)}`
-            : "下拉同步全部健康数据"
+            : "下拉同步全部健康数据",
+        syncAlertText: state.healthAlertText || ""
       });
     });
   },
@@ -92,15 +95,21 @@ Page({
       return
     }
     const state = bleManager.snapshot();
-    this.setData({ healthCards: getHealthCards(state.boundDevice, state.realtimeHealth) });
+    this.setData({
+      healthCards: getHealthCards(state.boundDevice, state.realtimeHealth),
+      foreignDevice: !!state.foreignDevice,
+    });
     // 消息未读数角标
     this.refreshUnreadCount();
-    // 定时同步：前台期间按 15 分钟周期静默同步
+    // 定时同步：前台期间按本地配置的同步间隔周期静默同步
     bleManager.scheduleAutoSync();
     const bound = state.boundDevice;
     if (bound && !state.healthSyncing) {
       const lastAt = bound.lastHealthSyncAt || state.lastHealthSyncAt || 0;
-      if (!lastAt || Date.now() - lastAt > AUTO_SYNC_STALE_MS) {
+      // 距上次同步超过本地配置间隔即在 onShow 时触发一次立即同步（取不到回落到默认 15 分钟）
+      const syncIntervalMinutes = deviceSettings.getSyncIntervalMinutes(bound.deviceId);
+      const staleThresholdMs = (Number(syncIntervalMinutes) || 15) * 60 * 1000;
+      if (!lastAt || Date.now() - lastAt > staleThresholdMs) {
         bleManager.safeAutoSync().catch(() => {});
       }
     }
@@ -233,15 +242,17 @@ Page({
       return
     }
     try {
-      // 个人档案：先用 /me 拿 patientId，再拼接 360 档案地址（其余 H5 入口保持原 targetPath）
+      // 个人档案/健康监测：先用 /me 拿 patientId，再拼接 H5 地址（其余 H5 入口保持原 targetPath）
       let targetPath = entry.targetPath
-      if (entry.key === 'profile') {
+      if (entry.key === 'profile' || entry.key === 'mymonitoring') {
         const meResponse = await api.cdmsRequest('/api/v1/miniapp/auth/me', 'GET', null, app.globalData.accessToken)
         const me = unwrapData(meResponse)
         const patientId = me && me.patientId
         if (!patientId) throw new Error('未取得患者档案信息')
-        // handoff 白名单要求 /h5/ 前缀：/h5/patients/{id}/360 由 H5 端 resolveHandoffTarget 映射到患者详情页
-        targetPath = `/h5/patients/${patientId}/360`
+        // handoff 白名单要求 /h5/ 前缀：个人档案走 360，健康监测走 monitoring，由 H5 端 resolveHandoffTarget 映射到患者详情页
+        targetPath = entry.key === 'mymonitoring'
+          ? `/h5/patients/${patientId}/monitoring`
+          : `/h5/patients/${patientId}/360`
       }
       if (!targetPath) throw new Error('该入口暂不可用')
       const response = await api.createHandoff(targetPath)

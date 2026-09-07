@@ -4,6 +4,7 @@ const { getWorkspaceEntries } = require('../miniprogram/utils/workspace-entry')
 assert.deepStrictEqual(getWorkspaceEntries('PATIENT'), [
   { key: 'profile', title: '个人档案', subtitle: '查看病历、用药与随访档案', type: 'H5', targetPath: '' },
   { key: 'followups', title: '随访记录', subtitle: '查看本人随访与健康报告', type: 'H5', targetPath: '/h5/followups' },
+  { key: 'mymonitoring', title: '健康监测', subtitle: '查看本人指环监测与预警', type: 'H5', targetPath: '' },
   { key: 'assess', title: '健康自测', subtitle: 'CAT 问卷与 mMRC 分级自评', type: 'NATIVE', url: '/pages/assess/index' },
   { key: 'checkin', title: '扫一扫签到', subtitle: '扫码完成患者签到', type: 'NATIVE', url: '/pages/scale-checkin/index' },
   { key: 'messages', title: '消息中心', subtitle: '查看随访提醒与系统消息', type: 'NATIVE', url: '/pages/messages/index' },

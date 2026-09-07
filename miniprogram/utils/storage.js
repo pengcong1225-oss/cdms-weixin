@@ -30,12 +30,32 @@ function getBoundDevice() {
   return wx.getStorageSync(BOUND_DEVICE_KEY) || null;
 }
 
+// 绑定归属隔离（Task A）：绑定记录上标注归属患者 patientRef。
+// 有当前患者上下文时自动补上 ownerPatientRef；无归属记录（旧数据）或非患者上下文则不动。
+function attachOwnerPatientRef(device) {
+  if (!device || typeof device !== "object") return device;
+  const patientRef = getCurrentPatientRef();
+  if (patientRef && !String(device.ownerPatientRef || "").trim()) {
+    device.ownerPatientRef = patientRef;
+  }
+  return device;
+}
+
 function saveBoundDevice(device) {
-  wx.setStorageSync(BOUND_DEVICE_KEY, device);
+  wx.setStorageSync(BOUND_DEVICE_KEY, attachOwnerPatientRef(device));
 }
 
 function clearBoundDevice() {
   wx.removeStorageSync(BOUND_DEVICE_KEY);
+}
+
+// 纯判定：该绑定是否属于指定患者。
+// 无归属记录（旧数据）一律视为本人设备（保持现状）；有归属记录则严格比对。
+function isBoundDeviceOwnedByPatient(boundDevice, patientRef) {
+  if (!boundDevice) return true;
+  const owner = String(boundDevice.ownerPatientRef || "").trim();
+  if (!owner) return true;
+  return owner === String(patientRef || "").trim();
 }
 
 function getDeviceAddress(deviceId) {
@@ -122,6 +142,7 @@ module.exports = {
   getBoundDevice,
   saveBoundDevice,
   clearBoundDevice,
+  isBoundDeviceOwnedByPatient,
   getDeviceAddress,
   saveDeviceAddress,
   getHealthRecords,

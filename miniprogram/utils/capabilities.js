@@ -1,5 +1,6 @@
 const storage = require("./storage");
 const { formatTime } = require("./format");
+const deviceSettings = require("./device-settings");
 
 const HEALTH_TYPES = [
   { type: "steps", title: "计步", icon: "步", unit: "步", support: (m) => m.step },
@@ -87,10 +88,54 @@ const SETTING_TYPES = [
     support: (m) => m.supportMuslimTimeDisplayMode,
   },
   { id: "powerOff", title: "关机与恢复出厂", subtitle: "设备电源操作", support: (m) => m.powerOff || m.recovery },
+  { id: "syncIntervalMinutes", title: "数据同步间隔", subtitle: "设置健康数据自动同步间隔", support: () => true }
 ];
+
+// 阈值比较统一 Number() 归一 + enabled 判断 + 非法值(非数字/"--")跳过，避免 NaN 误报
+function isHeartRateOutOfRange(value, settings) {
+  if (!settings || !settings.enabled) return false;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return false;
+  const high = Number(settings.high);
+  return Number.isFinite(high) && num > high;
+}
+
+function isBloodOxygenOutOfRange(value, settings) {
+  if (!settings || !settings.enabled) return false;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return false;
+  const low = Number(settings.low);
+  return Number.isFinite(low) && num < low;
+}
+
+// 取 records 中最新一条（按 measuredAt）
+function latestRecord(records) {
+  if (!records || !records.length) return null;
+  return records.reduce((latest, record) => (
+    !latest || (Number(record.measuredAt) || 0) >= (Number(latest.measuredAt) || 0) ? record : latest
+  ), null);
+}
+
+// 同步完成后基于本次同步 records 评估心率/血氧是否超阈值，返回 {heartRate, bloodOxygen, text}
+function evaluateHealthAlerts(records, settings) {
+  const heartRate = isHeartRateOutOfRange(
+    latestRecord(records && records.heartRate)?.value,
+    settings && settings.heartRateAlert
+  );
+  const bloodOxygen = isBloodOxygenOutOfRange(
+    latestRecord(records && records.bloodOxygen)?.value,
+    settings && settings.bloodOxygenAlert
+  );
+  let text = "";
+  if (heartRate && bloodOxygen) text = "心率/血氧超出您设置的提醒值";
+  else if (heartRate) text = "心率超出您设置的提醒值";
+  else if (bloodOxygen) text = "血氧超出您设置的提醒值";
+  return { heartRate, bloodOxygen, text };
+}
 
 function getHealthCards(device, realtimeHealth = {}) {
   if (!device || !device.supportMenu) return [];
+  const savedSettings = deviceSettings.load(device.deviceId);
   return HEALTH_TYPES.filter((item) => item.support(device.supportMenu)).map((item) => {
     const records = item.type === "workout" ? [] : storage.getHealthRecords(device.deviceId, item.type);
     const historical = item.type === "steps"
@@ -99,7 +144,16 @@ function getHealthCards(device, realtimeHealth = {}) {
     const last = item.type === "muslimCount"
       ? realtimeHealth.muslimCount || historical
       : historical;
+    let isAlert = false;
+    if (last) {
+      if (item.type === "heartRate") {
+        isAlert = isHeartRateOutOfRange(last.value, savedSettings.heartRateAlert);
+      } else if (item.type === "bloodOxygen") {
+        isAlert = isBloodOxygenOutOfRange(last.value, savedSettings.bloodOxygenAlert);
+      }
+    }
     return Object.assign({}, item, {
+      isAlert,
       valueText: last ? `${last.value}${last.unit || item.unit ? ` ${last.unit || item.unit}` : ""}` : "暂无数据",
       timeText: last ? formatTime(last.measuredAt) : item.type === "workout" ? "点击加载历史报告" : "点击查看历史",
     });
@@ -120,4 +174,13 @@ function findHealthType(type) {
   return HEALTH_TYPES.find((item) => item.type === type) || null;
 }
 
-module.exports = { HEALTH_TYPES, SETTING_TYPES, getHealthCards, getSettings, findHealthType };
+module.exports = {
+  HEALTH_TYPES,
+  SETTING_TYPES,
+  getHealthCards,
+  getSettings,
+  findHealthType,
+  isHeartRateOutOfRange,
+  isBloodOxygenOutOfRange,
+  evaluateHealthAlerts
+};

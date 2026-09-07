@@ -96,25 +96,37 @@ App({
     const nextPatientRef = activeRole === 'PATIENT'
       ? String(selectedRole?.patientId || selectedRole?.principalId || '')
       : ''
-    const identityChanged = this.globalData.identityId
-      && (String(this.globalData.identityId) !== String(session.identityId || '')
+    // Task B：identityId 是身份切换识别的锚点。token 刷新等场景的会话可能不含 identityId，
+    // 此时保留既有身份标记，避免误判为切换；登录/换账号时 session.identityId 一定存在并会覆盖。
+    const nextIdentityId = String(session.identityId || '').trim() || String(this.globalData.identityId || '').trim()
+    const identityChanged = !!nextIdentityId
+      && (String(this.globalData.identityId || '') !== nextIdentityId
         || this.globalData.activeRole !== activeRole
         || String(this.globalData.patientRef || '') !== nextPatientRef)
-    if (identityChanged) {
-      // 角色或患者切换时释放旧的设备会话，避免新患者复用旧患者的 IoT token。
-      bleManager.unbind().catch(error => console.warn('[CDMS BLE] identity switch cleanup failed', error))
-    }
     const auth = {
       cdmsBaseUrl: this.globalData.cdmsBaseUrl,
       accessToken: session.token || '',
       refreshToken: session.refreshToken || '',
-      identityId: session.identityId || '',
+      identityId: nextIdentityId,
       activeRole,
       roles: session.roles || [],
       patientRef: nextPatientRef
     }
     Object.assign(this.globalData, auth)
     wx.setStorageSync('cdms.miniapp.auth', auth)
+    if (identityChanged) {
+      console.info('[CDMS] 登录身份切换，按绑定归属刷新设备展示（不删除绑定历史）', {
+        fromPatientRef: String(this.globalData.patientRef || ''),
+      })
+    }
+    // Task A/B：身份/角色/患者切换后不再执行 unbind（unbind 会删除绑定历史），
+    // 改为按绑定归属 ownerPatientRef 与当前 patientRef 比对：
+    // 异患者绑定自动隐藏（foreignDevice）且不删除，登录本人账号后自动恢复。
+    // 每次登录都检查一次，同时覆盖"退出后换账号冷启动再登录"（identityId 已被清空的场景）。
+    if (bleManager && typeof bleManager.refreshBoundDeviceOwnership === 'function') {
+      bleManager.refreshBoundDeviceOwnership().catch(error =>
+        console.warn('[CDMS BLE] 登录后设备归属检查失败', error && error.message ? error.message : error))
+    }
   },
 
   clearAuth () {
@@ -122,7 +134,9 @@ App({
     wx.removeStorageSync('cdms.miniapp.wearable')
     this.globalData.accessToken = ''
     this.globalData.refreshToken = ''
-    this.globalData.identityId = ''
+    // Task B：保留 identityId，作为"退出登录后换账号再登录"的切换识别依据
+    // （saveAuth 的 identityChanged 依赖它；清空会导致该保护失效）。
+    // patientRef / activeRole 仍需清空：新账号登录后会在 saveAuth 中重设。
     this.globalData.activeRole = ''
     this.globalData.roles = []
     this.globalData.wearableToken = ''

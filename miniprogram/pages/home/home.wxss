@@ -271,6 +271,27 @@ page {
   font-size: 22rpx;
 }
 
+/* Task A：绑定归属其他账号（异设备）时的提示卡片 */
+.foreign-card {
+  border-color: #e7cf9c;
+  background: #fffbf2;
+}
+
+.foreign-card .unbound-icon {
+  background: #fbf0db;
+  color: #b5811e;
+}
+
+.foreign-card .unbound-title {
+  overflow: visible;
+  color: #8a6419;
+  white-space: normal;
+}
+
+.foreign-card .unbound-subtitle {
+  color: #a08a5e;
+}
+
 .sync-progress-wrap {
   margin: -10rpx 4rpx 26rpx;
 }
@@ -298,6 +319,37 @@ page {
 
 .health-heading {
   margin-top: 8rpx;
+}
+
+.sync-alert {
+  display: flex;
+  align-items: center;
+  margin: -2rpx 4rpx 18rpx;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid #f3caca;
+  border-radius: 18rpx;
+  background: #fdf3f3;
+}
+
+.sync-alert-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36rpx;
+  height: 36rpx;
+  flex: none;
+  border-radius: 50%;
+  background: #d84b4b;
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.sync-alert-text {
+  margin-left: 12rpx;
+  color: #c23c3c;
+  font-size: 23rpx;
+  font-weight: 650;
 }
 
 .health-grid {
@@ -362,6 +414,22 @@ page {
   margin-top: 7rpx;
   color: #a0aea8;
   font-size: 20rpx;
+}
+
+.health-card.alert {
+  border: 2rpx solid #d84b4b;
+  background: #fff6f6;
+  box-shadow: 0 10rpx 26rpx rgba(216, 75, 75, .18);
+}
+
+.health-card.alert .health-value {
+  color: #d84b4b;
+  font-weight: 800;
+}
+
+.health-card.alert .health-icon {
+  background: #fbe9e9;
+  color: #d84b4b;
 }
 
 .empty-card {

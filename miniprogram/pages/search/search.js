@@ -1,5 +1,6 @@
 const bleManager = require("../../services/bleManager");
 const cdmsBridge = require("../../utils/cdms-bridge");
+const { friendlyBindErrorMessage } = require("../../utils/bind-error");
 
 function presentDevices(devices) {
   return devices.map((device) => ({
@@ -82,6 +83,17 @@ Page({
     } catch (error) {
       wx.hideLoading();
       this.setData({ connectingId: "" });
+      // Task C：设备已被其他患者绑定（409 / 消息含"已被"）时给出可读提示，避免笼统的"连接失败"。
+      const bindMessage = friendlyBindErrorMessage(error);
+      if (bindMessage) {
+        wx.showModal({
+          title: "绑定失败",
+          content: bindMessage,
+          showCancel: false,
+          confirmText: "知道了",
+        });
+        return;
+      }
       bleManager.presentError(error, "连接失败");
     }
   },

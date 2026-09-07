@@ -52,6 +52,15 @@
     />
   </view>
 
+  <view wx:elif="{{foreignDevice}}" class="unbound-card foreign-card" bindtap="openSearch">
+    <view class="unbound-icon">!</view>
+    <view class="unbound-content">
+      <view class="unbound-title">当前绑定设备属于其他账号</view>
+      <view class="unbound-subtitle">该设备不会被自动连接或同步（绑定记录未删除），登录本人账号可恢复，或点击重新绑定</view>
+    </view>
+    <text class="unbound-arrow">›</text>
+  </view>
+
   <view wx:else class="unbound-card" bindtap="openSearch">
     <view class="unbound-icon">+</view>
     <view class="unbound-content">
@@ -76,11 +85,16 @@
     <view wx:if="{{boundDevice}}" class="refresh-hint">下拉同步</view>
   </view>
 
+  <view wx:if="{{syncAlertText}}" class="sync-alert">
+    <view class="sync-alert-icon">!</view>
+    <view class="sync-alert-text">{{syncAlertText}}</view>
+  </view>
+
   <view wx:if="{{healthCards.length}}" class="health-grid">
     <view
       wx:for="{{healthCards}}"
       wx:key="type"
-      class="health-card"
+      class="health-card {{item.isAlert ? 'alert' : ''}}"
       data-type="{{item.type}}"
       bindtap="openHistory"
     >

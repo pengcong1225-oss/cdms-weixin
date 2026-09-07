@@ -13,6 +13,29 @@
   font-size: 24rpx;
 }
 
+/* Task A：绑定归属其他账号（异设备）提示 */
+.foreign-notice {
+  margin-bottom: 22rpx;
+  padding: 24rpx 26rpx;
+  box-sizing: border-box;
+  border: 1rpx solid #e8d3a4;
+  border-radius: 22rpx;
+  background: #fffbf1;
+}
+
+.foreign-notice-title {
+  color: #8a6419;
+  font-size: 28rpx;
+  font-weight: 650;
+}
+
+.foreign-notice-text {
+  margin-top: 8rpx;
+  color: #a08a5e;
+  font-size: 23rpx;
+  line-height: 34rpx;
+}
+
 .unbound-device {
   display: flex;
   align-items: center;

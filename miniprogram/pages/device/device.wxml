@@ -5,6 +5,11 @@
   </view>
 
   <block wx:if="{{activeRole === 'PATIENT'}}">
+  <view wx:if="{{foreignDevice}}" class="foreign-notice">
+    <view class="foreign-notice-title">当前绑定设备属于其他账号</view>
+    <view class="foreign-notice-text">该设备不会被自动连接或同步（绑定记录未删除）。登录本人账号可恢复绑定，或重新搜索绑定自己的设备。</view>
+  </view>
+
   <device-card
     wx:if="{{boundDevice}}"
     device="{{boundDevice}}"
