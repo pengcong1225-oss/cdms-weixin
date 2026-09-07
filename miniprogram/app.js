@@ -59,8 +59,11 @@ App({
   },
   applyBridgeQuery (query = {}) {
     const keys = ['iotBaseUrl', 'managerBaseUrl', 'cdmsBaseUrl', 'cloudEnv', 'wearableToken', 'wearableSessionId', 'patientRef', 'handoffCode', 'mode', 'taskId']
+    const decode = value => {
+      try { return /%3A|%2F|%25/.test(value) ? decodeURIComponent(value) : value } catch (_) { return value }
+    }
     keys.forEach(key => {
-      if (query[key] != null && query[key] !== '') this.globalData[key] = query[key]
+      if (query[key] != null && query[key] !== '') this.globalData[key] = decode(query[key])
     })
     if (query.patientId && !this.globalData.patientRef) this.globalData.patientRef = query.patientId
   },

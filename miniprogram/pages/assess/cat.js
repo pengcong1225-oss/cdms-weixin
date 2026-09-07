@@ -1,4 +1,4 @@
-const { CAT_QUESTIONS, CAT_OPTIONS, catLevel, addHistory } = require('../../../utils/assess-rules')
+const { CAT_QUESTIONS, CAT_OPTIONS, catLevel, addHistory } = require('../../utils/assess-rules')
 
 Page({
   data: {

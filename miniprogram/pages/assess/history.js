@@ -1,4 +1,4 @@
-const { getHistory, catLevel, mmrcLevel } = require('../../../utils/assess-rules')
+const { getHistory, catLevel, mmrcLevel } = require('../../utils/assess-rules')
 
 function pad (value) { return String(value).padStart(2, '0') }
 

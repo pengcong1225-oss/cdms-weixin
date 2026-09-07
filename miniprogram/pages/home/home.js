@@ -240,7 +240,8 @@ Page({
         const me = unwrapData(meResponse)
         const patientId = me && me.patientId
         if (!patientId) throw new Error('未取得患者档案信息')
-        targetPath = `/patient/${patientId}/360`
+        // handoff 白名单要求 /h5/ 前缀：/h5/patients/{id}/360 由 H5 端 resolveHandoffTarget 映射到患者详情页
+        targetPath = `/h5/patients/${patientId}/360`
       }
       if (!targetPath) throw new Error('该入口暂不可用')
       const response = await api.createHandoff(targetPath)

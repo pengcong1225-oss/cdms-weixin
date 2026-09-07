@@ -1,4 +1,4 @@
-const { MMRC_OPTIONS, mmrcLevel, addHistory } = require('../../../utils/assess-rules')
+const { MMRC_OPTIONS, mmrcLevel, addHistory } = require('../../utils/assess-rules')
 
 Page({
   data: { options: [], selected: -1, finished: false, result: null },
