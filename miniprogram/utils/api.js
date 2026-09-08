@@ -64,7 +64,10 @@ async function cdmsRequestWithRetry (path, method, data, token, allowRefresh) {
       const nextToken = await refreshAccessToken()
       return request(`${baseUrl}${path}`, method, data, nextToken)
     } catch (refreshError) {
+      // §6.3：刷新失败（含角色切换后旧版本 token 失效）→ 清空【完整会话对象】，
+      // 而不是只删除单个 token。app.clearAuth 现委托 session-store 整体清空。
       if (typeof app.clearAuth === 'function') app.clearAuth()
+      else { try { require('./auth-guard').purgeSession(app) } catch (_) { /* noop */ } }
       throw refreshError
     }
   }
