@@ -2,6 +2,7 @@ const stationApi = require('../../../utils/station-api')
 const { ensureSession } = require('../../../utils/auth-guard')
 const { ScaleBle } = require('../../../services/scaleBle')
 const { buildQrMatrix, createCheckinPayload, drawQr } = require('../../../utils/scale-qr')
+const idempotency = require('../../../utils/idempotency')
 
 /**
  * 设备类型隔离（设计 §11）：体脂秤工作站仅接受 SCALE 场次。
@@ -122,10 +123,6 @@ function patientProfile (item) {
   }
 }
 
-function createActionKey (prefix) {
-  return stationApi.createIdempotencyKey(prefix)
-}
-
 function currentDraftFromQueueItem (item) {
   if (!item) return null
   if (!item.draftId) return null
@@ -143,6 +140,37 @@ globalThis.__cdmsScaleStationTestables = {
 }
 
 Page({
+  // ---- 动作级幂等 key（§14 客户端部分）：一次用户动作一个 key，成功/业务拒绝才消费 ----
+  ensureActionTracker () {
+    if (!this.actionTracker) {
+      this.actionTracker = idempotency.createIdempotencyTracker({ generator: stationApi.createIdempotencyKey })
+    }
+    return this.actionTracker
+  },
+
+  actionKey (name) {
+    return this.ensureActionTracker().key(name)
+  },
+
+  settleAction (name) {
+    this.ensureActionTracker().release(name)
+  },
+
+  releaseAllActions () {
+    if (this.actionTracker) this.actionTracker.releaseAll()
+  },
+
+  settleActionIfRejected (name, error) {
+    // 网络超时/5xx/409 保留 key 等待重试；明确业务拒绝(4xx)才消费（§14）
+    if (idempotency.isRejectedFailure(error)) this.settleAction(name)
+  },
+
+  // 新检测会话 = 新动作：先消费旧草稿 key，再生成本次测量动作的 key（§8 切换患者）
+  beginDraftActionKey () {
+    this.settleAction('station-draft')
+    return this.actionKey('station-draft')
+  },
+
   data: {
     loading: false,
     creating: false,
@@ -200,6 +228,7 @@ Page({
 
   onUnload () {
     this.stopMeasurementTimeout()
+    this.releaseAllActions()
     if (this.scale) {
       this.scale.disconnect().catch(() => {})
       this.scale.destroy()
@@ -213,8 +242,10 @@ Page({
     try {
       const station = await stationApi.createStation({
         stationName: '体脂秤轮测场次',
-        idempotencyKey: createActionKey('station-create')
+        idempotencyKey: this.actionKey('station-create')
       })
+      // 明确成功：消费本次创建动作的 key（§14）
+      this.settleAction('station-create')
       const stationId = valueText(station.id || station.stationId, '')
       if (stationId) {
         this.setData({ stationId })
@@ -222,6 +253,7 @@ Page({
       this.applyStation(station)
       await this.refreshStation(stationId || station.id || station.stationId)
     } catch (error) {
+      this.settleActionIfRejected('station-create', error)
       this.setData({ errorText: error.message || '场次创建失败' })
     } finally {
       this.setData({ creating: false, loading: false })
@@ -322,7 +354,7 @@ Page({
     this.metricAccumulator = {}
     this.measurementCompleteReceived = false
     this.draftSnapshot = null
-    this.measurementIdempotencyKey = createActionKey('station-draft')
+    this.measurementIdempotencyKey = this.beginDraftActionKey()
     // 超时保护：60s 无完成帧即判为未完成，保留本地提示、禁止提交草稿。
     this.measurementTimer = setTimeout(() => {
       this.measurementTimer = null
@@ -353,7 +385,7 @@ Page({
     this.metricAccumulator = {}
     this.measurementCompleteReceived = false
     this.draftSnapshot = null
-    this.measurementIdempotencyKey = createActionKey('station-draft')
+    this.measurementIdempotencyKey = this.beginDraftActionKey()
     this.measurementTimer = setTimeout(() => {
       this.measurementTimer = null
       if (!this.data.measuring || this.measurementCompleteReceived) return
@@ -399,12 +431,14 @@ Page({
     // 放在叫号请求发出【之前】：任何在途旧帧都进不了新窗口。旧测量动作的幂等 key 一并终结。
     this.abortMeasurementSession()
     this.measurementIdempotencyKey = ''
+    // 本次叫号动作固定一个 key（§14）：网络超时/5xx/409 重试复用，明确成功或业务拒绝才消费
+    const callNextKey = this.actionKey('station-next')
     try {
-      // TODO(阶段三): 网络超时重试应复用本动作的 callNext key 直到明确成功/失败（设计 §14）；
-      // 后端幂等表未上线前保持每次调用生成新 key。
       const station = await stationApi.callNext(this.data.stationId, {
-        idempotencyKey: createActionKey('station-next')
+        idempotencyKey: callNextKey
       })
+      // 明确成功：消费叫号动作 key（§14）
+      this.settleAction('station-next')
       if (!isStationDeviceTypeAllowed('SCALE', station.deviceType)) {
         this.applyStation(station)
         return
@@ -452,6 +486,7 @@ Page({
       }
     } catch (error) {
       this.handleStationError(error, '下一位失败')
+      this.settleActionIfRejected('station-next', error)
     } finally {
       this.setData({ loading: false })
     }
@@ -469,6 +504,7 @@ Page({
       // 会话彻底作废：停采集、清缓冲/累积器、清幂等 key（下一次叫号是新动作，绝不自动重放）
       this.abortMeasurementSession()
       this.measurementIdempotencyKey = ''
+      this.releaseAllActions()
       this.setData({
         measuring: false,
         canConfirm: false,
@@ -503,11 +539,14 @@ Page({
     this.measurementIdempotencyKey = ''
     try {
       const station = await stationApi.skipQueueItem(this.data.stationId, this.data.currentQueueItem.id, {
-        idempotencyKey: createActionKey('station-skip')
+        idempotencyKey: this.actionKey('station-skip')
       })
+      // 明确成功：消费本次跳过动作 key（§14）
+      this.settleAction('station-skip')
       this.applyStation(station)
     } catch (error) {
       this.handleStationError(error, '跳过失败')
+      this.settleActionIfRejected('station-skip', error)
     }
   },
 
@@ -519,11 +558,14 @@ Page({
     this.measurementIdempotencyKey = ''
     try {
       const station = await stationApi.requeueQueueItem(this.data.stationId, this.data.currentQueueItem.id, {
-        idempotencyKey: createActionKey('station-requeue')
+        idempotencyKey: this.actionKey('station-requeue')
       })
+      // 明确成功：消费本次重排动作 key（§14）
+      this.settleAction('station-requeue')
       this.applyStation(station)
     } catch (error) {
       this.handleStationError(error, '重排失败')
+      this.settleActionIfRejected('station-requeue', error)
     }
   },
 
@@ -654,7 +696,7 @@ Page({
       // 幂等复用（§14 客户端部分）：本次测量动作固定用建会话时生成的 key，
       // 失败重试沿用同一 key 直到服务端明确成功/失败，绝不中途换 key。
       const station = await stationApi.saveMeasurementDraft(this.data.stationId, this.data.currentQueueItem.id, {
-        idempotencyKey: this.measurementIdempotencyKey || createActionKey('station-draft'),
+        idempotencyKey: this.measurementIdempotencyKey || this.actionKey('station-draft'),
         // v2 必填：服务端 callNext 下发的 measurementSessionId（v1 通道由 api 层剥离，不进请求体）
         measurementSessionId: stationApi.getStationApiVersion() === 'v2' ? (this.measurementSessionId || '') : '',
         deviceId: this.scale?.deviceId || '',
@@ -676,6 +718,7 @@ Page({
       // 明确成功：结束会话上下文并消费本次幂等 key（同一动作不再复用）
       this.stopMeasurementTimeout()
       this.measurementIdempotencyKey = ''
+      this.settleAction('station-draft')
       this.draftSnapshot = null
       this.setData({
         currentDraft: station.currentDraft || currentDraftFromQueueItem(station.currentQueueItem || this.data.currentQueueItem),
@@ -685,8 +728,10 @@ Page({
       })
     } catch (error) {
       // 410 → handleStationError 清态并提示重新叫号；409 → 按服务端回传状态刷新恢复。
-      // 网络层错误（含超时/结果未知）保留 measurementIdempotencyKey，重试沿用同一 key（§14）。
+      // 网络层错误（含超时/结果未知）保留 measurementIdempotencyKey，重试沿用同一 key（§14）；
+      // 明确业务拒绝（4xx 非 409）则消费本次草稿 key（§14）。
       if (classifyStationError(error) === 'generic') {
+        this.settleActionIfRejected('station-draft', error)
         this.setData({ errorText: (error.message || '草稿保存失败') + '，请重试提交' })
       } else {
         this.handleStationError(error)
@@ -707,9 +752,11 @@ Page({
     this.setData({ saving: true, errorText: '' })
     try {
       const station = await stationApi.confirmMeasurement(this.data.stationId, this.data.currentQueueItem.id, this.data.currentDraft.id, {
-        idempotencyKey: createActionKey('station-confirm'),
+        idempotencyKey: this.actionKey('station-confirm'),
         measurementSessionId: this.measurementSessionId || ''
       })
+      // 明确成功：消费本次确认动作 key（§14）
+      this.settleAction('station-confirm')
       this.applyStation(station)
       // 确认后本次检测会话闭环：清会话与幂等 key，等待下一次叫号下发新会话
       this.abortMeasurementSession()
@@ -721,6 +768,7 @@ Page({
       })
     } catch (error) {
       this.handleStationError(error, '确认失败')
+      this.settleActionIfRejected('station-confirm', error)
     } finally {
       this.setData({ saving: false })
     }
@@ -733,15 +781,18 @@ Page({
     this.setData({ loading: true, errorText: '' })
     try {
       const station = await stationApi.closeStation(this.data.stationId, {
-        idempotencyKey: createActionKey('station-close'),
+        idempotencyKey: this.actionKey('station-close'),
         discardDraftIds
       })
+      // 明确成功：消费本次关闭动作 key（§14）
+      this.settleAction('station-close')
       this.applyStation(station)
       this.abortMeasurementSession()
       this.measurementIdempotencyKey = ''
       this.setData({ statusText: '场次已关闭', canConfirm: false, measuring: false })
     } catch (error) {
       this.handleStationError(error, '关闭场次失败')
+      this.settleActionIfRejected('station-close', error)
     } finally {
       this.setData({ loading: false })
     }

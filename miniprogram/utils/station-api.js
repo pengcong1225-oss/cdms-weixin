@@ -151,6 +151,9 @@ const STATION_API_VERSIONS = {
   v2: '/api/v2/miniapp/device-stations'
 }
 
+/** 机构到场签到 v2（设计 §12.1 / §15）：token 绑定 org/checkpoint，按 token 兑换。 */
+const ORG_CHECKIN_V2_PATH = '/api/v2/miniapp/checkins'
+
 /** 当前生效通道：页面通过 api.STATION_API_VERSION 读取；灰度回退时 setStationApiVersion('v1')。 */
 let stationApiVersion = 'v2'
 
@@ -237,10 +240,53 @@ function normalizePatientQueue (response) {
   }
 }
 
-async function createCheckin (stationId, checkinToken, payload = {}) {
-  return normalizePatientQueue(await requestStation(stationPath(stationId, '/checkins'), 'POST', writePayload(Object.assign({}, payload, {
-    checkinToken: toText(checkinToken)
-  }), 'station-checkin')))
+function stationPathFor (channel, stationId, suffix) {
+  const prefix = STATION_API_VERSIONS[String(channel || '').toLowerCase()] || STATION_API_VERSIONS.v2
+  return prefix + '/' + encodeURIComponent(String(stationId || '')) + (suffix || '')
+}
+
+/**
+ * 设备场次签到（阶段三 §12.2 / §15）：
+ * - channel v1（老码 LEGACY_STATION，灰度过渡）：body 保留明文 checkinToken，走老场次端点；
+ * - channel v2（安全码 NEW DEVICE_STATION）：body 用不透明 token 取代 checkinToken；
+ * 显式指定 channel 时不受全局 stationApiVersion 影响，保证「老码老通道、新码新通道」分流。
+ */
+async function createCheckin (stationId, token, payload = {}, options = {}) {
+  const channel = String(options.channel || stationApiVersion).toLowerCase()
+  if (!STATION_API_VERSIONS[channel]) throw new Error('未知的场次接口版本：' + channel)
+  const isV2 = STATION_API_VERSIONS[channel] === STATION_API_VERSIONS.v2
+  const fields = Object.assign({}, payload || {})
+  fields[isV2 ? 'token' : 'checkinToken'] = toText(token)
+  return normalizePatientQueue(await requestStation(stationPathFor(channel, stationId, '/checkins'), 'POST', writePayload(fields, 'station-checkin')))
+}
+
+/**
+ * 设备场次签到 token-only（设计 §12.2 / 阶段三收口）：POST .../device-stations/checkins/token。
+ * 场次由服务端按 token 绑定解析，患者扫码无需知道 stationId；响应仍为患者九字段 DTO（含 stationId）。
+ * 仅 v2 通道（token 码本身即 v2 语义），不受全局 stationApiVersion 影响。
+ */
+async function createCheckinByToken (token, payload = {}) {
+  const body = writePayload(Object.assign({}, payload || {}, { token: toText(token) }), 'station-checkin')
+  return normalizePatientQueue(await requestStation(STATION_API_VERSIONS.v2 + '/checkins/token', 'POST', body))
+}
+
+/**
+ * 机构到场签到 v2（设计 §12.1 / §5.1 ORG_CHECKIN）：POST /api/v2/miniapp/checkins，
+ * body { token, idempotencyKey }。响应为最小 VO：{checkinId,status,checkpointName}，
+ * 不回传 token 原文（§12.1：原始 token 不落库、不写日志、不在响应回传）。
+ */
+function normalizeOrgCheckin (response) {
+  const data = unwrap(response) || {}
+  return {
+    checkinId: toId(data.checkinId || data.id),
+    status: toText(data.status),
+    checkpointName: toText(data.checkpointName)
+  }
+}
+
+async function orgCheckinV2 (token, payload = {}) {
+  const body = writePayload(Object.assign({}, payload || {}, { token: toText(token) }), 'org-checkin')
+  return normalizeOrgCheckin(await requestStation(ORG_CHECKIN_V2_PATH, 'POST', body))
 }
 
 // 患者专用排队查询：签到后轮询本人 queueNo / queueStatus / waitingAhead / message
@@ -390,12 +436,14 @@ function reduceStationState (state = {}, action = {}) {
 }
 
 module.exports = {
+  ORG_CHECKIN_V2_PATH,
   STATION_API_VERSIONS,
   GLUCOSE_CONTEXTS,
   callNext,
   closeStation,
   confirmMeasurement,
   createCheckin,
+  createCheckinByToken,
   createIdempotencyKey,
   createStation,
   getStationApiVersion,
@@ -404,13 +452,16 @@ module.exports = {
   getTodayQueue,
   normalizeGlucoseContext,
   normalizeMetricV2,
+  normalizeOrgCheckin,
   normalizePatientQueue,
   normalizeQueueItem,
   normalizeStation,
   normalizeStationError,
+  orgCheckinV2,
   requeueQueueItem,
   reduceStationState,
   setStationApiVersion,
+  stationPathFor,
   stationPathPrefix,
   saveMeasurementDraft,
   skipQueueItem

@@ -71,11 +71,18 @@ assert.ok(usingComponents('pages/device-sunvou/index.json')['status-tag'])
 
 const checkinJs = read('pages/scale-checkin/index.js')
 assert.ok(checkinJs.includes("ensureSession({ role: 'PATIENT' })"))
-// 场次签到只提交场次令牌；通用签到从 /me 解析 patientId（患者身份由服务端授权，禁止从二维码载荷读取）
-assert.ok(checkinJs.includes('createCheckin(payload.stationId, payload.checkinToken)'))
+// 阶段三：扫码载荷统一走 checkin-qrcode 解析（新旧分流，未知版本/scene 失败关闭）
+assert.ok(checkinJs.includes("require('../../utils/checkin-qrcode')"))
+assert.ok(checkinJs.includes('checkinQr.parse(raw)'), '扫码后必须经 checkin-qrcode.parse 统一解析')
+assert.ok(checkinJs.includes('stationApi.createCheckin(stationId, token'), '场次签到只提交场次令牌/不透明 token')
+// 通用签到从 /me 解析 patientId（患者身份由服务端授权，禁止从二维码载荷读取）
 assert.ok(!checkinJs.includes('payload.patientId'), '不得从二维码载荷读取 patientId')
 assert.ok(checkinJs.includes('/api/v1/miniapp/auth/me'), '通用签到应从 /me 获取 patientId')
 assert.ok(checkinJs.includes('/api/v1/checkins?patientId='), '通用签到应调用 checkins?patientId= 端点')
+// v2 机构到场签到走 token 兑换端点；410/403 固定文案
+assert.ok(checkinJs.includes('/api/v2/miniapp/checkins') || checkinJs.includes('orgCheckinV2'), 'v2 到场签到应走 orgCheckinV2(/api/v2/miniapp/checkins)')
+assert.ok(checkinJs.includes('签到二维码已过期，请联系工作人员重新出示'))
+assert.ok(checkinJs.includes('二维码与当前机构或设备不匹配，请重新扫码'))
 
 // 工作站二维码走 canvas 渲染
 const stationWxml = read('pages/device-scale/station/index.wxml')
@@ -120,6 +127,8 @@ for (const rel of [
   'utils/auth-guard.js',
   'utils/station-api.js',
   'utils/scale-qr.js',
+  'utils/checkin-qrcode.js',
+  'utils/idempotency.js',
   'utils/qrcode-generator.js',
   'utils/session-store.js',
   'services/scaleBle.js',
