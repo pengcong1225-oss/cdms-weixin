@@ -57,6 +57,7 @@
       </view>
       <view class="station-meta">连接状态：{{connected ? '已连接' : '未连接'}}</view>
       <view class="station-meta">测量状态：{{statusText}}</view>
+      <view wx:if="{{deviceTypeMismatch}}" class="station-meta" style="color:#c0392b;font-weight:700;">设备类型不匹配：请扫描正确的设备二维码</view>
       <view wx:if="{{metrics.length}}" class="metric-list">
         <view wx:for="{{metrics}}" wx:key="name" class="metric-card">
           <text class="metric-label">{{item.label}}</text>

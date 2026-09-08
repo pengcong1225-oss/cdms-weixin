@@ -4,16 +4,18 @@
 
   <view wx:if="{{checkedIn && checkinKind === 'STATION'}}" class="success-card card">
     <view class="success-icon">✓</view>
-    <view class="success-title">已加入测量队列</view>
-    <view class="success-text">请在现场等待医生叫号，医生确认后测量结果会写入你的健康档案。</view>
+    <view class="success-title">设备排队签到成功</view>
+    <view class="success-text">已加入测量队列，请在现场等待医生叫号；医生确认后测量结果会写入你的健康档案。</view>
     <view wx:if="{{queueNo}}" class="queue-number">排队号 {{queueNo}}</view>
+    <view wx:if="{{waitingAheadText}}" class="status-text">{{waitingAheadText}}</view>
+    <view wx:if="{{queueMessage}}" class="status-text">{{queueMessage}}</view>
     <button class="primary-button" bindtap="scanAgain">扫描其他场次</button>
   </view>
 
   <view wx:elif="{{checkedIn}}" class="success-card card">
     <view class="success-icon">✓</view>
-    <view class="success-title">签到成功</view>
-    <view class="success-text">本次通用签到已完成，记录已提交至健康档案。</view>
+    <view class="success-title">到场签到成功</view>
+    <view class="success-text">本次到场签到已完成，记录已提交至健康档案。到场签到不会自动加入设备测量队列。</view>
     <view wx:if="{{checkinDateText}}" class="queue-number">{{checkinDateText}}</view>
     <view class="status-text">{{statusText}}</view>
     <button class="primary-button" bindtap="scanAgain">继续签到</button>

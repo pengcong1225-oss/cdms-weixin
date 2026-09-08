@@ -135,6 +135,8 @@ class ScaleBle {
     this.deviceFoundListener = null; this.connectionListener = null; this.valueListener = null
   }
   state (value, detail) { try { this.onState({ state: value, deviceId: this.deviceId, detail }) } catch (_) {} }
+  /** 切换患者/重新叫号时调用：丢弃解析缓冲里的残留半帧并新建 FrameAssembler，旧连接周期的延迟帧不再进入新会话。 */
+  reset () { if (this.assembler) { this.assembler.buffer = new Uint8Array(0); this.assembler = new FrameAssembler() } }
   async startScan ({ timeoutMs = 10000 } = {}) {
     await callWx('openBluetoothAdapter', {})
     this.devices.clear(); this.stopScanListeners()

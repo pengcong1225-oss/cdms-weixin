@@ -57,10 +57,27 @@
       <view class="station-meta">连接状态：{{connected ? '已连接' : '未连接'}}</view>
       <view class="station-meta">电量：{{batteryText || '未知'}}</view>
       <view class="station-meta">测量状态：{{statusText}}</view>
+      <view wx:if="{{deviceTypeMismatch}}" class="station-meta mismatch-hint">设备类型不匹配：请扫描正确的设备二维码</view>
+      <view class="measurement-item-list">
+        <view wx:for="{{measurementItems}}" wx:key="key" class="measurement-item {{item.enabled ? '' : 'disabled'}}">
+          <text class="metric-label">{{item.label}}</text>
+          <text wx:if="{{item.enabled}}" class="measurement-state">可测</text>
+          <text wx:else class="measurement-soon">{{item.note}}，操作入口暂不可用</text>
+        </view>
+      </view>
+      <!-- 血糖测量语境（设计 §10.1）：默认 UNKNOWN，医生必须显式选择空腹/餐后/随机才允许提交草稿 -->
+      <view class="glucose-context-row">
+        <text class="metric-label">血糖测量语境</text>
+        <picker mode="selector" range="{{glucoseContextOptions}}" value="{{glucoseContextIndex}}" bindchange="onGlucoseContextChange">
+          <text class="glucose-context-value {{glucoseContextConfirmed ? '' : 'pending'}}">{{glucoseContextText}}</text>
+        </picker>
+        <text wx:if="{{!glucoseContextConfirmed}}" class="measurement-soon">需医生确认</text>
+      </view>
+      <view wx:if="{{partialLipidText}}" class="partial-lipid-hint">{{partialLipidText}}</view>
       <view wx:if="{{metrics.length}}" class="metric-list">
         <view wx:for="{{metrics}}" wx:key="name" class="metric-card">
           <text class="metric-label">{{item.label}}{{item.state ? '（' + item.state + '）' : ''}}</text>
-          <text class="metric-value">{{item.value}} {{item.unit}}{{item.partial ? '（部分）' : ''}}</text>
+          <text class="metric-value">{{item.value}} {{item.unit}}{{item.partial ? '（部分血脂结果）' : ''}}</text>
         </view>
       </view>
       <button wx:if="{{canConfirm}}" class="primary-button" loading="{{saving}}" bindtap="confirmMeasurement">确认并提交</button>

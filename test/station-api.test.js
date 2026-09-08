@@ -66,6 +66,8 @@ assert.notStrictEqual(keyA, keyB)
     calls.push({ path, method, body })
     return { data: { id: '197', status: 'OPEN', checkinToken: 'tok' } }
   }
+  // 本用例固定走 v1 通道（灰度回退路径回归）；v2 device-stations 见 test/device-station-phase2.test.js
+  stationApi.setStationApiVersion('v1')
 
   try {
     await stationApi.createStation({ stationName: '体脂秤轮测场次' })
@@ -118,6 +120,7 @@ assert.notStrictEqual(keyA, keyB)
 
   } finally {
     api.cdmsRequest = originalCdmsRequest
+    stationApi.setStationApiVersion('v2')
   }
 
   // ---- 场次状态机 ----

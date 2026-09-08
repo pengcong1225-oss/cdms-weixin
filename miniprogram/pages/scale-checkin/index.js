@@ -3,6 +3,17 @@ const api = require('../../utils/api')
 const { ensureSession } = require('../../utils/auth-guard')
 const { parseCheckinPayload } = require('../../utils/scale-qr')
 
+// 患者排队轮询间隔（my-queue 专用接口）
+const QUEUE_POLL_INTERVAL_MS = 10000
+
+// 仅使用患者 DTO 的 waitingAhead 生成"前面还有 N 人"文案；未知时留空
+function waitingAheadText (waitingAhead) {
+  if (waitingAhead === '' || waitingAhead === null || waitingAhead === undefined) return ''
+  const n = Number(waitingAhead)
+  if (!Number.isFinite(n) || n < 0) return ''
+  return n === 0 ? '前面没有等待人数，请留意叫号' : `前面还有 ${n} 人`
+}
+
 function unwrapData (response) {
   return response && typeof response === 'object' && Object.prototype.hasOwnProperty.call(response, 'data')
     ? response.data
@@ -16,6 +27,9 @@ Page({
     checkedIn: false,
     checkinKind: '',
     queueNo: '',
+    waitingAheadText: '',
+    queueMessage: '',
+    stationStatus: '',
     stationId: '',
     errorText: '',
     statusText: '请扫描医生工作站二维码',
@@ -46,22 +60,70 @@ Page({
     }
   },
 
-  // 场次签到：进入医生工作站测量队列（原流程保持不变）
+  // 场次签到：后端对【患者】返回 MiniappScaleStationPatientQueueDTO（本人 queueNo/queueStatus/
+  // waitingAhead/message），不再返回完整场次视图；这里只取患者可见字段，不读 currentQueueItem/queue。
   async submitCheckin (payload) {
     this.setData({ submitting: true, stationId: payload.stationId, statusText: '正在加入测量队列…' })
     try {
-      const station = await stationApi.createCheckin(payload.stationId, payload.checkinToken)
-      const current = station.currentQueueItem || (station.queue || []).find(item => item.status === 'WAITING')
+      const view = await stationApi.createCheckin(payload.stationId, payload.checkinToken)
       this.setData({
         checkedIn: true,
         checkinKind: 'STATION',
-        queueNo: current?.queueNo ? String(current.queueNo) : '',
-        statusText: '签到成功，请留意医生叫号',
+        queueNo: view.queueNo === '' ? '' : String(view.queueNo),
+        waitingAheadText: waitingAheadText(view.waitingAhead),
+        queueMessage: view.message || '',
+        stationStatus: view.status || '',
+        // §5.1 两级签到：设备场次只写队列，主状态行固定为“设备排队签到成功”，
+        // 后端 message（到场确认 / 设备排队两类语义）作为补充提示单独展示。
+        statusText: '设备排队签到成功，请留意医生叫号',
         errorText: ''
       })
+      this.startQueuePolling()
     } finally {
       this.setData({ submitting: false })
     }
+  },
+
+  startQueuePolling () {
+    this.stopQueuePolling()
+    if (!this.data.checkedIn || this.data.checkinKind !== 'STATION' || !this.data.stationId) return
+    this.refreshMyQueue()
+    this.queueTimer = setInterval(() => this.refreshMyQueue(), QUEUE_POLL_INTERVAL_MS)
+  },
+
+  stopQueuePolling () {
+    if (this.queueTimer) {
+      clearInterval(this.queueTimer)
+      this.queueTimer = null
+    }
+  },
+
+  // 轮询 my-queue：只刷新本人排队号、前方等待人数与消息，不引入其他患者信息
+  async refreshMyQueue () {
+    const stationId = this.data.stationId
+    if (!stationId || !this.data.checkedIn || this.data.checkinKind !== 'STATION') return
+    try {
+      const view = await stationApi.getMyQueue(stationId)
+      if (!this.data.checkedIn || this.data.checkinKind !== 'STATION' || this.data.stationId !== stationId) return
+      this.setData({
+        queueNo: view.queueNo === '' ? '' : String(view.queueNo),
+        waitingAheadText: waitingAheadText(view.waitingAhead),
+        queueMessage: view.message || '',
+        stationStatus: view.status || ''
+      })
+    } catch (_) { /* 网络抖动不打断患者页面，下一轮重试 */ }
+  },
+
+  onShow () {
+    if (this.data.checkedIn && this.data.checkinKind === 'STATION') this.startQueuePolling()
+  },
+
+  onHide () {
+    this.stopQueuePolling()
+  },
+
+  onUnload () {
+    this.stopQueuePolling()
   },
 
   // 通用签到：/me 拿 patientId 后调 POST /api/v1/checkins?patientId=
@@ -83,7 +145,8 @@ Page({
       this.setData({
         checkedIn: true,
         checkinKind: 'GENERIC',
-        statusText: result && result.status ? '签到状态：' + result.status : '签到成功',
+        // §5.1 两级签到：通用码为机构到场签到（ORG_CHECKIN），文案与设备排队签到区分
+        statusText: result && result.status ? '到场签到状态：' + result.status : '到场签到成功',
         checkinDateText,
         errorText: ''
       })
@@ -93,10 +156,14 @@ Page({
   },
 
   scanAgain () {
+    this.stopQueuePolling()
     this.setData({
       checkedIn: false,
       checkinKind: '',
       queueNo: '',
+      waitingAheadText: '',
+      queueMessage: '',
+      stationStatus: '',
       stationId: '',
       errorText: '',
       statusText: '请扫描医生工作站二维码',

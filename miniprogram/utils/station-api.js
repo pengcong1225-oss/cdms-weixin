@@ -33,6 +33,28 @@ function writePayload (payload, prefix) {
   return body
 }
 
+/** 血糖上下文（设计 §10.1）：只能是 FASTING / POSTPRANDIAL / RANDOM / UNKNOWN，其余（含缺省）归一为 UNKNOWN。 */
+const GLUCOSE_CONTEXTS = ['FASTING', 'POSTPRANDIAL', 'RANDOM', 'UNKNOWN']
+function normalizeGlucoseContext (value) {
+  const text = String(value === null || value === undefined ? '' : value).trim().toUpperCase()
+  return GLUCOSE_CONTEXTS.includes(text) ? text : 'UNKNOWN'
+}
+
+/**
+ * v2 指标 DTO（设计 §10.1）：可选 context（仅血糖携带，其余类型不下发）与 partial
+ * （血脂分段未齐标记）。normalizeMetric 同时服务 v1/v2 通道：v1 服务端会忽略未知字段，
+ * 但为避免老后端把 context 当非法键拒绝，v1 草稿仍走 stripContext 路径（见 saveMeasurementDraftV1）。
+ */
+function normalizeMetricV2 (metric) {
+  const base = normalizeMetric(metric)
+  if (!base) return null
+  const out = Object.assign({}, base)
+  const name = out.type
+  if (name === 'glucose') out.context = normalizeGlucoseContext(metric.context || metric.glucoseContext)
+  if (metric.partial === true || metric.partial === 'true') out.partial = true
+  return out
+}
+
 function normalizeMetric (metric) {
   if (!metric || typeof metric !== 'object') return null
   return {
@@ -67,6 +89,8 @@ function normalizeQueueItem (item) {
     draftConfirmedAt: toText(item.draftConfirmedAt),
     draftCreatedAt: toText(item.draftCreatedAt),
     draftUpdatedAt: toText(item.draftUpdatedAt),
+    // v2：活动队列项自身可携带服务端检测会话 ID（医生视图）
+    measurementSessionId: toText(item.measurementSessionId),
     selectedAt: toText(item.selectedAt),
     skippedAt: toText(item.skippedAt),
     completedAt: toText(item.completedAt),
@@ -92,6 +116,8 @@ function normalizeStation (response) {
     currentQueueStatus: toText(data.currentQueueStatus),
     currentDraftId: toId(data.currentDraftId),
     currentDraftStatus: toText(data.currentDraftStatus),
+    // v2（设计 §8）：活动队列项携带服务端签发的检测会话 UUID；v1 响应无此字段 → ''
+    measurementSessionId: toText(data.measurementSessionId),
     error: toText(data.error),
     queue: Array.isArray(data.queue) ? data.queue.map(normalizeQueueItem).filter(Boolean) : [],
     currentQueueItem: normalizeQueueItem(data.currentQueueItem),
@@ -116,54 +142,159 @@ function normalizeQueueList (response) {
   }
 }
 
+/**
+ * 版本化端点前缀（设计 §15 API 演进）：v1 = scale/stations（灰度回退保留），
+ * v2 = device-stations（检测会话 + 严格状态机 + context/partial）。
+ */
+const STATION_API_VERSIONS = {
+  v1: '/api/v1/miniapp/scale/stations',
+  v2: '/api/v2/miniapp/device-stations'
+}
+
+/** 当前生效通道：页面通过 api.STATION_API_VERSION 读取；灰度回退时 setStationApiVersion('v1')。 */
+let stationApiVersion = 'v2'
+
+function stationPathPrefix () {
+  return STATION_API_VERSIONS[stationApiVersion] || STATION_API_VERSIONS.v2
+}
+
+function setStationApiVersion (version) {
+  const text = String(version || '').toLowerCase()
+  if (!STATION_API_VERSIONS[text]) throw new Error('未知的场次接口版本：' + text)
+  stationApiVersion = text
+}
+
+/**
+ * 错误规范化（设计 §17）：409=状态冲突/幂等 key 内容冲突，410=二维码或检测会话已过期。
+ * v2 的 409/410 响应体携带【当前服务端状态】供小程序刷新恢复；后端可能把状态平铺在响应顶层、
+ * data 里、或尚未解包，三种形态都要取到并归一化为 error.stationState。
+ * error.expiredSession / error.stateConflict 是显式布尔标记：页面据此区分「清态且不得自动重放」与「刷新后重试」。
+ */
+function extractStationState (response) {
+  if (!response || typeof response !== 'object') return null
+  const candidates = [response, response.data, response.result]
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue
+    if (candidate.status || candidate.stationId || candidate.id || candidate.currentQueueItem || Array.isArray(candidate.queue)) return candidate
+  }
+  return null
+}
+
+function normalizeStationError (error) {
+  if (!error || !Number.isFinite(Number(error.statusCode))) return error
+  const code = Number(error.statusCode)
+  if (code !== 409 && code !== 410) return error
+  error.expiredSession = code === 410
+  if (code === 409) error.stateConflict = true
+  const state = extractStationState(error.response)
+  if (state) {
+    error.serverState = state
+    error.stationState = normalizeStation(state)
+  }
+  return error
+}
+
+async function requestStation (path, method, body) {
+  try {
+    return await api.cdmsRequest(path, method, body, currentAccessToken())
+  } catch (error) {
+    throw normalizeStationError(error)
+  }
+}
+
+function stationPath (stationId, suffix) {
+  return stationPathPrefix() + '/' + encodeURIComponent(String(stationId || '')) + (suffix || '')
+}
+
 async function createStation (payload = {}) {
   const body = writePayload(payload, 'station-create')
   // 设备类型（SCALE / MFA1）原样透传给服务端枚举校验，缺省由服务端按 SCALE 处理
   if (body.deviceType !== undefined && body.deviceType !== null) body.deviceType = toText(body.deviceType)
-  return normalizeStation(await api.cdmsRequest('/api/v1/miniapp/scale/stations', 'POST', body, currentAccessToken()))
+  return normalizeStation(await requestStation(stationPathPrefix(), 'POST', body))
 }
 
 async function getStation (stationId) {
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}`, 'GET', null, currentAccessToken()))
+  return normalizeStation(await requestStation(stationPath(stationId), 'GET', null))
+}
+
+// 后端已将设备排队签到的患者响应从完整场次视图收紧为 MiniappScaleStationPatientQueueDTO：
+// 仅含 stationId、stationName、deviceType、status（场次状态）、本人 queueItemId、本人 queueNo、
+// 本人 queueStatus、waitingAhead（前方等待人数）、message。不再返回 checkinToken / 完整 queue /
+// currentQueueItem / currentDraft / patientSummary / metrics，患者端必须走本归一化器；
+// normalizeStation 保留给医生工作站动作（callNext/skip/draft/confirm/getStation）使用。
+function normalizePatientQueue (response) {
+  const data = unwrap(response) || {}
+  return {
+    stationId: toId(data.stationId),
+    stationName: toText(data.stationName),
+    deviceType: toText(data.deviceType, 'SCALE'),
+    status: toText(data.status || 'OPEN'),
+    queueItemId: toId(data.queueItemId),
+    queueNo: data.queueNo === null || data.queueNo === undefined || data.queueNo === '' ? '' : Number(data.queueNo),
+    queueStatus: toText(data.queueStatus),
+    waitingAhead: data.waitingAhead === null || data.waitingAhead === undefined || data.waitingAhead === '' ? '' : Number(data.waitingAhead),
+    message: toText(data.message)
+  }
 }
 
 async function createCheckin (stationId, checkinToken, payload = {}) {
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/checkins`, 'POST', writePayload(Object.assign({}, payload, {
+  return normalizePatientQueue(await requestStation(stationPath(stationId, '/checkins'), 'POST', writePayload(Object.assign({}, payload, {
     checkinToken: toText(checkinToken)
-  }), 'station-checkin'), currentAccessToken()))
+  }), 'station-checkin')))
+}
+
+// 患者专用排队查询：签到后轮询本人 queueNo / queueStatus / waitingAhead / message
+async function getMyQueue (stationId) {
+  return normalizePatientQueue(await requestStation(stationPath(stationId, '/my-queue'), 'GET', null))
 }
 
 async function getTodayQueue (stationId) {
-  return normalizeQueueList(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/queue`, 'GET', null, currentAccessToken()))
+  return normalizeQueueList(await requestStation(stationPath(stationId, '/queue'), 'GET', null))
 }
 
 async function callNext (stationId, payload = {}) {
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/call-next`, 'POST', writePayload(payload, 'station-next'), currentAccessToken()))
+  return normalizeStation(await requestStation(stationPath(stationId, '/call-next'), 'POST', writePayload(payload, 'station-next')))
 }
 
 async function skipQueueItem (stationId, queueItemId, payload = {}) {
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/queue/${encodeURIComponent(String(queueItemId || ''))}/skip`, 'POST', writePayload(payload, 'station-skip'), currentAccessToken()))
+  return normalizeStation(await requestStation(stationPath(stationId, '/queue/' + encodeURIComponent(String(queueItemId || '')) + '/skip'), 'POST', writePayload(payload, 'station-skip')))
 }
 
 async function requeueQueueItem (stationId, queueItemId, payload = {}) {
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/queue/${encodeURIComponent(String(queueItemId || ''))}/requeue`, 'POST', writePayload(payload, 'station-requeue'), currentAccessToken()))
+  return normalizeStation(await requestStation(stationPath(stationId, '/queue/' + encodeURIComponent(String(queueItemId || '')) + '/requeue'), 'POST', writePayload(payload, 'station-requeue')))
 }
 
+/**
+ * 保存草稿。v2（设计 §8/§10.1）：必带服务端下发的 measurementSessionId，指标走 context/partial DTO；
+ * v1（灰度回退）：不发 sessionId、指标去掉 context/partial——后端同事明确 v1 不接受新 MFA1 指标契约。
+ */
 async function saveMeasurementDraft (stationId, queueItemId, payload = {}) {
-  const body = writePayload({
+  const isV2 = stationPathPrefix() === STATION_API_VERSIONS.v2
+  const sourceMetrics = Array.isArray(payload.metrics)
+    ? (isV2 ? payload.metrics.map(normalizeMetricV2) : payload.metrics.map(normalizeMetric)).filter(Boolean)
+    : []
+  const fields = {
     idempotencyKey: payload.idempotencyKey,
     deviceId: payload.deviceId,
     measuredAt: payload.measuredAt,
     gender: payload.gender,
     age: payload.age,
     height: payload.height,
-    metrics: Array.isArray(payload.metrics) ? payload.metrics.map(normalizeMetric).filter(Boolean) : []
-  }, 'station-draft')
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/queue/${encodeURIComponent(String(queueItemId || ''))}/draft`, 'POST', body, currentAccessToken()))
+    metrics: sourceMetrics
+  }
+  if (isV2) fields.measurementSessionId = toText(payload.measurementSessionId)
+  const body = writePayload(fields, 'station-draft')
+  return normalizeStation(await requestStation(stationPath(stationId, '/queue/' + encodeURIComponent(String(queueItemId || '')) + '/draft'), 'POST', body))
 }
 
+/** 确认草稿。v2 请求体必填 measurementSessionId（payload 或 this 侧传入均可）。 */
 async function confirmMeasurement (stationId, queueItemId, draftId, payload = {}) {
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/queue/${encodeURIComponent(String(queueItemId || ''))}/drafts/${encodeURIComponent(String(draftId || ''))}/confirm`, 'POST', writePayload(payload, 'station-confirm'), currentAccessToken()))
+  const body = writePayload(payload, 'station-confirm')
+  if (stationPathPrefix() === STATION_API_VERSIONS.v2 && !body.measurementSessionId) {
+    // 缺失即拒绝发起：会话不匹配的确认绝不允许静默发出（设计 §8）
+    throw new Error('缺少检测会话标识，请重新叫号')
+  }
+  return normalizeStation(await requestStation(stationPath(stationId, '/queue/' + encodeURIComponent(String(queueItemId || '')) + '/drafts/' + encodeURIComponent(String(draftId || '')) + '/confirm'), 'POST', body))
 }
 
 async function closeStation (stationId, payload = {}) {
@@ -171,8 +302,11 @@ async function closeStation (stationId, payload = {}) {
     idempotencyKey: payload.idempotencyKey,
     discardDraftIds: Array.isArray(payload.discardDraftIds) ? payload.discardDraftIds.map(id => toId(id)).filter(Boolean) : []
   }, 'station-close')
-  return normalizeStation(await api.cdmsRequest(`/api/v1/miniapp/scale/stations/${encodeURIComponent(String(stationId || ''))}/close`, 'POST', body, currentAccessToken()))
+  return normalizeStation(await requestStation(stationPath(stationId, '/close'), 'POST', body))
 }
+
+/** 当前生效通道（只读快照，供页面/测试断言）。 */
+function getStationApiVersion () { return stationApiVersion }
 
 function reduceStationState (state = {}, action = {}) {
   const current = Object.assign({
@@ -256,18 +390,28 @@ function reduceStationState (state = {}, action = {}) {
 }
 
 module.exports = {
+  STATION_API_VERSIONS,
+  GLUCOSE_CONTEXTS,
   callNext,
   closeStation,
   confirmMeasurement,
   createCheckin,
   createIdempotencyKey,
   createStation,
+  getStationApiVersion,
+  getMyQueue,
   getStation,
   getTodayQueue,
+  normalizeGlucoseContext,
+  normalizeMetricV2,
+  normalizePatientQueue,
   normalizeQueueItem,
   normalizeStation,
+  normalizeStationError,
   requeueQueueItem,
   reduceStationState,
+  setStationApiVersion,
+  stationPathPrefix,
   saveMeasurementDraft,
   skipQueueItem
 }

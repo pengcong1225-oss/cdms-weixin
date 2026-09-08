@@ -113,6 +113,18 @@
   padding: 10rpx 0;
 }
 
+.measurement-item-list { margin-top: 18rpx; display: flex; flex-direction: column; gap: 12rpx; }
+.measurement-item { display: flex; align-items: center; justify-content: space-between; padding: 16rpx 20rpx; border-radius: 20rpx; background: #fff; box-shadow: 0 8rpx 26rpx rgba(23, 61, 50, 0.06); }
+.measurement-item .metric-label { display: inline; }
+.measurement-item.disabled { opacity: 0.55; }
+.measurement-state { color: #0c9b6c; font-size: 24rpx; }
+.measurement-soon { color: #b26a00; font-size: 24rpx; }
+.mismatch-hint { color: #c0392b; font-weight: 700; }
+.glucose-context-row { margin-top: 14rpx; display: flex; align-items: center; gap: 16rpx; padding: 16rpx 20rpx; border-radius: 20rpx; background: #fff; box-shadow: 0 8rpx 26rpx rgba(23, 61, 50, 0.06); }
+.glucose-context-value { color: #0c9b6c; font-size: 24rpx; }
+.glucose-context-value.pending { color: #b26a00; }
+.partial-lipid-hint { margin-top: 12rpx; color: #b26a00; font-size: 24rpx; font-weight: 700; }
+
 .qr-panel { width: 100%; display: flex; flex-direction: column; align-items: center; padding: 24rpx 0 30rpx; margin-bottom: 24rpx; background: #f7fbf9; border-radius: 24rpx; }
 .station-qr { display: block; width: 240px; height: 240px; background: #fff; }
 .qr-hint { color: #718078; font-size: 22rpx; margin-top: 16rpx; }

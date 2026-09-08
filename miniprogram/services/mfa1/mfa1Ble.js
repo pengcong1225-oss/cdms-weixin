@@ -330,7 +330,7 @@ class Mfa1Ble {
     this.devices = new Map(); this.deviceId = ''; this.writeId = ''; this.notifyId = ''
     this.assembler = new FrameAssembler(); this.manualClose = false; this.reconnectPromise = null; this.reconnectAttempts = 0
     // 超时降级的血脂帧经此回调补发给 onResult（push 同步路径与定时器路径共用）。
-    this.assembler.onDrain = drained => drained.forEach(item => { try { this.onResult(item) } catch (_) {} })
+    this.assembler.onDrain = drained => drained.forEach(item => { try { this.onResult(Object.assign({}, item, { receivedAt: Date.now() })) } catch (_) {} })
     this.deviceFoundListener = null; this.connectionListener = null; this.valueListener = null
   }
   state (value, detail) { try { this.onState({ state: value, deviceId: this.deviceId, detail }) } catch (_) {} }
@@ -370,7 +370,7 @@ class Mfa1Ble {
     if (!write || !notify) throw new Error('MFA-1 BLE 特征 FFF6/FFF7 未找到')
     if (this.assembler) this.assembler.flush().forEach(item => { try { this.onResult(item) } catch (_) {} })
     this.deviceId = deviceId; this.serviceId = service.uuid; this.writeId = write.uuid; this.notifyId = notify.uuid; this.assembler = new FrameAssembler()
-    this.assembler.onDrain = drained => drained.forEach(item => { try { this.onResult(item) } catch (_) {} })
+    this.assembler.onDrain = drained => drained.forEach(item => { try { this.onResult(Object.assign({}, item, { receivedAt: Date.now() })) } catch (_) {} })
     this.installListeners()
     await callWx('notifyBLECharacteristicValueChange', { state: true, deviceId, serviceId: this.serviceId, characteristicId: this.notifyId })
     this.state('connected'); return this.lastDevice
@@ -379,8 +379,11 @@ class Mfa1Ble {
     if (!this.valueListener) {
       this.valueListener = event => {
         if (event.deviceId !== this.deviceId || normalizeUuid(event.characteristicId) !== normalizeUuid(this.notifyId)) return
+        // 与 scaleBle 对齐：为成帧结果盖 receivedAt（设备通知到达时刻），页面据此执行
+        // 「只收晚于新会话启动时间的数据」窗口过滤（设计 §8 第 6 步）。不改解析语义。
+        const receivedAt = Date.now()
         this.assembler.push(new Uint8Array(event.value || [])).forEach(result => {
-          try { this.onResult(result) } catch (_) {}
+          try { this.onResult(Object.assign({}, result, { receivedAt })) } catch (_) {}
         })
       }
       wx.onBLECharacteristicValueChange(this.valueListener)
