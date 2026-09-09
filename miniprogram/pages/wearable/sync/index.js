@@ -1,6 +1,7 @@
 const rwfit = require('../../../utils/rwfit-sdk')
 const api = require('../../../utils/api')
 const cdmsBridge = require('../../../utils/cdms-bridge')
+const bleManager = require('../../../services/bleManager')
 
 Page({
   data: { mode: 'PATIENT', status: '准备就绪', scanning: false, syncing: false, devices: [], queued: 0 },
@@ -43,16 +44,23 @@ Page({
     this.setData({ syncing: true, status: '正在连接手环…' })
     let sdk
     try {
-      sdk = await rwfit.connect(this.deviceId, { onStage: stage => this.setData({ status: `连接阶段：${stage}` }) })
-      if (!this.token) {
-        this.setData({ status: '设备已连接，正在申请安全采集会话…' })
-        const session = await cdmsBridge.ensureIoTSession(this.deviceId)
-        this.baseUrl = session.iotBaseUrl
-        this.token = session.wearableToken
-        this.sessionId = session.wearableSessionId
-        this.patientRef = session.patientRef
-        if (!this.token) throw new Error('未取得 IoT 采集令牌')
-      }
+      const selectedDevice = (this.data.devices || []).find(device => device.deviceId === this.deviceId)
+        || { deviceId: this.deviceId }
+      await bleManager.connect(selectedDevice)
+      sdk = typeof bleManager.getSdk === 'function' ? bleManager.getSdk() : null
+      if (!sdk) throw new Error('设备连接尚未就绪')
+      this.setData({ status: '设备已连接，正在申请安全采集会话…' })
+      const session = await cdmsBridge.ensureIoTSession(this.deviceId)
+      this.baseUrl = session.iotBaseUrl
+      this.token = session.wearableToken
+      this.sessionId = session.wearableSessionId
+      this.patientRef = session.patientRef
+      if (!this.token) throw new Error('未取得 IoT 采集令牌')
+      const syncScope = Object.freeze({
+        patientRef: session.patientRef,
+        deviceRef: session.deviceRef,
+        sessionId: session.wearableSessionId
+      })
       let records
       let errors = {}
       if (this.data.mode === 'DOCTOR') {
@@ -64,21 +72,21 @@ Page({
         errors = result.errors || {}
       }
       if (records.length) {
-        const context = cdmsBridge.updateContext({
-          iotBaseUrl: this.baseUrl,
-          wearableToken: this.token,
-          wearableSessionId: this.sessionId,
-          patientRef: this.patientRef,
-          deviceRef: this.deviceId
+        await cdmsBridge.enqueueAndFlush({
+          deviceRef: syncScope.deviceRef,
+          records,
+          syncScope,
+          session
         })
-        await cdmsBridge.enqueueAndFlush({ deviceRef: context.deviceRef, records })
       }
       this.setData({ status: Object.keys(errors).length ? '部分类型同步失败，已保存成功数据' : '同步完成，正在上传…' })
       this.setData({ status: '同步完成' })
     } catch (error) {
       this.setData({ status: error.message || '同步失败，数据已保存在本机待重试' })
     } finally {
-      try { await sdk?.disconnect() } catch (_) {}
+      if (sdk && typeof bleManager.disconnect === 'function') {
+        try { await bleManager.disconnect() } catch (_) {}
+      }
       this.setData({ syncing: false, queued: api.readQueue().length })
     }
   },
@@ -88,7 +96,29 @@ Page({
     this.setData({ queued: api.readQueue().length })
   },
   async retry () {
-    const context = await cdmsBridge.ensureIoTSession(this.deviceId || 'retry')
+    const app = getApp()
+    const livePatientRef = String(app?.globalData?.patientRef || '').trim()
+    const patientRef = livePatientRef || (
+      app?.globalData?.activeRole === 'DOCTOR' ? String(this.patientRef || '').trim() : ''
+    )
+    if (!patientRef) throw new Error('无法确定当前患者作用域，请先登录')
+    const queued = api.readQueue({ patientRef })
+    const queuedDeviceRefs = Array.from(new Set(queued
+      .map(batch => String(batch && batch.deviceRef || '').trim())
+      .filter(Boolean)))
+    const deviceRef = String(this.deviceId || '').trim() || (
+      queuedDeviceRefs.length === 1 ? queuedDeviceRefs[0] : ''
+    )
+    if (!deviceRef) {
+      throw new Error(queuedDeviceRefs.length > 1
+        ? '待重试队列包含多个设备，请先选择设备'
+        : '无法确定待重试设备，请先选择设备')
+    }
+    const context = await cdmsBridge.ensureIoTSession(deviceRef)
+    if (String(context.patientRef || '').trim() !== patientRef ||
+      String(context.deviceRef || '').trim() !== deviceRef) {
+      throw new Error('待重试设备会话作用域不一致')
+    }
     if (!context.iotBaseUrl || !context.wearableToken) throw new Error('缺少 IoT 会话配置')
     await api.flushQueue({
       baseUrl: context.iotBaseUrl,

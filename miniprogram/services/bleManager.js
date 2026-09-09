@@ -650,10 +650,23 @@ class BleManager {
     await this.disconnect();
   }
 
-  async unbind() {
+  async unbind(deviceRef) {
+    const requestedDeviceId = String(deviceRef || "").trim();
     const previous = this.state.boundDevice;
-    const targetDeviceId = previous && previous.deviceId ? previous.deviceId : this.activeDeviceId;
-    await this.disconnect();
+    const activeDeviceId = String(this.activeDeviceId || "").trim();
+    const connectingDeviceId = String(this.connectingDeviceId || "").trim();
+    if ((this.connectPromise || connectingDeviceId) && !requestedDeviceId) {
+      throw new Error("连接进行中，请明确指定要解绑的设备");
+    }
+    const targetDeviceId = requestedDeviceId ||
+      (previous && previous.deviceId ? String(previous.deviceId).trim() : "") ||
+      activeDeviceId;
+    if (!targetDeviceId) throw new Error("没有可解绑的设备");
+    const targetWasActive = activeDeviceId === targetDeviceId;
+    const targetWasBound = !!(previous && previous.deviceId === targetDeviceId);
+    // An explicit non-active target must not disconnect the currently active
+    // device: unbind is scoped to exactly the requested business binding.
+    if (targetWasActive) await this.disconnect();
     try {
       await cdmsBridge.releaseWearableSession(targetDeviceId);
     } catch (error) {
@@ -663,18 +676,28 @@ class BleManager {
     if (typeof storage.clearBoundDevice === "function") {
       storage.clearBoundDevice(targetDeviceId, this.getContextPatientRef());
     }
-    this.activeDeviceId = "";
-    this.patch({
-      boundDevice: null,
+    const patch = {
       error: "",
-      healthSyncing: false,
-      healthSyncProgress: 0,
-      lastHealthSyncAt: 0,
-      workoutState: { sportType: 0, status: 4, isRunning: false },
-      workoutRealtime: { activityTime: 0, steps: 0, distance: 0, calorie: 0, heartRate: 0 },
-      workoutReports: [],
-      workoutRevision: this.state.workoutRevision + 1,
-    });
+    };
+    if (targetWasActive) {
+      this.activeDeviceId = "";
+      Object.assign(patch, {
+        boundDevice: null,
+        healthSyncing: false,
+        healthSyncProgress: 0,
+        lastHealthSyncAt: 0,
+        workoutState: { sportType: 0, status: 4, isRunning: false },
+        workoutRealtime: { activityTime: 0, steps: 0, distance: 0, calorie: 0, heartRate: 0 },
+        workoutReports: [],
+        workoutRevision: this.state.workoutRevision + 1,
+      });
+    } else if (targetWasBound) {
+      const replacement = activeDeviceId && typeof storage.getScopedBoundDevice === "function"
+        ? storage.getScopedBoundDevice(activeDeviceId, this.getContextPatientRef())
+        : null;
+      patch.boundDevice = replacement || null;
+    }
+    this.patch(patch);
   }
 
   async refreshPower() {

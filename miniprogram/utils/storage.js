@@ -44,6 +44,15 @@ function getCurrentPatientRef() {
   }
 }
 
+function getCurrentRole() {
+  try {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return String(app && app.globalData && app.globalData.activeRole || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
 function getHealthScopeKey(deviceId) {
   const patientRef = getCurrentPatientRef();
   return patientRef ? `${patientRef}::${deviceId}` : deviceId;
@@ -66,6 +75,7 @@ function getBoundDevice(deviceRef, patientRef) {
     // callers migrating from the old single-device helper.
     return direct || getScopedBoundDevice(patientRef, deviceRef);
   }
+  if (!getCurrentPatientRef() && getCurrentRole() !== "DOCTOR") return null;
   const records = readBoundDeviceRecords();
   if (!records.length) return null;
   return toDevice(records[records.length - 1]);
@@ -113,7 +123,10 @@ function normalizeBoundRecord(value) {
   return { patientRef, deviceRef, device };
 }
 
-function readBoundDeviceRecords() {
+function readBoundDeviceRecords(patientRefOverride) {
+  const migrationPatientRef = deviceScope(
+    patientRefOverride == null ? getCurrentPatientRef() : patientRefOverride
+  );
   const raw = readStorage(BOUND_DEVICES_KEY, null);
   const records = [];
   const seen = new Map();
@@ -143,9 +156,9 @@ function readBoundDeviceRecords() {
   }
 
   const legacy = readStorage(BOUND_DEVICE_KEY, null);
-  if (legacy && typeof legacy === "object") {
+  if (legacy && typeof legacy === "object" && migrationPatientRef) {
     add(Object.assign({}, legacy, {
-      patientRef: legacy.patientRef || legacy.ownerPatientRef || getCurrentPatientRef()
+      patientRef: legacy.patientRef || legacy.ownerPatientRef || migrationPatientRef
     }), false);
     // The V1 key is only a migration source. Once observed, never let it
     // overwrite a newer V2 device collection on a later launch.
@@ -180,18 +193,21 @@ function toDevice(record) {
 function listBoundDevices(patientRef) {
   if (patientRef && typeof patientRef === "object") patientRef = patientRef.patientRef;
   const scope = deviceScope(patientRef == null ? getCurrentPatientRef() : patientRef);
-  return readBoundDeviceRecords()
-    .filter(record => !scope || !record.patientRef || record.patientRef === scope)
+  const records = readBoundDeviceRecords(scope);
+  if (!scope && getCurrentRole() !== "DOCTOR") return [];
+  return records
+    .filter(record => scope ? record.patientRef === scope : !record.patientRef)
     .map(toDevice);
 }
 
 function getScopedBoundDevice(deviceRef, patientRef) {
-  const records = readBoundDeviceRecords();
+  const explicitScope = patientRef == null ? getCurrentPatientRef() : patientRef;
+  const records = readBoundDeviceRecords(explicitScope);
   const find = (refValue, scopeValue) => {
     const scope = deviceScope(scopeValue == null ? getCurrentPatientRef() : scopeValue);
     const ref = deviceRefOf({ deviceRef: refValue });
     return records.find(item => item.deviceRef === ref &&
-      (!scope || !item.patientRef || item.patientRef === scope));
+      (scope ? item.patientRef === scope : !item.patientRef));
   };
   // Accept both (deviceRef, patientRef) and (patientRef, deviceRef). The
   // latter is convenient for callers that model the storage key order.
@@ -208,7 +224,7 @@ function saveBoundDevice(device, patientRef) {
   if (!deviceRef) return null;
   candidate.deviceId = String(candidate.deviceId || deviceRef);
   if (scope && !String(candidate.ownerPatientRef || "").trim()) candidate.ownerPatientRef = scope;
-  const records = readBoundDeviceRecords();
+  const records = readBoundDeviceRecords(scope);
   const next = { patientRef: scope, deviceRef, device: candidate };
   const index = records.findIndex(record => recordKey(record) === recordKey(next));
   if (index < 0) records.push(next);
@@ -220,14 +236,14 @@ function saveBoundDevice(device, patientRef) {
 function clearBoundDevice(deviceRef, patientRef) {
   let ref = deviceRefOf({ deviceRef });
   let scope = deviceScope(patientRef == null ? getCurrentPatientRef() : patientRef);
-  const records = readBoundDeviceRecords();
+  const records = readBoundDeviceRecords(patientRef == null ? scope : patientRef);
   if (ref && patientRef != null) {
     const direct = records.some(record => record.deviceRef === ref &&
-      (!scope || !record.patientRef || record.patientRef === scope));
+      (scope ? record.patientRef === scope : !record.patientRef));
     const reverseRef = deviceScope(patientRef);
     const reverseScope = deviceScope(deviceRef);
     const reverse = records.some(record => record.deviceRef === reverseRef &&
-      (!reverseScope || !record.patientRef || record.patientRef === reverseScope));
+      (reverseScope ? record.patientRef === reverseScope : !record.patientRef));
     if (!direct && reverse) {
       ref = reverseRef;
       scope = reverseScope;
@@ -236,14 +252,14 @@ function clearBoundDevice(deviceRef, patientRef) {
   let next;
   if (ref) {
     next = records.filter(record => !(record.deviceRef === ref &&
-      (!scope || !record.patientRef || record.patientRef === scope)));
+      (scope ? record.patientRef === scope : !record.patientRef)));
   } else {
     // Legacy callers had no device argument. Restrict the compatibility
     // clear to the most recently saved record in the current scope instead of
     // deleting every long-term binding for that patient.
     const candidateIndex = records.reduce((found, record, index) => {
       const matchesScope = scope
-        ? (!record.patientRef || record.patientRef === scope)
+        ? record.patientRef === scope
         : !record.patientRef;
       return matchesScope ? index : found;
     }, -1);

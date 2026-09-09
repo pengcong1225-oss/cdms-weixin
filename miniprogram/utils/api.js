@@ -10,6 +10,10 @@ function safeScopePart (value) {
   return encodeURIComponent(String(value || 'anonymous'))
 }
 
+function legacyScopePart (value) {
+  return String(value || 'anonymous').replace(/[^A-Za-z0-9_.-]/g, '_')
+}
+
 function currentPatientRef () {
   try {
     const app = typeof getApp === 'function' ? getApp() : null
@@ -41,6 +45,20 @@ function queueStorageKey (scope, deviceRef, sessionId) {
   return normalized.sessionId ? `${base}.${safeScopePart(normalized.sessionId)}` : base
 }
 
+function legacyPatientQueueKey (patientRef) {
+  return `${queueKey}.${legacyScopePart(patientRef)}`
+}
+
+function legacyQueueKeys (patientRef) {
+  const keys = [queueStorageKey(patientRef), legacyPatientQueueKey(patientRef)]
+  try {
+    const app = typeof getApp === 'function' ? getApp() : null
+    const mode = String(app?.globalData?.mode || '').trim()
+    if (mode && mode !== String(patientRef || '').trim()) keys.push(legacyPatientQueueKey(mode))
+  } catch (_) {}
+  return keys.filter((key, index) => key && keys.indexOf(key) === index)
+}
+
 function readStorage (key, fallback) {
   try {
     const value = wx.getStorageSync(key)
@@ -52,9 +70,44 @@ function writeStorage (key, value) {
   try { wx.setStorageSync(key, value) } catch (_) { /* best effort in tests/offline mode */ }
 }
 
-function readQueueIndex () {
+function readStoredQueueIndex () {
   const value = readStorage(queueIndexKey, [])
   return Array.isArray(value) ? value.filter(item => item && item.key) : []
+}
+
+function recoverQueueIndex (index) {
+  let next = index.slice()
+  let changed = false
+  let keys = []
+  try {
+    const info = typeof wx.getStorageInfoSync === 'function' ? wx.getStorageInfoSync() : null
+    keys = Array.isArray(info?.keys) ? info.keys : []
+  } catch (_) {}
+  keys.forEach(key => {
+    if (!key || key === queueIndexKey || !key.startsWith(`${queueKey}.`)) return
+    if (next.some(item => item.key === key)) return
+    const queue = readQueueAtKey(key)
+    const sample = queue.find(batch => batch && typeof batch === 'object' &&
+      String(batch.patientRef || '').trim() && String(batch.deviceRef || '').trim())
+    if (!sample) return
+    // Patient-only legacy queues are migrated from their batch metadata below;
+    // they are not exact v2 scopes and must not be indexed as one.
+    const patientKey = legacyPatientQueueKey(sample.patientRef)
+    if (key === patientKey || key === queueStorageKey(sample.patientRef)) return
+    next = next.concat({
+      key,
+      patientRef: String(sample.patientRef).trim(),
+      deviceRef: String(sample.deviceRef).trim(),
+      sessionId: String(sample.sessionId || '').trim()
+    })
+    changed = true
+  })
+  if (changed) writeStorage(queueIndexKey, next)
+  return next
+}
+
+function readQueueIndex () {
+  return recoverQueueIndex(readStoredQueueIndex())
 }
 
 function registerQueueScope (scope) {
@@ -80,6 +133,46 @@ function readQueueAtKey (key) {
   return Array.isArray(queue) ? queue.slice() : []
 }
 
+function migrateLegacyQueues (patientRef) {
+  const requestedPatientRef = String(patientRef || '').trim()
+  const sourceKeys = legacyQueueKeys(requestedPatientRef || 'anonymous')
+  sourceKeys.forEach(sourceKey => {
+    const sourceQueue = readQueueAtKey(sourceKey)
+    if (!sourceQueue.length) return
+    const remainder = []
+    const destinations = new Map()
+    sourceQueue.forEach(batch => {
+      const batchPatientRef = String(batch && batch.patientRef || '').trim()
+      const batchDeviceRef = String(batch && (batch.deviceRef || batch.wearableDeviceRef) || '').trim()
+      const batchSessionId = String(batch && (batch.sessionId || batch.wearableSessionId) || '').trim()
+      if (!batch || typeof batch !== 'object' || !batchPatientRef || !batchDeviceRef || !batchSessionId) {
+        remainder.push(batch)
+        return
+      }
+      const targetScope = {
+        patientRef: batchPatientRef,
+        deviceRef: batchDeviceRef,
+        sessionId: batchSessionId
+      }
+      const targetKey = queueStorageKey(targetScope)
+      if (!destinations.has(targetKey)) destinations.set(targetKey, { scope: targetScope, batches: [] })
+      destinations.get(targetKey).batches.push(Object.assign({}, batch, targetScope))
+    })
+    destinations.forEach(({ scope, batches }, targetKey) => {
+      const targetQueue = readQueueAtKey(targetKey)
+      const seen = new Set(targetQueue.map(batch => batch && batch.batchId).filter(Boolean).map(String))
+      batches.forEach(batch => {
+        const id = batch.batchId == null ? '' : String(batch.batchId)
+        if (id && seen.has(id)) return
+        if (id) seen.add(id)
+        targetQueue.push(batch)
+      })
+      writeQueueAtKey(targetKey, targetQueue, scope)
+    })
+    if (remainder.length !== sourceQueue.length) writeStorage(sourceKey, remainder)
+  })
+}
+
 function writeQueueAtKey (key, queue, scope) {
   writeStorage(key, queue.slice())
   if (scope && scope.deviceRef) registerQueueScope(scope)
@@ -98,11 +191,11 @@ function queueEntries (scope) {
     const baseKey = queueStorageKey(scope.patientRef, scope.deviceRef)
     if (!keys.some(item => item.key === baseKey)) keys.push({ key: baseKey, scope: normalizeQueueScope(scope.patientRef, scope.deviceRef, '') })
     // A legacy patient queue may already contain device-tagged batches.
-    const legacyKey = queueStorageKey(scope.patientRef)
-    if (!keys.some(item => item.key === legacyKey)) keys.push({ key: legacyKey, scope: normalizeQueueScope(scope.patientRef) })
+    legacyQueueKeys(scope.patientRef).forEach(legacyKey => {
+      if (!keys.some(item => item.key === legacyKey)) keys.push({ key: legacyKey, scope: normalizeQueueScope(scope.patientRef) })
+    })
   } else {
-    const legacyKey = queueStorageKey(scope.patientRef)
-    keys.push({ key: legacyKey, scope: normalizeQueueScope(scope.patientRef) })
+    legacyQueueKeys(scope.patientRef).forEach(legacyKey => keys.push({ key: legacyKey, scope: normalizeQueueScope(scope.patientRef) }))
     readQueueIndex().forEach(item => {
       if (item.patientRef === scope.patientRef && !keys.some(entry => entry.key === item.key)) {
         keys.push({ key: item.key, scope: normalizeQueueScope(item) })
@@ -123,6 +216,7 @@ function queueEntries (scope) {
 
 function readQueue (scope = currentPatientRef(), deviceRef, sessionId) {
   const normalized = normalizeQueueScope(scope, deviceRef, sessionId)
+  migrateLegacyQueues(normalized.patientRef)
   return queueEntries(normalized).map(entry => entry.batch)
 }
 
@@ -138,6 +232,7 @@ function removeQueueEntry (entry) {
 
 function appendQueueBatch (batch) {
   const normalized = normalizeQueueScope(batch)
+  migrateLegacyQueues(normalized.patientRef)
   const storedBatch = Object.assign({}, batch)
   if (!storedBatch.patientRef) storedBatch.patientRef = normalized.patientRef
   if (normalized.deviceRef && !storedBatch.deviceRef) storedBatch.deviceRef = normalized.deviceRef
@@ -157,14 +252,18 @@ function request (url, method, data, token) {
     const header = token ? { Authorization: `Bearer ${token}` } : {}
     wx.request({ url, method, data, header,
       success: res => {
-        if (res.statusCode >= 200 && res.statusCode < 300 && res.data?.code !== 401) {
+        const businessCode = Number(res.data?.code)
+        const unauthorized = Number(res.statusCode) === 401 || businessCode === 401
+        if (res.statusCode >= 200 && res.statusCode < 300 && !unauthorized) {
           resolve(res.data)
           return
         }
         const error = new Error(`HTTP ${res.statusCode}`)
-        error.statusCode = res.statusCode
+        // Some gateways return HTTP 200 with a business-level 401. Keep one
+        // error shape so callers do not accidentally skip session renewal.
+        error.statusCode = unauthorized ? 401 : res.statusCode
         error.response = res.data
-        if (res.data?.code) error.code = res.data.code
+        if (res.data?.code != null) error.code = res.data.code
         reject(error)
       },
       fail: err => {
@@ -371,6 +470,15 @@ async function flushQueueInternal ({ baseUrl, token, scope }) {
 
 async function flushQueue (options = {}) {
   const scope = normalizeQueueScope(options.scope || options.patientRef || currentPatientRef(), options.deviceRef, options.sessionId)
+  if (!scope.patientRef || scope.patientRef === 'anonymous' || !scope.deviceRef || !scope.sessionId) {
+    const error = new Error('上传队列需要完整患者、设备和会话作用域')
+    error.code = 'QUEUE_SCOPE_REQUIRED'
+    error.statusCode = 409
+    throw error
+  }
+  // Migrate only after the caller has supplied an exact scope. This keeps
+  // legacy batches isolated and makes a patient-only flush fail closed.
+  migrateLegacyQueues(scope.patientRef)
   const key = queueStorageKey(scope)
   if (flushLocks.has(key)) return flushLocks.get(key)
   const promise = flushQueueInternal({ baseUrl: options.baseUrl, token: options.token, scope })
