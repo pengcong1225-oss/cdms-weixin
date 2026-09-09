@@ -43,14 +43,17 @@ Page({
     if (!this.deviceId) { this.setData({ status: '请先搜索并选择设备' }); return }
     this.setData({ syncing: true, status: '正在连接手环…' })
     let sdk
+    const syncDeviceId = this.deviceId
+    let syncConnectionGeneration
     try {
-      const selectedDevice = (this.data.devices || []).find(device => device.deviceId === this.deviceId)
-        || { deviceId: this.deviceId }
+      const selectedDevice = (this.data.devices || []).find(device => device.deviceId === syncDeviceId)
+        || { deviceId: syncDeviceId }
       await bleManager.connect(selectedDevice)
+      syncConnectionGeneration = bleManager.connectionGeneration
       sdk = typeof bleManager.getSdk === 'function' ? bleManager.getSdk() : null
       if (!sdk) throw new Error('设备连接尚未就绪')
       this.setData({ status: '设备已连接，正在申请安全采集会话…' })
-      const session = await cdmsBridge.ensureIoTSession(this.deviceId)
+      const session = await cdmsBridge.ensureIoTSession(syncDeviceId)
       this.baseUrl = session.iotBaseUrl
       this.token = session.wearableToken
       this.sessionId = session.wearableSessionId
@@ -84,8 +87,12 @@ Page({
     } catch (error) {
       this.setData({ status: error.message || '同步失败，数据已保存在本机待重试' })
     } finally {
-      if (sdk && typeof bleManager.disconnect === 'function') {
-        try { await bleManager.disconnect() } catch (_) {}
+      const managerTracksDevice = typeof bleManager.activeDeviceId === 'string'
+      const stillCurrent = !managerTracksDevice || bleManager.activeDeviceId === syncDeviceId
+      const generationMatches = syncConnectionGeneration == null ||
+        bleManager.connectionGeneration === syncConnectionGeneration
+      if (sdk && typeof bleManager.disconnect === 'function' && stillCurrent && generationMatches) {
+        try { await bleManager.disconnect(syncDeviceId, syncConnectionGeneration) } catch (_) {}
       }
       this.setData({ syncing: false, queued: api.readQueue().length })
     }

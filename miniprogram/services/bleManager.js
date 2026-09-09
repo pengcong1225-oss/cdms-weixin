@@ -90,6 +90,7 @@ class BleManager {
     this.deviceEventUnsubscribe = null;
     this.connectPromise = null;
     this.connectingDeviceId = "";
+    this.connectionGeneration = 0;
     this.scanTicker = null;
     this.scanDeviceDebugSignature = "";
     this.healthMeasurementTimer = null;
@@ -202,13 +203,16 @@ class BleManager {
       typeof storage.listBoundDevices === "function"
       ? storage.listBoundDevices(patientRef)
       : [];
+    const hasKnownPatientScope = this.getContextRole() === "PATIENT" && !!patientRef;
     const activeDevice = this.activeDeviceId && typeof storage.getScopedBoundDevice === "function"
       ? storage.getScopedBoundDevice(this.activeDeviceId, patientRef)
       : null;
-    const boundDevice = patientDevices.length
-      ? (activeDevice || patientDevices[patientDevices.length - 1])
+    const boundDevice = hasKnownPatientScope
+      ? (patientDevices.length ? (activeDevice || patientDevices[patientDevices.length - 1]) : null)
       : storedDevice;
-    const foreign = !patientDevices.length && this.isBoundDeviceForeignFor(storedDevice);
+    const foreign = hasKnownPatientScope
+      ? !patientDevices.length && !!storedDevice
+      : !patientDevices.length && this.isBoundDeviceForeignFor(storedDevice);
     const patch = { foreignDevice: !!foreign };
     if (foreign) {
       if (this.activeDeviceId) this.markIntentionalDisconnect(this.activeDeviceId);
@@ -336,15 +340,42 @@ class BleManager {
         recoverable: true,
       }));
     }
+    const generation = ++this.connectionGeneration;
     this.connectingDeviceId = target.deviceId;
-    this.connectPromise = this.performConnect(target).finally(() => {
+    this.connectPromise = this.performConnect(target, generation).finally(() => {
       this.connectPromise = null;
       this.connectingDeviceId = "";
     });
     return this.connectPromise;
   }
 
-  async performConnect(target) {
+  isConnectionCurrent(target, generation) {
+    return this.connectionGeneration === generation &&
+      this.connectingDeviceId === target.deviceId &&
+      this.activeDeviceId === target.deviceId;
+  }
+
+  isConnectionAttemptCurrent(target, generation) {
+    return this.connectionGeneration === generation &&
+      this.connectingDeviceId === target.deviceId;
+  }
+
+  async abortStaleConnection(target, sdk) {
+    if (sdk && typeof sdk.disconnect === "function") {
+      await sdk.disconnect("连接已失效").catch(() => undefined);
+    } else if (target && target.deviceId && wx.closeBLEConnection) {
+      await new Promise((resolve) => wx.closeBLEConnection({ deviceId: target.deviceId, complete: resolve }));
+    }
+    this.disposeRuntime("连接已失效");
+    throw new BleClientError({
+      code: "CONNECT_CANCELLED",
+      stage: "connect",
+      message: "连接已失效，请重新连接",
+      recoverable: true,
+    });
+  }
+
+  async performConnect(target, generation) {
     if (
       this.state.connectionState === "connected" &&
       this.activeDeviceId === target.deviceId
@@ -353,11 +384,13 @@ class BleManager {
     }
 
     await this.stopScan();
+    if (!this.isConnectionAttemptCurrent(target, generation)) return this.abortStaleConnection(target);
     const previousDeviceId = this.activeDeviceId;
     if (previousDeviceId && previousDeviceId !== target.deviceId) {
       this.markIntentionalDisconnect(previousDeviceId);
       if (this.sdk) await this.sdk.disconnect("切换连接设备").catch(() => undefined);
       else await new Promise((resolve) => wx.closeBLEConnection({ deviceId: previousDeviceId, complete: resolve }));
+      if (!this.isConnectionAttemptCurrent(target, generation)) return this.abortStaleConnection(target);
     }
     this.disposeRuntime("开始新连接");
     this.activeDeviceId = target.deviceId;
@@ -368,7 +401,7 @@ class BleManager {
       const app = typeof getApp === "function" ? getApp() : null;
       const devicePassword = app?.globalData?.devicePassword;
       if (devicePassword) RingSdk.prepareAutoPassword(String(devicePassword));
-      this.sdk = await RingSdk.connect(target.deviceId, {
+      const sdk = await RingSdk.connect(target.deviceId, {
         onConnectionStateChange: ({ deviceId, connected }) => {
           if (connected || deviceId !== this.activeDeviceId) return;
           if (this.intentionalDisconnectIds.has(deviceId)) {
@@ -403,6 +436,8 @@ class BleManager {
           }
         },
       });
+      if (!this.isConnectionCurrent(target, generation)) return this.abortStaleConnection(target, sdk);
+      this.sdk = sdk;
       this.deviceEventUnsubscribe = this.sdk.onDeviceEvent((event) => this.handleDeviceEvent(event));
       const supportMenu = this.sdk.supportMenu;
 
@@ -411,6 +446,7 @@ class BleManager {
         this.sdk.readFirmwareVersion().catch(() => null),
         this.sdk.readBleAddress().catch(() => ""),
       ]);
+      if (!this.isConnectionCurrent(target, generation)) return this.abortStaleConnection(target, this.sdk);
       const power = results[0];
       const firmware = results[1];
       const macAddress = results[2];
@@ -635,7 +671,11 @@ class BleManager {
     return Object.assign({}, saved, updated);
   }
 
-  async disconnect() {
+  async disconnect(deviceRef, expectedGeneration) {
+    const requestedDeviceId = String(deviceRef || "").trim();
+    if (requestedDeviceId && requestedDeviceId !== String(this.activeDeviceId || "").trim()) return;
+    if (expectedGeneration != null && expectedGeneration !== this.connectionGeneration) return;
+    if (this.connectPromise || this.connectingDeviceId) this.connectionGeneration += 1;
     const deviceId = this.activeDeviceId;
     const sdk = this.sdk;
     if (deviceId) this.markIntentionalDisconnect(deviceId);
@@ -658,6 +698,7 @@ class BleManager {
     if ((this.connectPromise || connectingDeviceId) && !requestedDeviceId) {
       throw new Error("连接进行中，请明确指定要解绑的设备");
     }
+    if (requestedDeviceId && connectingDeviceId === requestedDeviceId) this.connectionGeneration += 1;
     const targetDeviceId = requestedDeviceId ||
       (previous && previous.deviceId ? String(previous.deviceId).trim() : "") ||
       activeDeviceId;
@@ -840,13 +881,19 @@ class BleManager {
     if (!this.state.boundDevice) return Promise.reject(new Error("尚未绑定设备"));
 
     const deviceId = this.state.boundDevice.deviceId;
+    const syncGeneration = this.connectionGeneration;
+    const sdk = this.sdk;
+    const isCurrent = () => this.connectionGeneration === syncGeneration &&
+      this.activeDeviceId === deviceId && this.sdk === sdk &&
+      this.state.boundDevice && this.state.boundDevice.deviceId === deviceId;
     this.patch({ healthSyncing: true, healthSyncProgress: 0, error: "" });
     this.log("开始同步全部健康数据");
-    this.healthSyncPromise = this.sdk.syncAllHealthData({
+    this.healthSyncPromise = sdk.syncAllHealthData({
       onProgress: (progress) => {
-        this.patch({ healthSyncProgress: progress.percent });
+        if (isCurrent()) this.patch({ healthSyncProgress: progress.percent });
       },
     }).then(async (result) => {
+      if (!isCurrent()) return { recordCount: 0, failedTypes: [], uploadError: new Error("健康同步上下文已失效"), result, healthAlertText: "" };
       let recordCount = 0;
       Object.keys(result.records).forEach((type) => {
         const records = result.records[type] || [];
@@ -873,8 +920,10 @@ class BleManager {
           deviceRef: deviceId,
           recordsByType: result.records,
         });
+        if (!isCurrent()) return { recordCount: 0, failedTypes: [], uploadError: new Error("健康同步上下文已失效"), result, healthAlertText: "" };
         this.log(`CDMS 数据上传完成，共 ${recordCount} 条`);
       } catch (error) {
+        if (!isCurrent()) return { recordCount: 0, failedTypes: [], uploadError: new Error("健康同步上下文已失效"), result, healthAlertText: "" };
         uploadError = error;
         this.log(`CDMS 数据暂未上传：${error.message || error}`);
       }
@@ -887,8 +936,10 @@ class BleManager {
       }
       return { recordCount, failedTypes, uploadError, result, healthAlertText };
     }).finally(() => {
-      this.healthSyncPromise = null;
-      this.patch({ healthSyncing: false });
+      if (isCurrent()) {
+        this.healthSyncPromise = null;
+        this.patch({ healthSyncing: false });
+      }
     });
     return this.healthSyncPromise;
   }

@@ -7,6 +7,8 @@ let requestGeneration = 0
 let latestRequest = null
 let contextRevision = 0
 let contextSignature = null
+const sessionGenerations = new Map()
+const sessionProvenance = new WeakMap()
 
 function appContext () {
   const app = typeof getApp === 'function' ? getApp() : null
@@ -52,8 +54,19 @@ function isCompleteSession (session) {
     session.wearableSessionId && session.patientRef && session.deviceRef)
 }
 
-function immutableSnapshot (session) {
-  return Object.freeze(Object.assign({}, session))
+function immutableSnapshot (session, identity) {
+  const snapshot = Object.freeze(Object.assign({}, session))
+  if (identity) sessionProvenance.set(snapshot, Object.assign({}, identity))
+  return snapshot
+}
+
+function sessionGeneration (patientRef, deviceRef) {
+  return sessionGenerations.get(sessionKey(patientRef, deviceRef)) || 0
+}
+
+function invalidateSessionScope (patientRef, deviceRef) {
+  const key = sessionKey(patientRef, deviceRef)
+  sessionGenerations.set(key, sessionGeneration(patientRef, deviceRef) + 1)
 }
 
 function readSessionCache () {
@@ -127,15 +140,17 @@ function observeContextRevision (context) {
 }
 
 function beginSessionRequest (context, deviceRef) {
+  const patientRef = text(context.patientRef || context.patientId)
   const identity = {
     generation: ++requestGeneration,
     contextRevision: observeContextRevision(context),
-    patientRef: text(context.patientRef || context.patientId),
+    patientRef,
     activeRole: text(context.activeRole),
     identityId: text(context.identityId || context.principalId),
     accessToken: text(context.accessToken),
     refreshToken: text(context.refreshToken),
     deviceRef: text(deviceRef),
+    sessionGeneration: sessionGeneration(patientRef || 'anonymous', deviceRef),
     initialDeviceRef: text(context.wearableDeviceRef || context.deviceRef),
     initialIotBaseUrl: text(context.iotBaseUrl)
   }
@@ -145,6 +160,7 @@ function beginSessionRequest (context, deviceRef) {
 
 function mayPublishSession (identity) {
   const context = appContext()
+  if (sessionGeneration(identity.patientRef || 'anonymous', identity.deviceRef) !== identity.sessionGeneration) return false
   if (observeContextRevision(context) !== identity.contextRevision) return false
   const currentPatientRef = text(context.patientRef || context.patientId)
   if (currentPatientRef !== identity.patientRef) return false
@@ -161,7 +177,9 @@ function mayPublishSession (identity) {
 }
 
 function publishSessionIfCurrent (identity, session) {
-  return mayPublishSession(identity) ? publishSession(session) : immutableSnapshot(session)
+  if (!mayPublishSession(identity)) return immutableSnapshot(session, identity)
+  cacheSession(session)
+  return immutableSnapshot(publishSession(session), identity)
 }
 
 function createUploadBatch ({ batchId, sessionId, patientRef, deviceRef, recordsByType, records, sdkVersion = 'RW_SDK_V2.0.0_20260807' }) {
@@ -188,7 +206,10 @@ function updateContext (values) {
 function clearWearableSession (deviceRef) {
   const context = appContext()
   const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
-  if (targetDeviceRef) removeCachedSession(context.patientRef, targetDeviceRef)
+  if (targetDeviceRef) {
+    invalidateSessionScope(context.patientRef || context.patientId || 'anonymous', targetDeviceRef)
+    removeCachedSession(context.patientRef || context.patientId, targetDeviceRef)
+  }
   const currentDeviceRef = text(context.wearableDeviceRef || context.deviceRef)
   if (!targetDeviceRef || !currentDeviceRef || targetDeviceRef === currentDeviceRef) {
     context.wearableToken = ''
@@ -210,15 +231,15 @@ function canRenewPatientSession (context) {
 async function renewPatientSession (deviceRef, expiredSessionId, expectedPatientRef) {
   const context = appContext()
   const targetDeviceRef = text(deviceRef)
-  const identity = beginSessionRequest(context, targetDeviceRef)
-  const patientRef = identity.patientRef
   if (!canRenewPatientSession(context) || !targetDeviceRef) {
     throw new Error('患者登录状态不完整，无法续期 IoT 会话')
   }
+  const patientRef = text(context.patientRef || context.patientId)
   if (expectedPatientRef && patientRef !== text(expectedPatientRef)) {
     throw new Error('患者登录状态已切换，拒绝续期旧设备会话')
   }
   clearWearableSession(targetDeviceRef)
+  const identity = beginSessionRequest(appContext(), targetDeviceRef)
   // A renewal is a new session creation. The expired ID is intentionally not
   // sent back to the server and may never be used as a fallback locally.
   const response = await api.createPatientWearableSession(targetDeviceRef)
@@ -234,7 +255,6 @@ async function renewPatientSession (deviceRef, expiredSessionId, expectedPatient
   if (expiredSessionId && session.wearableSessionId === text(expiredSessionId)) {
     throw new Error('IoT 新会话不得复用已过期 sessionId')
   }
-  cacheSession(session)
   // A late renewal for a previously active device/patient must not overwrite
   // the global convenience context. The immutable snapshot remains available
   // to the caller for its own retry.
@@ -258,7 +278,6 @@ async function ensureIoTSession (deviceRef) {
   // cached device must never be retagged as the new device.
   if (!currentDeviceRef && current.wearableToken && current.wearableSessionId) current.deviceRef = targetDeviceRef
   if (isCompleteSession(current) && current.patientRef === patientRef && current.deviceRef === targetDeviceRef) {
-    cacheSession(current)
     return publishSessionIfCurrent(identity, current)
   }
 
@@ -291,7 +310,6 @@ async function ensureIoTSession (deviceRef) {
   if (!isCompleteSession(session) || (requestedPatientRef && session.patientRef !== requestedPatientRef) || session.deviceRef !== targetDeviceRef) {
     throw new Error('IoT 会话响应范围不完整')
   }
-  cacheSession(session)
   return publishSessionIfCurrent(identity, session)
 }
 
@@ -307,10 +325,44 @@ async function releaseWearableSession (deviceRef) {
   }
 }
 
+function sessionMatchesLiveContext (session) {
+  const context = appContext()
+  const patientRef = text(context.patientRef || context.patientId)
+  const deviceRef = text(context.wearableDeviceRef || context.deviceRef)
+  return patientRef === session.patientRef &&
+    (!deviceRef || deviceRef === session.deviceRef) &&
+    (!text(context.wearableSessionId) || text(context.wearableSessionId) === session.wearableSessionId) &&
+    (!text(context.wearableToken) || text(context.wearableToken) === session.wearableToken)
+}
+
+function isCurrentSessionSnapshot (session) {
+  const identity = sessionProvenance.get(session)
+  return identity ? mayPublishSession(identity) : sessionMatchesLiveContext(session)
+}
+
+function staleSessionError () {
+  const error = new Error('IoT 会话上下文已过期，已保留待当前作用域重试')
+  error.code = 'STALE_WEARABLE_CONTEXT'
+  error.statusCode = 409
+  return error
+}
+
+function enqueueStaleSnapshot (session, recordsByType, records) {
+  api.enqueue(createUploadBatch({
+    sessionId: session.wearableSessionId,
+    patientRef: session.patientRef,
+    deviceRef: session.deviceRef,
+    recordsByType,
+    records
+  }))
+  throw staleSessionError()
+}
+
 async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, session }) {
   const requestedDeviceRef = text(deviceRef || syncScope?.deviceRef)
-  const context = session && typeof session === 'object'
-    ? immutableSnapshot(sessionSnapshot(session))
+  const providedSession = session && typeof session === 'object' ? session : null
+  const context = providedSession
+    ? sessionSnapshot(providedSession)
     : await ensureIoTSession(requestedDeviceRef)
   if (!isCompleteSession(context)) throw new Error('IoT 会话范围不完整，无法上传健康数据')
   if (syncScope && (
@@ -323,6 +375,9 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, 
   if (requestedDeviceRef && requestedDeviceRef !== context.deviceRef) {
     throw new Error('上传设备作用域与 IoT 会话不一致')
   }
+  if (providedSession && !isCurrentSessionSnapshot(providedSession)) {
+    enqueueStaleSnapshot(context, recordsByType, records)
+  }
   const batch = createUploadBatch({
     sessionId: context.wearableSessionId,
     patientRef: context.patientRef,
@@ -332,6 +387,9 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, 
   })
   api.enqueue(batch)
   const scope = { patientRef: context.patientRef, deviceRef: context.deviceRef, sessionId: context.wearableSessionId }
+  if (providedSession && !isCurrentSessionSnapshot(providedSession)) {
+    throw staleSessionError()
+  }
   try {
     return await api.flushQueue({ baseUrl: context.iotBaseUrl, token: context.wearableToken, scope })
   } catch (error) {
