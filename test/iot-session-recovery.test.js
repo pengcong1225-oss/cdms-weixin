@@ -32,7 +32,7 @@ function loadScenario (uploadStatuses) {
           data: {
             code: 200,
             data: {
-              sessionId: 'session-old',
+              sessionId: 'session-new',
               patientRef: 'patient-1',
               deviceRef: 'device-1',
               uploadToken: 'fresh-token'
@@ -72,17 +72,14 @@ async function testRenewsPatientSessionAndRetriesOnce () {
 
   assert.deepStrictEqual(result, { accepted: 1, duplicates: 0, rejected: 0 })
   assert.strictEqual(scenario.sessionRequests.length, 1)
-  assert.deepStrictEqual(scenario.sessionRequests[0].data, {
-    deviceRef: 'device-1',
-    sessionId: 'session-old'
-  })
+  assert.deepStrictEqual(scenario.sessionRequests[0].data, { deviceRef: 'device-1' })
   assert.deepStrictEqual(scenario.sessionRequests[0].header, {
     Authorization: 'Bearer cdms-access-token'
   })
   assert.strictEqual(scenario.uploadRequests.length, 2)
   assert.strictEqual(scenario.uploadRequests[0].header.Authorization, 'Bearer expired-token')
   assert.strictEqual(scenario.uploadRequests[1].header.Authorization, 'Bearer fresh-token')
-  assert.strictEqual(scenario.uploadRequests[1].data.sessionId, 'session-old')
+  assert.strictEqual(scenario.uploadRequests[1].data.sessionId, 'session-new')
   assert.strictEqual(scenario.globalData.wearableToken, 'fresh-token')
   assert.deepStrictEqual(scenario.api.readQueue('patient-1'), [])
 }

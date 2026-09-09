@@ -184,6 +184,11 @@ class BleManager {
   }
 
   isBoundDeviceForeign() {
+    const patientRef = this.getContextPatientRef();
+    if (this.getContextRole() === "PATIENT" && patientRef &&
+      typeof storage.listBoundDevices === "function" && storage.listBoundDevices(patientRef).length) {
+      return false;
+    }
     return this.isBoundDeviceForeignFor(storage.getBoundDevice());
   }
 
@@ -191,8 +196,19 @@ class BleManager {
   // 异患者绑定：展示层面置为未绑定（boundDevice=null + foreignDevice=true），
   // 不删除绑定记录、不清健康历史；切回本人登录后再调用即可恢复展示。
   async refreshBoundDeviceOwnership() {
-    const boundDevice = storage.getBoundDevice();
-    const foreign = this.isBoundDeviceForeignFor(boundDevice);
+    const storedDevice = storage.getBoundDevice();
+    const patientRef = this.getContextPatientRef();
+    const patientDevices = this.getContextRole() === "PATIENT" && patientRef &&
+      typeof storage.listBoundDevices === "function"
+      ? storage.listBoundDevices(patientRef)
+      : [];
+    const activeDevice = this.activeDeviceId && typeof storage.getScopedBoundDevice === "function"
+      ? storage.getScopedBoundDevice(this.activeDeviceId, patientRef)
+      : null;
+    const boundDevice = patientDevices.length
+      ? (activeDevice || patientDevices[patientDevices.length - 1])
+      : storedDevice;
+    const foreign = !patientDevices.length && this.isBoundDeviceForeignFor(storedDevice);
     const patch = { foreignDevice: !!foreign };
     if (foreign) {
       if (this.activeDeviceId) this.markIntentionalDisconnect(this.activeDeviceId);
@@ -636,14 +652,17 @@ class BleManager {
 
   async unbind() {
     const previous = this.state.boundDevice;
+    const targetDeviceId = previous && previous.deviceId ? previous.deviceId : this.activeDeviceId;
     await this.disconnect();
     try {
-      await cdmsBridge.releaseWearableSession(previous && previous.deviceId);
+      await cdmsBridge.releaseWearableSession(targetDeviceId);
     } catch (error) {
       // 本地解绑必须完成；服务端释放失败会被记录，后续重新绑定时由会话校验再次修复。
       this.log(`服务端设备解绑未完成：${error && error.message ? error.message : "请求失败"}`);
     }
-    storage.clearBoundDevice();
+    if (typeof storage.clearBoundDevice === "function") {
+      storage.clearBoundDevice(targetDeviceId, this.getContextPatientRef());
+    }
     this.activeDeviceId = "";
     this.patch({
       boundDevice: null,

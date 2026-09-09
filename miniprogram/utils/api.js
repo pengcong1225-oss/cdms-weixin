@@ -1,26 +1,156 @@
 const queueKey = 'cdms.iot.wearable.upload.queue'
+const queueIndexKey = `${queueKey}.index`
 let refreshPromise = null
+const flushLocks = new Map()
 
-function queueStorageKey (scope) {
-  const safeScope = String(scope || 'anonymous').replace(/[^A-Za-z0-9_.-]/g, '_')
-  return `${queueKey}.${safeScope}`
+function safeScopePart (value) {
+  // Keep the old spelling for simple identifiers, while encoding separators
+  // instead of collapsing distinct patient/device refs (for example `a/b`
+  // and `a_b`) onto one storage key.
+  return encodeURIComponent(String(value || 'anonymous'))
 }
 
-function currentScope () {
+function currentPatientRef () {
   try {
     const app = typeof getApp === 'function' ? getApp() : null
-    return app?.globalData?.patientRef || app?.globalData?.mode || 'anonymous'
+    return app?.globalData?.patientRef || 'anonymous'
   } catch (_) { return 'anonymous' }
 }
 
-function readQueue (scope = currentScope()) {
-  const queue = wx.getStorageSync(queueStorageKey(scope)) || []
-  if (queue.length <= 1) return queue
-  const latest = queue.slice(-1)
-  writeQueue(latest, scope)
-  return latest
+function normalizeQueueScope (scope, deviceRef, sessionId) {
+  if (scope && typeof scope === 'object') {
+    return {
+      patientRef: String(scope.patientRef || currentPatientRef()).trim() || 'anonymous',
+      deviceRef: String(scope.deviceRef || scope.wearableDeviceRef || '').trim(),
+      sessionId: String(scope.sessionId || scope.wearableSessionId || '').trim()
+    }
+  }
+  return {
+    patientRef: String(scope || currentPatientRef()).trim() || 'anonymous',
+    deviceRef: String(deviceRef || '').trim(),
+    sessionId: String(sessionId || '').trim()
+  }
 }
-function writeQueue (queue, scope = currentScope()) { wx.setStorageSync(queueStorageKey(scope), queue.slice(-1000)) }
+
+function queueStorageKey (scope, deviceRef, sessionId) {
+  const normalized = normalizeQueueScope(scope, deviceRef, sessionId)
+  const patientPart = safeScopePart(normalized.patientRef)
+  if (!normalized.deviceRef) return `${queueKey}.${patientPart}`
+  const devicePart = safeScopePart(normalized.deviceRef)
+  const base = `${queueKey}.${patientPart}.${devicePart}`
+  return normalized.sessionId ? `${base}.${safeScopePart(normalized.sessionId)}` : base
+}
+
+function readStorage (key, fallback) {
+  try {
+    const value = wx.getStorageSync(key)
+    return value == null ? fallback : value
+  } catch (_) { return fallback }
+}
+
+function writeStorage (key, value) {
+  try { wx.setStorageSync(key, value) } catch (_) { /* best effort in tests/offline mode */ }
+}
+
+function readQueueIndex () {
+  const value = readStorage(queueIndexKey, [])
+  return Array.isArray(value) ? value.filter(item => item && item.key) : []
+}
+
+function registerQueueScope (scope) {
+  if (!scope.deviceRef) return
+  const key = queueStorageKey(scope)
+  const index = readQueueIndex()
+  if (index.some(item => item.key === key)) return
+  writeStorage(queueIndexKey, index.concat({
+    key,
+    patientRef: scope.patientRef,
+    deviceRef: scope.deviceRef,
+    sessionId: scope.sessionId || ''
+  }))
+}
+
+function unregisterQueueScope (key) {
+  const next = readQueueIndex().filter(item => item.key !== key)
+  writeStorage(queueIndexKey, next)
+}
+
+function readQueueAtKey (key) {
+  const queue = readStorage(key, [])
+  return Array.isArray(queue) ? queue.slice() : []
+}
+
+function writeQueueAtKey (key, queue, scope) {
+  writeStorage(key, queue.slice())
+  if (scope && scope.deviceRef) registerQueueScope(scope)
+  if (!queue.length && scope && scope.deviceRef) unregisterQueueScope(key)
+}
+
+function queueEntries (scope) {
+  const keys = []
+  if (scope.deviceRef) {
+    const exactSession = scope.sessionId
+    readQueueIndex().forEach(item => {
+      if (item.patientRef !== scope.patientRef || item.deviceRef !== scope.deviceRef) return
+      if (exactSession && item.sessionId !== exactSession) return
+      keys.push({ key: item.key, scope: normalizeQueueScope(item) })
+    })
+    const baseKey = queueStorageKey(scope.patientRef, scope.deviceRef)
+    if (!keys.some(item => item.key === baseKey)) keys.push({ key: baseKey, scope: normalizeQueueScope(scope.patientRef, scope.deviceRef, '') })
+    // A legacy patient queue may already contain device-tagged batches.
+    const legacyKey = queueStorageKey(scope.patientRef)
+    if (!keys.some(item => item.key === legacyKey)) keys.push({ key: legacyKey, scope: normalizeQueueScope(scope.patientRef) })
+  } else {
+    const legacyKey = queueStorageKey(scope.patientRef)
+    keys.push({ key: legacyKey, scope: normalizeQueueScope(scope.patientRef) })
+    readQueueIndex().forEach(item => {
+      if (item.patientRef === scope.patientRef && !keys.some(entry => entry.key === item.key)) {
+        keys.push({ key: item.key, scope: normalizeQueueScope(item) })
+      }
+    })
+  }
+  const entries = []
+  keys.forEach(source => {
+    readQueueAtKey(source.key).forEach((batch, index) => {
+      if (!batch || typeof batch !== 'object') return
+      if (scope.deviceRef && batch.deviceRef && String(batch.deviceRef) !== scope.deviceRef) return
+      if (scope.sessionId && batch.sessionId && String(batch.sessionId) !== scope.sessionId) return
+      entries.push({ key: source.key, scope: source.scope, batch, index })
+    })
+  })
+  return entries
+}
+
+function readQueue (scope = currentPatientRef(), deviceRef, sessionId) {
+  const normalized = normalizeQueueScope(scope, deviceRef, sessionId)
+  return queueEntries(normalized).map(entry => entry.batch)
+}
+
+function removeQueueEntry (entry) {
+  const queue = readQueueAtKey(entry.key)
+  const index = queue.findIndex(item => item && entry.batch && item.batchId && entry.batch.batchId
+    ? String(item.batchId) === String(entry.batch.batchId)
+    : item === entry.batch)
+  if (index < 0) return
+  queue.splice(index, 1)
+  writeQueueAtKey(entry.key, queue, entry.scope)
+}
+
+function appendQueueBatch (batch) {
+  const normalized = normalizeQueueScope(batch)
+  const storedBatch = Object.assign({}, batch)
+  if (!storedBatch.patientRef) storedBatch.patientRef = normalized.patientRef
+  if (normalized.deviceRef && !storedBatch.deviceRef) storedBatch.deviceRef = normalized.deviceRef
+  if (normalized.sessionId && !storedBatch.sessionId) storedBatch.sessionId = normalized.sessionId
+  const existing = queueEntries(normalized).some(entry => entry.batch.batchId && storedBatch.batchId &&
+    String(entry.batch.batchId) === String(batch.batchId))
+  if (existing) return false
+  const key = queueStorageKey(normalized)
+  const queue = readQueueAtKey(key)
+  queue.push(storedBatch)
+  writeQueueAtKey(key, queue, normalized)
+  return true
+}
 
 function request (url, method, data, token) {
   return new Promise((resolve, reject) => {
@@ -160,7 +290,9 @@ async function redeemHandoff (code) {
 
 async function createPatientWearableSession (deviceRef, sessionId) {
   const app = getApp()
-  return cdmsRequest('/api/v1/miniapp/iot/wearable-session', 'POST', { deviceRef, sessionId }, app.globalData.accessToken)
+  const payload = { deviceRef }
+  if (sessionId) payload.sessionId = sessionId
+  return cdmsRequest('/api/v1/miniapp/iot/wearable-session', 'POST', payload, app.globalData.accessToken)
 }
 
 async function releasePatientWearableSession (deviceRef) {
@@ -187,14 +319,106 @@ async function submitScaleMeasurement (payload) {
   return cdmsRequest('/api/v1/miniapp/iot/scale/measurements', 'POST', payload, app.globalData.accessToken)
 }
 
-async function flushQueue ({ baseUrl, token, scope }) {
-  const queueScope = scope || currentScope()
-  const queue = readQueue(queueScope)
-  if (!queue.length) return { accepted: 0, duplicates: 0, rejected: 0 }
-  const batch = queue[0]
-  const result = await request(`${baseUrl}/v1/wearable-upload-batches`, 'POST', batch, token)
-  writeQueue(queue.slice(1), queueScope)
-  return result
+function listQueueScopes () {
+  return readQueueIndex().map(item => Object.assign({}, item))
+}
+
+function mergeUploadResult (summary, result) {
+  if (!result || typeof result !== 'object') return summary
+  ;['accepted', 'duplicates', 'rejected'].forEach(key => {
+    const value = Number(result[key])
+    if (Number.isFinite(value)) summary[key] += value
+  })
+  return summary
+}
+
+async function flushQueueInternal ({ baseUrl, token, scope }) {
+  const summary = { accepted: 0, duplicates: 0, rejected: 0 }
+  while (true) {
+    const entries = queueEntries(scope)
+    const entry = entries[0]
+    if (!entry) return summary
+    const batch = entry.batch
+    if (scope.patientRef && String(batch.patientRef || '') !== scope.patientRef) {
+      const error = new Error('上传队列患者范围不一致')
+      error.code = 'QUEUE_SCOPE_MISMATCH'
+      error.statusCode = 409
+      throw error
+    }
+    if (!scope.deviceRef && String(batch.deviceRef || '')) {
+      const error = new Error('上传队列缺少设备范围')
+      error.code = 'QUEUE_SCOPE_MISMATCH'
+      error.statusCode = 409
+      throw error
+    }
+    if (scope.deviceRef && String(batch.deviceRef || '') !== scope.deviceRef) {
+      const error = new Error('上传队列设备范围不一致')
+      error.code = 'QUEUE_SCOPE_MISMATCH'
+      error.statusCode = 409
+      throw error
+    }
+    if (scope.sessionId && String(batch.sessionId || '') !== scope.sessionId) {
+      const error = new Error('上传队列会话范围不一致')
+      error.code = 'QUEUE_SCOPE_MISMATCH'
+      error.statusCode = 409
+      throw error
+    }
+    const result = await request(`${baseUrl}/v1/wearable-upload-batches`, 'POST', batch, token)
+    mergeUploadResult(summary, result)
+    removeQueueEntry(entry)
+  }
+}
+
+async function flushQueue (options = {}) {
+  const scope = normalizeQueueScope(options.scope || options.patientRef || currentPatientRef(), options.deviceRef, options.sessionId)
+  const key = queueStorageKey(scope)
+  if (flushLocks.has(key)) return flushLocks.get(key)
+  const promise = flushQueueInternal({ baseUrl: options.baseUrl, token: options.token, scope })
+    .finally(() => flushLocks.delete(key))
+  flushLocks.set(key, promise)
+  return promise
+}
+
+function rebindQueueSession ({ patientRef, deviceRef, fromSessionId, toSessionId }) {
+  const sourceScope = normalizeQueueScope({ patientRef, deviceRef, sessionId: fromSessionId })
+  const targetScope = normalizeQueueScope({ patientRef, deviceRef, sessionId: toSessionId })
+  if (!sourceScope.deviceRef || !sourceScope.sessionId || !targetScope.sessionId) return 0
+  if (sourceScope.sessionId === targetScope.sessionId) return 0
+  const sourceEntries = queueEntries(sourceScope).filter(entry =>
+    String(entry.batch.deviceRef || '') === sourceScope.deviceRef &&
+    String(entry.batch.patientRef || '') === sourceScope.patientRef &&
+    String(entry.batch.sessionId || '') === sourceScope.sessionId)
+  if (!sourceEntries.length) return 0
+
+  const targetKey = queueStorageKey(targetScope)
+  const targetQueue = readQueueAtKey(targetKey)
+  const seenBatchIds = new Set(targetQueue.map(item => item && item.batchId).filter(Boolean).map(String))
+  const removals = new Map()
+  let moved = 0
+  sourceEntries.forEach(entry => {
+    const batchId = entry.batch && entry.batch.batchId ? String(entry.batch.batchId) : ''
+    if (!batchId || !seenBatchIds.has(batchId)) {
+      if (batchId) seenBatchIds.add(batchId)
+      targetQueue.push(Object.assign({}, entry.batch, {
+        patientRef: targetScope.patientRef,
+        deviceRef: targetScope.deviceRef,
+        sessionId: targetScope.sessionId
+      }))
+      moved += 1
+    }
+    if (!removals.has(entry.key)) removals.set(entry.key, new Set())
+    removals.get(entry.key).add(batchId || `__index__${entry.index}`)
+  })
+  if (moved) writeQueueAtKey(targetKey, targetQueue, targetScope)
+  removals.forEach((batchIds, key) => {
+    const sourceQueue = readQueueAtKey(key).filter((item, index) => {
+      const identity = item && item.batchId ? String(item.batchId) : `__index__${index}`
+      return !batchIds.has(identity)
+    })
+    const sourceScopeForKey = readQueueIndex().find(item => item.key === key) || sourceScope
+    writeQueueAtKey(key, sourceQueue, sourceScopeForKey)
+  })
+  return moved
 }
 
 async function exchangeHandoff ({ managerBaseUrl, handoffCode, deviceRef }) {
@@ -204,8 +428,8 @@ async function exchangeHandoff ({ managerBaseUrl, handoffCode, deviceRef }) {
 }
 
 function enqueue (batch) {
-  const scope = batch?.patientRef || currentScope()
-  writeQueue([batch], scope)
+  if (!batch || typeof batch !== 'object') return false
+  return appendQueueBatch(batch)
 }
 
-module.exports = { enqueue, flushQueue, exchangeHandoff, readQueue, queueStorageKey, request, cdmsRequest, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
+module.exports = { enqueue, flushQueue, rebindQueueSession, exchangeHandoff, readQueue, listQueueScopes, queueStorageKey, request, cdmsRequest, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }

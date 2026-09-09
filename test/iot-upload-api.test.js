@@ -17,9 +17,11 @@ storage.set(api.queueStorageKey('patient-legacy'), [
   { batchId: 'legacy-latest', patientRef: 'patient-legacy' }
 ])
 assert.deepStrictEqual(api.readQueue('patient-legacy'), [
+  { batchId: 'legacy-old', patientRef: 'patient-legacy' },
   { batchId: 'legacy-latest', patientRef: 'patient-legacy' }
 ])
 assert.deepStrictEqual(storage.get(api.queueStorageKey('patient-legacy')), [
+  { batchId: 'legacy-old', patientRef: 'patient-legacy' },
   { batchId: 'legacy-latest', patientRef: 'patient-legacy' }
 ])
 
@@ -27,6 +29,7 @@ api.enqueue({ batchId: 'batch-old', patientRef: 'patient-1' })
 api.enqueue({ batchId: 'batch-latest', patientRef: 'patient-1' })
 
 assert.deepStrictEqual(api.readQueue('patient-1'), [
+  { batchId: 'batch-old', patientRef: 'patient-1' },
   { batchId: 'batch-latest', patientRef: 'patient-1' }
 ])
 

@@ -90,7 +90,15 @@ Page({
   async retry () {
     const context = await cdmsBridge.ensureIoTSession(this.deviceId || 'retry')
     if (!context.iotBaseUrl || !context.wearableToken) throw new Error('缺少 IoT 会话配置')
-    await api.flushQueue({ baseUrl: context.iotBaseUrl, token: context.wearableToken, scope: context.patientRef })
+    await api.flushQueue({
+      baseUrl: context.iotBaseUrl,
+      token: context.wearableToken,
+      scope: {
+        patientRef: context.patientRef,
+        deviceRef: context.deviceRef,
+        sessionId: context.wearableSessionId
+      }
+    })
     this.setData({ queued: api.readQueue().length })
   }
 })
