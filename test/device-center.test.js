@@ -43,20 +43,37 @@ for (const route of [
   'pages/device-scale/station/index',
   'pages/scale-checkin/index',
   'pages/device-mfa1/index',
+  'pages/device-mfa1/mode/index',
+  'pages/device-mfa1/direct/index',
   'pages/device-sunvou/index'
 ]) {
   assert.ok(appJson.pages.includes(route), `missing route: ${route}`)
 }
 
 // 目录项必须导航到真实工作站页面，不允许占位提示
-assert.ok(deviceJs.includes('/pages/device-mfa1/index'))
+// MFA-1 目录项进入模式选择页（扫码轮测/单人直测二选一，与体脂秤目录同构）
+assert.ok(deviceJs.includes('/pages/device-mfa1/mode/index'))
 assert.ok(deviceJs.includes('/pages/device-sunvou/index'))
 assert.ok(!deviceJs.includes('即将开放'))
+
+// ---- MFA-1 模式选择页（双入口） ----
+
+for (const ext of ['js', 'json', 'wxml', 'wxss']) {
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'miniprogram', 'pages/device-mfa1/mode/index.' + ext)), 'missing file: pages/device-mfa1/mode/index.' + ext)
+}
+const mfa1ModeJs = read('pages/device-mfa1/mode/index.js')
+const mfa1ModeWxml = read('pages/device-mfa1/mode/index.wxml')
+assert.ok(mfa1ModeJs.includes("ensureSession({ role: 'DOCTOR' })"), '模式选择页仅医生可用')
+assert.ok(mfa1ModeJs.includes("'/pages/device-mfa1/index'"), '扫码轮测为推荐主入口')
+assert.ok(mfa1ModeJs.includes("'/pages/device-mfa1/direct/index'"), '单人直接测量为备用入口')
+assert.ok(mfa1ModeWxml.includes('扫码轮测') && mfa1ModeWxml.includes('单人直接测量'))
 
 
 // ---- 组件声明（防止引用未注册组件） ----
 
 const usingComponents = rel => JSON.parse(read(rel)).usingComponents || {}
+assert.ok(usingComponents('pages/device-mfa1/mode/index.json')['app-header'])
+assert.ok(usingComponents('pages/device-mfa1/mode/index.json')['state-panel'])
 assert.ok(usingComponents('pages/device-scale/mode/index.json')['app-header'])
 assert.ok(usingComponents('pages/device-scale/mode/index.json')['state-panel'])
 assert.ok(usingComponents('pages/device-scale/station/index.json')['form-section'])

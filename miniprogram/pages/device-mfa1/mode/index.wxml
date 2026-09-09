@@ -1,0 +1,29 @@
+<view class="page mode-page">
+  <app-header title="MFA-1 工作方式" subtitle="选择适合现场的测量流程" showBack="{{true}}" bindback="goBack" />
+  <state-panel wx:if="{{errorText}}" state="error" title="无法进入设备工作站" message="{{errorText}}" />
+  <view wx:else class="mode-stack">
+    <view class="mode-intro card">
+      <view class="eyebrow">医生设备中心</view>
+      <view class="mode-title">MFA-1 血糖仪测量</view>
+      <view class="mode-text">两种模式共用同一台 MFA-1 血糖仪和确认落库流程，患者身份由服务端权限校验。</view>
+    </view>
+    <view class="mode-card card" bindtap="openStation">
+      <view class="mode-icon primary-icon">轮</view>
+      <view class="mode-copy">
+        <view class="mode-name">扫码轮测</view>
+        <view class="mode-desc">创建场次并展示二维码，患者扫码排队，医生逐位叫号确认</view>
+        <view class="mode-badge">推荐 · 现场多人使用</view>
+      </view>
+      <text class="chevron">›</text>
+    </view>
+    <view class="mode-card card" bindtap="openDirect">
+      <view class="mode-icon secondary-icon">单</view>
+      <view class="mode-copy">
+        <view class="mode-name">单人直接测量</view>
+        <view class="mode-desc">选择本院患者后直接连接血糖仪，适合患者没有智能手机时兜底</view>
+        <view class="mode-badge neutral-badge">备用 · 单个患者使用</view>
+      </view>
+      <text class="chevron">›</text>
+    </view>
+  </view>
+</view>

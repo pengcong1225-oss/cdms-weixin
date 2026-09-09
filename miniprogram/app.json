@@ -6,6 +6,8 @@
     "pages/health-record/index",
     "pages/device/device",
     "pages/device-mfa1/index",
+    "pages/device-mfa1/mode/index",
+    "pages/device-mfa1/direct/index",
     "pages/device-sunvou/index",
     "pages/device-scale/mode/index",
     "pages/device-scale/index",

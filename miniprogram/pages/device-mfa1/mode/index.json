@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "MFA-1 工作方式",
+  "usingComponents": {
+    "app-header": "/components/app-header/app-header",
+    "state-panel": "/components/state-panel/state-panel"
+  }
+}

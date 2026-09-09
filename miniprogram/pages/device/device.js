@@ -198,7 +198,7 @@ Page({
       return;
     }
     if (entry.key === "mfa1") {
-      wx.navigateTo({ url: "/pages/device-mfa1/index" });
+      wx.navigateTo({ url: "/pages/device-mfa1/mode/index" });
       return;
     }
     if (entry.key === "sunvou") {
