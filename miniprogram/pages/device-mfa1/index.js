@@ -324,6 +324,8 @@ Page({
       }
       this.applyStation(station)
       await this.refreshStation(stationId || station.id || station.stationId)
+      // v2：医生视图不再下发明文 checkinToken，二维码须走 /qr 端点签发一次（§12.2）
+      await this.issueQrForStation(stationId || station.id || station.stationId)
     } catch (error) {
       this.settleActionIfRejected('station-create', error)
       this.setData({ errorText: error.message || '场次创建失败' })
@@ -377,7 +379,9 @@ Page({
       stationId: nextStationId,
       stationStatus: valueText(station.status, 'OPEN'),
       checkinToken: nextToken,
-      qrPayload: createCheckinPayload(nextStationId, nextToken),
+      // v2 场次视图无明文 token，二维码由 /qr 端点签发（issueQrForStation 管理 qrPayload）；
+      // v1 灰度响应仍带 checkinToken 时才本地拼接，避免 v2 下把已签发的 payload 清空。
+      qrPayload: nextToken ? createCheckinPayload(nextStationId, nextToken) : this.data.qrPayload,
       tokenExpiresAt: valueText(station.tokenExpiresAt),
       queue,
       currentQueueItem,
@@ -394,6 +398,34 @@ Page({
           ? '等待下一位患者'
           : '场次已关闭'
     }, () => this.drawCheckinQr())
+  },
+
+  /**
+   * 签发并渲染场次二维码（v2 §12.2）：调 /qr 端点拿一次性 qrPayload 后绘制。
+   * v1 灰度（响应带 checkinToken）时沿用本地拼接；两者都不可得则保持面板隐藏并提示。
+   */
+  async issueQrForStation (stationId) {
+    const target = valueText(stationId, this.data.stationId)
+    if (!target) return
+    try {
+      if (stationApi.getStationApiVersion() === 'v2') {
+        const issued = await stationApi.issueStationQr(target)
+        if (issued.qrPayload) {
+          this.setData({ qrPayload: issued.qrPayload, tokenExpiresAt: issued.tokenExpiresAt || this.data.tokenExpiresAt }, () => this.drawCheckinQr())
+          return
+        }
+        // v2 但签发为空：清掉旧 payload 让面板隐藏，避免展示过期码
+        this.setData({ qrPayload: '' }, () => this.drawCheckinQr())
+        this.setData({ statusText: '二维码签发失败，请重试' })
+        return
+      }
+      // v1 灰度：从场次视图取 checkinToken 本地拼接
+      const station = this.data.stationId ? await stationApi.getStation(target) : null
+      const token = valueText(station && station.checkinToken, this.data.checkinToken)
+      this.setData({ qrPayload: createCheckinPayload(target, token) }, () => this.drawCheckinQr())
+    } catch (error) {
+      this.setData({ errorText: error.message || '二维码签发失败' })
+    }
   },
 
   drawCheckinQr () {

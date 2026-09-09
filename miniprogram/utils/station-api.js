@@ -216,6 +216,18 @@ async function createStation (payload = {}) {
   return normalizeStation(await requestStation(stationPathPrefix(), 'POST', body))
 }
 
+/**
+ * 医生签发本场次签到二维码（v2 §12.2）：POST prefix/stationId/qr。
+ * 响应仅 qrPayload（服务端构造的 JSON 字符串，前端直接渲染成码）；
+ * 原始 token 只在该响应出现一次，医生视图/场次查询均不再下发明文 token。
+ */
+async function issueStationQr (stationId) {
+  const path = stationPath(stationId, '/qr')
+  const response = await requestStation(path, 'POST', writePayload({}, 'station-qr'))
+  const data = unwrap(response) || {}
+  return { qrPayload: toText(data.qrPayload), tokenExpiresAt: toText(data.tokenExpiresAt) }
+}
+
 async function getStation (stationId) {
   return normalizeStation(await requestStation(stationPath(stationId), 'GET', null))
 }
@@ -446,6 +458,7 @@ module.exports = {
   createCheckinByToken,
   createIdempotencyKey,
   createStation,
+  issueStationQr,
   getStationApiVersion,
   getMyQueue,
   getStation,

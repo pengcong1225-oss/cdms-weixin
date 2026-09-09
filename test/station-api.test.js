@@ -118,6 +118,11 @@ assert.notStrictEqual(keyA, keyB)
     assert.strictEqual(calls[9].body.deviceType, 'MFA1', 'createStation 必须透传 deviceType')
     assert.ok(calls[9].body.idempotencyKey.startsWith('station-create-'))
 
+    // v2 §12.2：医生二维码签发端点（qrPayload 一次性下发，医生视图无明文 token）
+    await stationApi.issueStationQr('197')
+    assert.strictEqual(calls[10].path, '/api/v1/miniapp/scale/stations/197/qr')
+    assert.strictEqual(calls[10].method, 'POST')
+
   } finally {
     api.cdmsRequest = originalCdmsRequest
     stationApi.setStationApiVersion('v2')
