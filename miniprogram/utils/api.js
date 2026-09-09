@@ -37,7 +37,12 @@ function request (url, method, data, token) {
         if (res.data?.code) error.code = res.data.code
         reject(error)
       },
-      fail: reject })
+      fail: err => {
+        // 网络层失败（DNS/SSL/断连等）没有 message，只有 errMsg——透传给调用方，避免被笼统的「登录失败/同步失败」吞掉
+        const error = new Error('网络请求失败: ' + ((err && err.errMsg) || 'unknown'))
+        error.errMsg = (err && err.errMsg) || ''
+        reject(error)
+      } })
   })
 }
 
@@ -124,7 +129,11 @@ function loginWithWechat ({ baseUrl, phone }) {
           wxCode: loginResult.code
         }, '').then(resolve).catch(reject)
       },
-      fail: reject
+      fail: err => {
+        const error = new Error('微信授权失败: ' + ((err && err.errMsg) || 'unknown'))
+        error.errMsg = (err && err.errMsg) || ''
+        reject(error)
+      }
     })
   })
 }
