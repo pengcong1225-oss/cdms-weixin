@@ -755,9 +755,12 @@ class BleManager {
     if (this.connectPromise || this.connectingDeviceId) this.connectionGeneration += 1;
     const deviceId = this.activeDeviceId;
     const sdk = this.sdk;
+    const disconnectGeneration = this.connectionGeneration;
     if (deviceId) this.markIntentionalDisconnect(deviceId);
     if (sdk) await sdk.disconnect("用户断开连接").catch(() => undefined);
     else if (deviceId) await new Promise((resolve) => wx.closeBLEConnection({ deviceId, complete: resolve }));
+    if (this.activeDeviceId !== deviceId || this.sdk !== sdk ||
+      this.connectionGeneration !== disconnectGeneration) return;
     this.disposeRuntime("用户断开连接");
     this.patch({ connectionState: "disconnected" });
   }

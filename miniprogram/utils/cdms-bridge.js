@@ -9,10 +9,12 @@ let contextRevision = 0
 let contextSignature = null
 const sessionGenerations = new Map()
 const sessionProvenance = new WeakMap()
-// Session creation/release for one patient/device must be serialized.  A
-// release invalidates the local generation before its DELETE starts; an
-// ensure that arrives during that DELETE waits before creating a replacement.
+// Session creation, renewal, and release for one patient/device must be
+// serialized. A release invalidates the local generation before its DELETE
+// starts; an ensure that arrives during that DELETE waits before creating a
+// replacement.
 const scopeLocks = new Map()
+const scopeEnsureFlights = new Map()
 
 function appContext () {
   const app = typeof getApp === 'function' ? getApp() : null
@@ -73,19 +75,20 @@ function invalidateSessionScope (patientRef, deviceRef) {
   sessionGenerations.set(key, sessionGeneration(patientRef, deviceRef) + 1)
 }
 
-function runScopeOperation (key, operation) {
-  const previous = scopeLocks.get(key) || Promise.resolve()
-  const current = previous.catch(() => undefined).then(operation)
+function runScopeOperation (key, operation, startImmediately = false) {
+  const previous = scopeLocks.get(key)
+  let current
+  if (!previous && startImmediately) {
+    try { current = Promise.resolve(operation()) } catch (error) { current = Promise.reject(error) }
+  } else {
+    current = (previous || Promise.resolve()).catch(() => undefined).then(operation)
+  }
   scopeLocks.set(key, current)
   current.then(
     () => { if (scopeLocks.get(key) === current) scopeLocks.delete(key) },
     () => { if (scopeLocks.get(key) === current) scopeLocks.delete(key) }
   )
   return current
-}
-
-function pendingScopeOperation (key) {
-  return scopeLocks.get(key) || null
 }
 
 function readSessionCache () {
@@ -197,6 +200,17 @@ function operationGuardIsCurrent (guard) {
     return false
   }
   return false
+}
+
+function sameAuthIdentity (left, right) {
+  if (!left || !right) return false
+  return left.contextRevision === right.contextRevision &&
+    left.patientRef === right.patientRef &&
+    left.activeRole === right.activeRole &&
+    left.identityId === right.identityId &&
+    left.accessToken === right.accessToken &&
+    left.refreshToken === right.refreshToken &&
+    left.authGeneration === right.authGeneration
 }
 
 function captureInvocationProvenance (context, requestedDeviceRef, providedSession) {
@@ -333,7 +347,7 @@ function canRenewPatientSession (context) {
     !!context.patientRef
 }
 
-async function renewPatientSession (deviceRef, expiredSessionId, expectedPatientRef) {
+async function renewPatientSessionUnlocked (deviceRef, expiredSessionId, expectedPatientRef) {
   const context = appContext()
   const targetDeviceRef = text(deviceRef)
   if (!canRenewPatientSession(context) || !targetDeviceRef) {
@@ -366,16 +380,23 @@ async function renewPatientSession (deviceRef, expiredSessionId, expectedPatient
   return publishSessionIfCurrent(identity, session)
 }
 
-async function ensureIoTSession (deviceRef) {
+function renewPatientSession (deviceRef, expiredSessionId, expectedPatientRef) {
+  const context = appContext()
+  const targetDeviceRef = text(deviceRef)
+  const patientRef = text(context.patientRef || context.patientId) || 'anonymous'
+  return runScopeOperation(
+    sessionKey(patientRef, targetDeviceRef),
+    () => renewPatientSessionUnlocked(targetDeviceRef, expiredSessionId, expectedPatientRef),
+    true
+  )
+}
+
+async function ensureIoTSessionUnlocked (targetDeviceRef) {
   let context = appContext()
-  const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
   if (!targetDeviceRef) throw new Error('缺少设备标识，无法建立 IoT 会话')
-  const initialPatientRef = text(context.patientRef || context.patientId) || 'anonymous'
-  const scopeLock = pendingScopeOperation(sessionKey(initialPatientRef, targetDeviceRef))
-  if (scopeLock) await scopeLock.catch(() => undefined)
-  // The release may have cleared the old snapshot while we were waiting.  A
-  // fresh identity also prevents the old session generation from publishing.
-  context = appContext()
+  // The release may have cleared the old snapshot before this scoped
+  // operation starts. A fresh identity also prevents an old session
+  // generation from publishing.
   const identity = beginSessionRequest(context, targetDeviceRef)
   const requestedPatientRef = identity.patientRef
   const patientRef = requestedPatientRef || 'anonymous'
@@ -422,6 +443,25 @@ async function ensureIoTSession (deviceRef) {
     throw new Error('IoT 会话响应范围不完整')
   }
   return publishSessionIfCurrent(identity, session)
+}
+
+function ensureIoTSession (deviceRef) {
+  const context = appContext()
+  const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
+  if (!targetDeviceRef) return Promise.reject(new Error('缺少设备标识，无法建立 IoT 会话'))
+  const patientRef = text(context.patientRef || context.patientId) || 'anonymous'
+  const key = sessionKey(patientRef, targetDeviceRef)
+  const auth = authIdentity(context)
+  const existing = scopeEnsureFlights.get(key)
+  if (existing && sameAuthIdentity(existing.auth, auth)) return existing.promise
+  const operation = runScopeOperation(key, () => ensureIoTSessionUnlocked(targetDeviceRef), true)
+  const flight = { auth, promise: operation }
+  scopeEnsureFlights.set(key, flight)
+  const clearFlight = () => {
+    if (scopeEnsureFlights.get(key) === flight) scopeEnsureFlights.delete(key)
+  }
+  operation.then(clearFlight, clearFlight)
+  return operation
 }
 
 function releaseWearableSession (deviceRef) {

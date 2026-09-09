@@ -1025,15 +1025,21 @@ async function c19ReleaseInvalidatesPendingEnsureBeforeDelete () {
   })
   const firstEnsure = scenario.bridge.ensureIoTSession('ring-a')
   const release = scenario.bridge.releaseWearableSession('ring-a')
-  for (let i = 0; i < 10 && (!pendingEnsure || !pendingRelease); i += 1) {
+  for (let i = 0; i < 10 && !pendingEnsure; i += 1) {
     await new Promise(resolve => setImmediate(resolve))
   }
+  assert.strictEqual(typeof pendingEnsure?.success, 'function')
+  assert.strictEqual(pendingRelease, undefined, 'release DELETE must wait for the pending ensure POST')
   pendingEnsure.success({ statusCode: 200, data: { data: {
     sessionId: 'session-stale', patientRef: 'patient-a', deviceRef: 'ring-a',
     uploadToken: 'token-stale', iotBaseUrl: 'https://iot-stale'
   } } })
   await firstEnsure
   assert.strictEqual(globalData.wearableToken, '', 'pending ensure must not republish while release is in flight')
+  for (let i = 0; i < 10 && !pendingRelease; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof pendingRelease?.success, 'function')
   pendingRelease.success({ statusCode: 200, data: {} })
   await release
   const fresh = await scenario.bridge.ensureIoTSession('ring-a')
@@ -1477,6 +1483,222 @@ async function c27ReleaseAndEnsureSerializeSameDeviceScope () {
   assert.strictEqual(globalData.wearableSessionId, 'session-fresh')
 }
 
+async function c28UnbindPendingDisconnectDoesNotDisposeNewConnection () {
+  const values = new Map()
+  const globalData = { activeRole: 'PATIENT', patientRef: 'patient-a' }
+  global.getApp = () => ({ globalData })
+  global.wx = {
+    getStorageSync: key => values.get(key),
+    setStorageSync: (key, value) => values.set(key, value),
+    removeStorageSync: key => values.delete(key)
+  }
+  clearModules()
+  let resolveBDisconnect
+  let disconnectCalls = 0
+  let aDisposeCount = 0
+  const sdkB = {
+    dispose: () => {},
+    disconnect: () => {
+      disconnectCalls += 1
+      if (disconnectCalls === 1) return new Promise(resolve => { resolveBDisconnect = resolve })
+      return Promise.resolve()
+    },
+    onDeviceEvent: () => () => {},
+    setMonitoring: async () => {}
+  }
+  const sdkA = {
+    dispose: () => { aDisposeCount += 1 },
+    disconnect: async () => {},
+    onDeviceEvent: () => () => {},
+    setMonitoring: async () => {},
+    readPower: async () => ({ level: 90 }),
+    readFirmwareVersion: async () => '1.0.1',
+    readBleAddress: async () => 'AA:BB:CC:DD:EE:02'
+  }
+  mockModule(bridgePath, { releaseWearableSession: async () => {} })
+  mockModule(bleSdkPath, {
+    RingSdk: {
+      prepareAutoPassword: () => {},
+      connect: async () => sdkA
+    }
+  })
+  const storage = require(storagePath)
+  const manager = require(bleManagerPath)
+  storage.saveBoundDevice({ deviceId: 'ring-b', ownerPatientRef: 'patient-a', name: 'B' })
+  manager.sdk = sdkB
+  manager.activeDeviceId = 'ring-b'
+  manager.connectionGeneration = 1
+  manager.state = Object.assign({}, manager.state, {
+    connectionState: 'connected',
+    boundDevice: { deviceId: 'ring-b', ownerPatientRef: 'patient-a', name: 'B' }
+  })
+
+  const unbinding = manager.unbind('ring-b')
+  for (let i = 0; i < 10 && typeof resolveBDisconnect !== 'function'; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof resolveBDisconnect, 'function')
+
+  const connectedA = await manager.connect({ deviceId: 'ring-a', name: 'A' })
+  assert.strictEqual(connectedA.deviceId, 'ring-a', 'A must commit while B disconnect is pending')
+  assert.strictEqual(manager.state.connectionState, 'connected')
+  assert.strictEqual(manager.sdk, sdkA)
+
+  resolveBDisconnect()
+  await unbinding
+  assert.strictEqual(manager.state.connectionState, 'connected', 'late B disconnect must not patch A as disconnected')
+  assert.strictEqual(manager.activeDeviceId, 'ring-a')
+  assert.strictEqual(manager.sdk, sdkA, 'late B disconnect must not replace the active A SDK')
+  assert.strictEqual(aDisposeCount, 0, 'late B disconnect must not dispose A runtime')
+}
+
+async function c29ConcurrentEnsureSingleFlightsSameScope () {
+  let createCalls = 0
+  const creates = []
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-a', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: '', wearableToken: '', wearableSessionId: '', wearableDeviceRef: ''
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      if (options.method === 'POST') {
+        createCalls += 1
+        creates.push(options)
+      }
+    }
+  })
+  const first = scenario.bridge.ensureIoTSession('ring-a')
+  const second = scenario.bridge.ensureIoTSession('ring-a')
+  assert.strictEqual(createCalls, 1, 'concurrent ensure calls must share one in-flight POST')
+  const response = { statusCode: 200, data: { data: {
+    sessionId: 'session-a', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-a', iotBaseUrl: 'https://iot-a'
+  } } }
+  creates.forEach(options => options.success(response))
+  const sessions = await Promise.all([first, second])
+  assert.strictEqual(sessions[0].wearableSessionId, 'session-a')
+  assert.strictEqual(sessions[1].wearableSessionId, 'session-a')
+}
+
+async function c30EnsureWaitsForPendingPostBeforeRelease () {
+  let pendingCreate
+  let pendingDelete
+  let deleteCalls = 0
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-a', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: '', wearableToken: '', wearableSessionId: '', wearableDeviceRef: 'ring-a'
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      if (options.method === 'DELETE') {
+        deleteCalls += 1
+        pendingDelete = options
+        return
+      }
+      pendingCreate = options
+    }
+  })
+  const ensuring = scenario.bridge.ensureIoTSession('ring-a')
+  for (let i = 0; i < 10 && !pendingCreate; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof pendingCreate?.success, 'function')
+  const releasing = scenario.bridge.releaseWearableSession('ring-a')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.strictEqual(deleteCalls, 0, 'release must wait for the in-flight ensure POST')
+
+  pendingCreate.success({ statusCode: 200, data: { data: {
+    sessionId: 'session-stale', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-stale', iotBaseUrl: 'https://iot-stale'
+  } } })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.strictEqual(deleteCalls, 1, 'release must start DELETE after the ensure POST settles')
+  assert.strictEqual(globalData.wearableSessionId, '', 'released ensure must not republish the stale session')
+  pendingDelete.success({ statusCode: 200, data: {} })
+  await Promise.all([ensuring, releasing])
+  assert.strictEqual(globalData.wearableToken, '')
+  assert.strictEqual(globalData.wearableSessionId, '')
+}
+
+async function c31NewAuthEnsureDoesNotShareStaleFlight () {
+  let createCalls = 0
+  const creates = []
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-old', identityId: 'identity-old', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: '', wearableToken: '', wearableSessionId: '', wearableDeviceRef: ''
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      if (options.method === 'POST') {
+        createCalls += 1
+        creates.push(options)
+      }
+    }
+  })
+  const first = scenario.bridge.ensureIoTSession('ring-a')
+  assert.strictEqual(createCalls, 1)
+  Object.assign(globalData, { accessToken: 'access-new', identityId: 'identity-new' })
+  const second = scenario.bridge.ensureIoTSession('ring-a')
+  creates[0].success({ statusCode: 200, data: { data: {
+    sessionId: 'session-old', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-old', iotBaseUrl: 'https://iot-old'
+  } } })
+  await first
+  for (let i = 0; i < 10 && createCalls < 2; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(createCalls, 2, 'a new auth provenance must not share the old pending ensure flight')
+  creates[1].success({ statusCode: 200, data: { data: {
+    sessionId: 'session-new', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-new', iotBaseUrl: 'https://iot-new'
+  } } })
+  const fresh = await second
+  assert.strictEqual(fresh.wearableSessionId, 'session-new')
+  assert.strictEqual(globalData.wearableSessionId, 'session-new')
+}
+
+async function c32RenewWaitsForPendingEnsureBeforeRelease () {
+  let pendingRenew
+  let pendingDelete
+  let deleteCalls = 0
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-a', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: 'https://iot-old', wearableToken: 'token-old', wearableSessionId: 'session-old', wearableDeviceRef: 'ring-a'
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      if (options.method === 'DELETE') {
+        deleteCalls += 1
+        pendingDelete = options
+        return
+      }
+      pendingRenew = options
+    }
+  })
+  const renewing = scenario.bridge.renewPatientSession('ring-a', 'session-old', 'patient-a')
+  for (let i = 0; i < 10 && !pendingRenew; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof pendingRenew?.success, 'function')
+  const releasing = scenario.bridge.releaseWearableSession('ring-a')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.strictEqual(deleteCalls, 0, 'release must wait for a pending renewal POST')
+
+  pendingRenew.success({ statusCode: 200, data: { data: {
+    sessionId: 'session-renewed', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-renewed', iotBaseUrl: 'https://iot-new'
+  } } })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.strictEqual(deleteCalls, 1, 'release must DELETE after renewal settles')
+  pendingDelete.success({ statusCode: 200, data: {} })
+  await Promise.all([renewing, releasing])
+  assert.strictEqual(globalData.wearableSessionId, '', 'release must clear the renewed session context')
+}
+
 async function run () {
   const cases = [
     ['C1 always scopes every upload', c1AlwaysScopesEveryUpload],
@@ -1518,7 +1740,12 @@ async function run () {
     ['C24 cancelled B connect notifies restored active A', c24CancelledBConnectNotifiesRestoredActiveA],
     ['C25 cancelled B during pending stop scan restores A', c25CancelledBDuringPendingStopScanRestoresA],
     ['C26 unbind release rechecks active generation', c26UnbindReleaseRechecksActiveGeneration],
-    ['C27 release and ensure serialize same device scope', c27ReleaseAndEnsureSerializeSameDeviceScope]
+    ['C27 release and ensure serialize same device scope', c27ReleaseAndEnsureSerializeSameDeviceScope],
+    ['C28 unbind pending disconnect does not dispose new connection', c28UnbindPendingDisconnectDoesNotDisposeNewConnection],
+    ['C29 concurrent ensure single-flights same scope', c29ConcurrentEnsureSingleFlightsSameScope],
+    ['C30 ensure waits for pending POST before release', c30EnsureWaitsForPendingPostBeforeRelease],
+    ['C31 new auth ensure does not share stale flight', c31NewAuthEnsureDoesNotShareStaleFlight],
+    ['C32 renewal waits before release', c32RenewWaitsForPendingEnsureBeforeRelease]
   ]
   let failures = 0
   for (const [name, scenario] of cases) {
