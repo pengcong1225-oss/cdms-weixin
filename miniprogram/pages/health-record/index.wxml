@@ -1,0 +1,146 @@
+<view class="page health-record-page">
+  <view class="record-topbar">
+    <view class="record-title">健康档案</view>
+    <view class="record-caption">本人档案信息与随访记录</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-text">加载中…</view>
+
+  <block wx:else>
+    <!-- 基本档案（患者 360，只读） -->
+    <view class="section-title">基本档案<text class="section-caption">来自患者 360 建档信息</text></view>
+
+    <view wx:if="{{profileError}}" class="card empty-card">
+      <view class="empty-title">档案加载失败</view>
+      <view class="empty-text">{{profileError}}</view>
+      <button class="primary-button" bindtap="retryProfile">重试</button>
+    </view>
+
+    <block wx:elif="{{profileReady}}">
+      <view class="card profile-card">
+        <view class="profile-head">基本信息</view>
+        <view class="info-grid">
+          <view class="info-item" wx:for="{{basicRows}}" wx:key="label">
+            <view class="info-label">{{item.label}}</view>
+            <view class="info-value">{{item.value}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="card profile-card">
+        <view class="profile-head">肺功能与分级</view>
+        <view class="info-grid">
+          <view class="info-item" wx:for="{{lungRows}}" wx:key="label">
+            <view class="info-label">{{item.label}}</view>
+            <view class="info-value">{{item.value}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="card profile-card">
+        <view class="profile-head">用药方案</view>
+        <block wx:if="{{hasDrugs}}">
+          <view class="drug-group" wx:for="{{drugGroups}}" wx:key="label" wx:for-item="group">
+            <view class="drug-label">{{group.label}}</view>
+            <view class="drug-tags">
+              <view class="drug-tag" wx:for="{{group.tags}}" wx:key="*this">{{item}}</view>
+            </view>
+          </view>
+        </block>
+        <view wx:else class="profile-empty">暂无用药记录</view>
+      </view>
+
+      <view class="card profile-card">
+        <view class="profile-head">随访概要</view>
+        <view class="info-grid">
+          <view class="info-item" wx:for="{{summaryRows}}" wx:key="label">
+            <view class="info-label">{{item.label}}</view>
+            <view class="info-value">{{item.value}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="card profile-card">
+        <view class="profile-head">风险与状态</view>
+        <view class="info-grid">
+          <view class="info-item" wx:for="{{riskRows}}" wx:key="label">
+            <view class="info-label">{{item.label}}</view>
+            <view class="info-value">{{item.value}}</view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- 随访记录 -->
+    <view class="section-title">随访记录<text class="section-caption">{{listTotal ? '共 ' + listTotal + ' 条' : ''}}</text></view>
+
+    <view wx:if="{{listLoading}}" class="loading-text">随访记录加载中…</view>
+    <view wx:elif="{{listError && !followups.length}}" class="card empty-card">
+      <view class="empty-title">随访记录加载失败</view>
+      <view class="empty-text">{{listError}}</view>
+      <button class="primary-button" bindtap="retryList">重试</button>
+    </view>
+    <view wx:elif="{{!followups.length}}" class="card empty-card">
+      <view class="empty-illustration">随</view>
+      <view class="empty-title">暂无随访记录</view>
+      <view class="empty-text">医生完成随访后会显示在这里</view>
+    </view>
+
+    <block wx:if="{{followups.length}}">
+      <view class="card followup-list">
+        <view
+          wx:for="{{followups}}"
+          wx:key="id"
+          class="followup-row"
+          data-id="{{item.id}}"
+          bindtap="openFollowUpDetail"
+        >
+          <view class="followup-main">
+            <view class="followup-date">{{item.visitDateText}}</view>
+            <view class="followup-meta">
+              <text class="followup-chip">{{item.visitTypeText}}</text>
+              <text class="followup-meta-item">CAT {{item.catScoreText}}</text>
+              <text class="followup-meta-item">{{item.diseaseStatusText}}</text>
+            </view>
+          </view>
+          <view class="followup-side">
+            <view class="followup-next">下次随访</view>
+            <view class="followup-next-date">{{item.nextVisitDateText}}</view>
+          </view>
+          <text class="followup-arrow">›</text>
+        </view>
+        <view wx:if="{{listLoadingMore}}" class="list-more">加载中…</view>
+        <view wx:elif="{{hasMore}}" class="list-more list-more-btn" bindtap="loadMoreFollowUps">加载更多</view>
+        <view wx:else class="list-more list-more-end">没有更多了</view>
+      </view>
+      <view wx:if="{{listError}}" class="list-error-line">
+        <text>{{listError}}</text>
+        <text class="list-error-retry" bindtap="loadMoreFollowUps">重试</text>
+      </view>
+    </block>
+  </block>
+
+  <!-- 随访详情弹层 -->
+  <view wx:if="{{detailShow}}" class="detail-mask" bindtap="closeFollowUpDetail">
+    <view class="detail-panel" catchtap="noop">
+      <view class="detail-head">
+        <view class="detail-title">随访详情</view>
+        <view class="detail-close" bindtap="closeFollowUpDetail">✕</view>
+      </view>
+      <view wx:if="{{detailLoading}}" class="loading-text detail-loading">加载中…</view>
+      <view wx:elif="{{detailError}}" class="detail-error">
+        <view class="empty-text">{{detailError}}</view>
+        <button class="primary-button" bindtap="retryDetail">重试</button>
+      </view>
+      <scroll-view wx:else scroll-y class="detail-body">
+        <view class="detail-section" wx:for="{{detailSections}}" wx:key="title" wx:for-item="section">
+          <view class="detail-section-title">{{section.title}}</view>
+          <view class="detail-row" wx:for="{{section.rows}}" wx:key="label" wx:for-item="row">
+            <view class="detail-label">{{row.label}}</view>
+            <view class="detail-value">{{row.value}}</view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

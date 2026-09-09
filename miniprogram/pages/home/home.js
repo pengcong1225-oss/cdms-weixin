@@ -8,9 +8,7 @@ const deviceSettings = require("../../utils/device-settings");
 
 // 业务入口图标（与 workspace-entry.js 中 PATIENT/DOCTOR 的 key 对应）
 const WORKSPACE_ICONS = {
-  profile: "档",
-  followups: "随",
-  mymonitoring: "监",
+  healthRecord: "档",
   assess: "测",
   checkin: "扫",
   messages: "信",
@@ -231,6 +229,11 @@ Page({
   async openWorkspaceEntry (event) {
     const entry = (this.data.workspaceEntries || []).find(item => item.key === event.currentTarget.dataset.key)
     if (!entry) return
+    // 健康档案：原生页面（不走 handoff/web-view），先取 patientId 再进入，避免 H5 身份切换问题
+    if (entry.key === 'healthRecord') {
+      await this.openHealthRecord()
+      return
+    }
     if (entry.type === 'NATIVE') {
       if (TAB_PAGES.includes(entry.url)) wx.switchTab({ url: entry.url })
       else wx.navigateTo({ url: entry.url })
@@ -242,25 +245,33 @@ Page({
       return
     }
     try {
-      // 个人档案/健康监测：先用 /me 拿 patientId，再拼接 H5 地址（其余 H5 入口保持原 targetPath）
-      let targetPath = entry.targetPath
-      if (entry.key === 'profile' || entry.key === 'mymonitoring') {
-        const meResponse = await api.cdmsRequest('/api/v1/miniapp/auth/me', 'GET', null, app.globalData.accessToken)
-        const me = unwrapData(meResponse)
-        const patientId = me && me.patientId
-        if (!patientId) throw new Error('未取得患者档案信息')
-        // handoff 白名单要求 /h5/ 前缀：个人档案走 360，健康监测走 monitoring，由 H5 端 resolveHandoffTarget 映射到患者详情页
-        targetPath = entry.key === 'mymonitoring'
-          ? `/h5/patients/${patientId}/monitoring`
-          : `/h5/patients/${patientId}/360`
-      }
-      if (!targetPath) throw new Error('该入口暂不可用')
-      const response = await api.createHandoff(targetPath)
+      // 其余 H5 入口保持原 targetPath（如医生端患者工作台）
+      if (!entry.targetPath) throw new Error('该入口暂不可用')
+      const response = await api.createHandoff(entry.targetPath)
       const handoff = response?.data || response
       if (!handoff?.handoffUrl) throw new Error('未取得 H5 安全地址')
       wx.navigateTo({ url: `/pages/h5/index?url=${encodeURIComponent(handoff.handoffUrl)}` })
     } catch (error) {
       wx.showToast({ title: error.message || '打开业务入口失败', icon: 'none' })
+    }
+  },
+
+  // 健康档案入口：与原个人档案分支一致，先 /me 拿 patientId；patientId 同时存实例与 url 参数供页面使用
+  async openHealthRecord () {
+    const app = getApp()
+    if (!app.globalData.cdmsBaseUrl || !app.globalData.accessToken) {
+      wx.reLaunch({ url: '/pages/auth/login' })
+      return
+    }
+    try {
+      const meResponse = await api.cdmsRequest('/api/v1/miniapp/auth/me', 'GET', null, app.globalData.accessToken)
+      const me = unwrapData(meResponse)
+      const patientId = me && me.patientId
+      if (!patientId) throw new Error('未取得患者档案信息')
+      this._healthRecordPatientId = patientId
+      wx.navigateTo({ url: `/pages/health-record/index?patientId=${patientId}` })
+    } catch (error) {
+      wx.showToast({ title: error.message || '打开健康档案失败', icon: 'none' })
     }
   },
 

@@ -15,7 +15,7 @@
     <view class="section-heading workspace-heading">
       <view>
         <view class="section-title">业务入口</view>
-        <view class="section-caption">患者档案、随访与设备中心</view>
+        <view class="section-caption">健康档案、自测与设备中心</view>
       </view>
     </view>
     <view

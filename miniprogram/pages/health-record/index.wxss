@@ -1,0 +1,58 @@
+/* 健康档案：沿用 app.wxss 的卡片/分区/按钮基础样式，仅补充本页布局 */
+.health-record-page { padding-bottom: 60rpx; }
+
+.record-topbar { padding: 36rpx 4rpx 8rpx; }
+.record-title { color: #29453b; font-size: 42rpx; line-height: 56rpx; font-weight: 750; }
+.record-caption { margin-top: 6rpx; color: #8a9a93; font-size: 23rpx; }
+
+.profile-card { margin-top: 16rpx; padding: 6rpx 24rpx 20rpx; }
+.profile-head { padding: 22rpx 0 4rpx; color: #29453b; font-size: 27rpx; font-weight: 700; }
+.info-grid { display: flex; flex-wrap: wrap; }
+.info-item { width: 50%; box-sizing: border-box; padding: 14rpx 12rpx 6rpx 0; }
+.info-label { color: #8a9a93; font-size: 21rpx; }
+.info-value { margin-top: 6rpx; color: #20352e; font-size: 25rpx; font-weight: 600; line-height: 1.5; word-break: break-all; }
+
+.drug-group { display: flex; align-items: flex-start; padding: 14rpx 0 4rpx; }
+.drug-group + .drug-group { border-top: 1rpx solid #edf0ee; }
+.drug-label { flex: none; width: 130rpx; margin-top: 10rpx; color: #8a9a93; font-size: 21rpx; }
+.drug-tags { display: flex; flex-wrap: wrap; flex: 1; }
+.drug-tag { margin: 6rpx 12rpx 6rpx 0; padding: 8rpx 18rpx; border-radius: 999rpx; background: #e5f6ee; color: #0c9b6c; font-size: 21rpx; }
+.profile-empty { padding: 14rpx 0 8rpx; color: #92a099; font-size: 23rpx; }
+
+.followup-list { margin-top: 16rpx; padding: 6rpx 24rpx; }
+.followup-row { display: flex; align-items: center; padding: 26rpx 4rpx; border-bottom: 1rpx solid #edf0ee; }
+.followup-row:last-child { border-bottom: none; }
+.followup-main { min-width: 0; flex: 1; }
+.followup-date { color: #20352e; font-size: 27rpx; font-weight: 700; }
+.followup-meta { display: flex; align-items: center; flex-wrap: wrap; margin-top: 10rpx; }
+.followup-chip { padding: 4rpx 14rpx; border-radius: 999rpx; background: #e5f6ee; color: #0c9b6c; font-size: 20rpx; }
+.followup-meta-item { margin-left: 14rpx; color: #6f8178; font-size: 22rpx; }
+.followup-side { flex: none; margin-left: 18rpx; text-align: right; }
+.followup-next { color: #8a9a93; font-size: 20rpx; }
+.followup-next-date { margin-top: 4rpx; color: #527166; font-size: 22rpx; }
+.followup-arrow { flex: none; margin-left: 12rpx; color: #a8b9b1; font-size: 40rpx; font-weight: 200; }
+
+.list-more { padding: 22rpx 0 12rpx; text-align: center; color: #8a9a93; font-size: 23rpx; }
+.list-more-btn { color: #0c9b6c; font-weight: 650; }
+.list-more-end { color: #a8b4af; }
+.list-error-line { margin-top: 14rpx; text-align: center; color: #cf3f3f; font-size: 22rpx; }
+.list-error-retry { margin-left: 12rpx; color: #0c9b6c; font-weight: 600; }
+
+/* 随访详情弹层 */
+.detail-mask { position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: flex-end; background: rgba(18, 34, 28, .45); }
+.detail-panel { display: flex; flex-direction: column; width: 100%; max-height: 82vh; padding: 28rpx 28rpx 40rpx; box-sizing: border-box; border-radius: 32rpx 32rpx 0 0; background: #fff; }
+.detail-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10rpx; }
+.detail-title { color: #29453b; font-size: 31rpx; font-weight: 750; }
+.detail-close { padding: 8rpx 16rpx; color: #8a9a93; font-size: 30rpx; }
+.detail-body { height: 56vh; box-sizing: border-box; }
+.detail-section { padding: 18rpx 0 8rpx; }
+.detail-section + .detail-section { border-top: 1rpx solid #edf0ee; }
+.detail-section-title { margin-bottom: 4rpx; color: #29453b; font-size: 25rpx; font-weight: 700; }
+.detail-row { display: flex; align-items: flex-start; padding: 12rpx 0; }
+.detail-label { flex: none; width: 200rpx; color: #8a9a93; font-size: 23rpx; line-height: 1.55; }
+.detail-value { flex: 1; color: #20352e; font-size: 23rpx; line-height: 1.55; word-break: break-all; }
+.detail-loading { padding: 60rpx 0; }
+.detail-error { display: flex; flex-direction: column; align-items: center; padding: 46rpx 0 20rpx; }
+
+.loading-text { padding: 32rpx 0 12rpx; text-align: center; color: #8a9a93; font-size: 23rpx; }
+.empty-illustration { color: #c3d4cc; font-size: 56rpx; line-height: 1; }

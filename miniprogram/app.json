@@ -3,6 +3,7 @@
     "pages/auth/login",
     "pages/h5/index",
     "pages/home/home",
+    "pages/health-record/index",
     "pages/device/device",
     "pages/device-mfa1/index",
     "pages/device-sunvou/index",
