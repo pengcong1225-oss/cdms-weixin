@@ -507,20 +507,39 @@ class BleManager {
     const saved = deviceSettings.load(deviceId);
     if (!saved || typeof saved !== "object") return;
     const typeMap = deviceSettings.MONITORING_TYPE_MAP || {};
+    // 任何监测项的 enabled=false 都不重放：重连设备绝不自动关闭采集（关闭必须由用户在设备页显式操作）。
+    let replayedAny = false;
     for (const key of Object.keys(typeMap)) {
       const value = saved[key];
       if (!value || typeof value !== "object") continue;
+      if (!value.enabled) continue;
       try {
         await sdk.setMonitoring(typeMap[key], {
-          enabled: !!value.enabled,
+          enabled: true,
           startHour: value.startHour,
           startMinute: value.startMinute,
           endHour: value.endHour,
           endMinute: value.endMinute,
           intervalMinutes: value.intervalMinutes,
         });
+        replayedAny = true;
       } catch (error) {
         console.warn(`[CDMS BLE] 重放 ${key} 失败`, error && error.message ? error.message : error);
+      }
+    }
+    // 新绑定/无任何监测配置：默认开启全天心率+血氧（30 分钟），保证设备开箱即有监测数据。
+    const hasMonitoringConfig = Object.keys(typeMap).some((key) => saved[key] && typeof saved[key] === "object");
+    if (!replayedAny && !hasMonitoringConfig) {
+      try {
+        await sdk.setMonitoring("heartRate", { enabled: true, startHour: 0, startMinute: 0, endHour: 23, endMinute: 59, intervalMinutes: 30 });
+        await sdk.setMonitoring("bloodOxygen", { enabled: true, startHour: 0, startMinute: 0, endHour: 23, endMinute: 59, intervalMinutes: 30 });
+        deviceSettings.save(deviceId, {
+          heartRateMonitoring: { enabled: true, startHour: 0, startMinute: 0, endHour: 23, endMinute: 59, intervalMinutes: 30 },
+          bloodOxygenMonitoring: { enabled: true, startHour: 0, startMinute: 0, endHour: 23, endMinute: 59, intervalMinutes: 30 }
+        });
+        this.log("未检测到监测配置，已默认开启全天心率/血氧监测（30 分钟）");
+      } catch (error) {
+        console.warn("[CDMS BLE] 默认监测开启失败", error && error.message ? error.message : error);
       }
     }
     if (saved.heartRateAlert && typeof saved.heartRateAlert === "object") {
