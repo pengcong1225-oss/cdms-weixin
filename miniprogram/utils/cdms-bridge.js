@@ -469,10 +469,15 @@ function releaseWearableSession (deviceRef) {
   const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
   const shouldReleaseRemote = !!(targetDeviceRef && canRenewPatientSession(context))
   const patientRef = text(context.patientRef || context.patientId) || 'anonymous'
+  const key = sessionKey(patientRef, targetDeviceRef)
+  // A release invalidates every in-flight ensure for this scope. The old
+  // promise may still settle, but a later ensure must queue behind this
+  // release instead of reusing that stale result.
+  scopeEnsureFlights.delete(key)
   // Register the lock before clearing so an immediately following ensure
   // waits, while invalidation itself still happens synchronously at release
   // entry (before the DELETE request is started).
-  const lock = runScopeOperation(sessionKey(patientRef, targetDeviceRef), async () => {
+  const lock = runScopeOperation(key, async () => {
     if (shouldReleaseRemote) await api.releasePatientWearableSession(targetDeviceRef)
   })
   clearWearableSession(targetDeviceRef)

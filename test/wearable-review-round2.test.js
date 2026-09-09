@@ -1699,6 +1699,61 @@ async function c32RenewWaitsForPendingEnsureBeforeRelease () {
   assert.strictEqual(globalData.wearableSessionId, '', 'release must clear the renewed session context')
 }
 
+async function c33ReleasedEnsureFlightCannotBeReused () {
+  let createCalls = 0
+  let deleteCalls = 0
+  let pendingDelete
+  const creates = []
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-a', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: '', wearableToken: '', wearableSessionId: '', wearableDeviceRef: 'ring-a'
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      if (options.method === 'DELETE') {
+        deleteCalls += 1
+        pendingDelete = options
+        return
+      }
+      createCalls += 1
+      creates.push(options)
+    }
+  })
+  const oldEnsure = scenario.bridge.ensureIoTSession('ring-a')
+  for (let i = 0; i < 10 && !creates[0]; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof creates[0]?.success, 'function')
+  const release = scenario.bridge.releaseWearableSession('ring-a')
+  const freshEnsure = scenario.bridge.ensureIoTSession('ring-a')
+  assert.notStrictEqual(freshEnsure, oldEnsure, 'ensure after release must not reuse the released flight')
+
+  creates[0].success({ statusCode: 200, data: { data: {
+    sessionId: 'session-old', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-old', iotBaseUrl: 'https://iot-old'
+  } } })
+  await oldEnsure
+  for (let i = 0; i < 10 && !pendingDelete; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(deleteCalls, 1, 'release must DELETE after the old ensure settles')
+  assert.strictEqual(createCalls, 1, 'fresh ensure must wait for the release DELETE')
+  pendingDelete.success({ statusCode: 200, data: {} })
+  await release
+  for (let i = 0; i < 10 && createCalls < 2; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(createCalls, 2, 'fresh ensure must create a session after DELETE settles')
+  creates[1].success({ statusCode: 200, data: { data: {
+    sessionId: 'session-fresh', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-fresh', iotBaseUrl: 'https://iot-fresh'
+  } } })
+  const fresh = await freshEnsure
+  assert.strictEqual(fresh.wearableSessionId, 'session-fresh')
+  assert.strictEqual(globalData.wearableSessionId, 'session-fresh')
+}
+
 async function run () {
   const cases = [
     ['C1 always scopes every upload', c1AlwaysScopesEveryUpload],
@@ -1745,7 +1800,8 @@ async function run () {
     ['C29 concurrent ensure single-flights same scope', c29ConcurrentEnsureSingleFlightsSameScope],
     ['C30 ensure waits for pending POST before release', c30EnsureWaitsForPendingPostBeforeRelease],
     ['C31 new auth ensure does not share stale flight', c31NewAuthEnsureDoesNotShareStaleFlight],
-    ['C32 renewal waits before release', c32RenewWaitsForPendingEnsureBeforeRelease]
+    ['C32 renewal waits before release', c32RenewWaitsForPendingEnsureBeforeRelease],
+    ['C33 released ensure flight cannot be reused', c33ReleasedEnsureFlightCannotBeReused]
   ]
   let failures = 0
   for (const [name, scenario] of cases) {
