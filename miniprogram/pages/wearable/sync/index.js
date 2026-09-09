@@ -46,6 +46,8 @@ Page({
     const syncDeviceId = this.deviceId
     let syncConnectionGeneration
     let connectionGuard
+    let authFingerprint
+    let isOperationCurrent = () => true
     try {
       const selectedDevice = (this.data.devices || []).find(device => device.deviceId === syncDeviceId)
         || { deviceId: syncDeviceId }
@@ -56,8 +58,19 @@ Page({
       connectionGuard = typeof bleManager.captureConnectionGuard === 'function'
         ? bleManager.captureConnectionGuard()
         : null
+      authFingerprint = typeof bleManager.captureAuthFingerprint === 'function'
+        ? bleManager.captureAuthFingerprint()
+        : null
+      isOperationCurrent = () => {
+        const connectionCurrent = !connectionGuard || typeof bleManager.isConnectionGuardCurrent !== 'function' ||
+          bleManager.isConnectionGuardCurrent(connectionGuard)
+        const authCurrent = authFingerprint == null || typeof bleManager.captureAuthFingerprint !== 'function' ||
+          bleManager.captureAuthFingerprint() === authFingerprint
+        return connectionCurrent && authCurrent
+      }
       this.setData({ status: '设备已连接，正在申请安全采集会话…' })
       const session = await cdmsBridge.ensureIoTSession(syncDeviceId)
+      if (!isOperationCurrent()) throw new Error('同步上下文已失效')
       this.baseUrl = session.iotBaseUrl
       this.token = session.wearableToken
       this.sessionId = session.wearableSessionId
@@ -79,8 +92,7 @@ Page({
         errors = result.errors || {}
       }
       if (records.length) {
-        if (connectionGuard && typeof bleManager.isConnectionGuardCurrent === 'function' &&
-          !bleManager.isConnectionGuardCurrent(connectionGuard)) {
+        if (!isOperationCurrent()) {
           api.enqueue({
             batchId: `wx-${Date.now()}`,
             sessionId: syncScope.sessionId,
@@ -95,7 +107,9 @@ Page({
           deviceRef: syncScope.deviceRef,
           records,
           syncScope,
-          session
+          session,
+          isOperationCurrent,
+          operationGuard: { isCurrent: isOperationCurrent }
         })
       }
       this.setData({ status: Object.keys(errors).length ? '部分类型同步失败，已保存成功数据' : '同步完成，正在上传…' })

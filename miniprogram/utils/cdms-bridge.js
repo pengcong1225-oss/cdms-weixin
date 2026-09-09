@@ -9,6 +9,10 @@ let contextRevision = 0
 let contextSignature = null
 const sessionGenerations = new Map()
 const sessionProvenance = new WeakMap()
+// Session creation/release for one patient/device must be serialized.  A
+// release invalidates the local generation before its DELETE starts; an
+// ensure that arrives during that DELETE waits before creating a replacement.
+const scopeLocks = new Map()
 
 function appContext () {
   const app = typeof getApp === 'function' ? getApp() : null
@@ -67,6 +71,21 @@ function sessionGeneration (patientRef, deviceRef) {
 function invalidateSessionScope (patientRef, deviceRef) {
   const key = sessionKey(patientRef, deviceRef)
   sessionGenerations.set(key, sessionGeneration(patientRef, deviceRef) + 1)
+}
+
+function runScopeOperation (key, operation) {
+  const previous = scopeLocks.get(key) || Promise.resolve()
+  const current = previous.catch(() => undefined).then(operation)
+  scopeLocks.set(key, current)
+  current.then(
+    () => { if (scopeLocks.get(key) === current) scopeLocks.delete(key) },
+    () => { if (scopeLocks.get(key) === current) scopeLocks.delete(key) }
+  )
+  return current
+}
+
+function pendingScopeOperation (key) {
+  return scopeLocks.get(key) || null
 }
 
 function readSessionCache () {
@@ -130,13 +149,97 @@ function observeContextRevision (context) {
     text(context.activeRole),
     text(context.identityId || context.principalId),
     text(context.accessToken),
-    text(context.refreshToken)
+    text(context.refreshToken),
+    text(context.authGeneration || context.authRevision || context.authVersion || context.tokenVersion)
   ].join('\u0000')
   if (signature !== contextSignature) {
     contextSignature = signature
     contextRevision += 1
   }
   return contextRevision
+}
+
+function authIdentity (context) {
+  return {
+    contextRevision: observeContextRevision(context),
+    patientRef: text(context.patientRef || context.patientId),
+    activeRole: text(context.activeRole),
+    identityId: text(context.identityId || context.principalId),
+    accessToken: text(context.accessToken),
+    refreshToken: text(context.refreshToken),
+    // Newer callers may expose an explicit generation.  Keep it in the
+    // provenance when present so a logout/login cycle cannot be mistaken for
+    // the same value merely because a token happens to be reused.
+    authGeneration: text(context.authGeneration || context.authRevision || context.authVersion || context.tokenVersion)
+  }
+}
+
+function authIdentityIsCurrent (identity) {
+  if (!identity) return false
+  const current = appContext()
+  const live = authIdentity(current)
+  return live.contextRevision === identity.contextRevision &&
+    live.patientRef === identity.patientRef &&
+    live.activeRole === identity.activeRole &&
+    live.identityId === identity.identityId &&
+    live.accessToken === identity.accessToken &&
+    live.refreshToken === identity.refreshToken &&
+    live.authGeneration === identity.authGeneration
+}
+
+function operationGuardIsCurrent (guard) {
+  if (!guard) return true
+  try {
+    if (typeof guard === 'function') return !!guard()
+    if (typeof guard.isOperationCurrent === 'function') return !!guard.isOperationCurrent()
+    if (typeof guard.isCurrent === 'function') return !!guard.isCurrent()
+  } catch (_) {
+    return false
+  }
+  return false
+}
+
+function captureInvocationProvenance (context, requestedDeviceRef, providedSession) {
+  const scopedSession = isCompleteSession(providedSession) ? providedSession : null
+  const patientRef = text(scopedSession?.patientRef || context.patientRef || context.patientId)
+  return {
+    auth: authIdentity(context),
+    patientRef,
+    deviceRef: text(requestedDeviceRef || scopedSession?.deviceRef || context.wearableDeviceRef || context.deviceRef),
+    session: scopedSession || sessionSnapshot(context)
+  }
+}
+
+function sessionBelongsToInvocation (session, invocation) {
+  if (!session || !invocation || !isCompleteSession(session)) return false
+  if (session.patientRef !== invocation.patientRef || session.deviceRef !== invocation.deviceRef) return false
+  const identity = sessionProvenance.get(session)
+  if (!identity) return session === invocation.session ||
+    (session.wearableSessionId === invocation.session.wearableSessionId &&
+      session.wearableToken === invocation.session.wearableToken)
+  return identity.patientRef === invocation.auth.patientRef &&
+    identity.activeRole === invocation.auth.activeRole &&
+    identity.identityId === invocation.auth.identityId &&
+    identity.accessToken === invocation.auth.accessToken &&
+    identity.refreshToken === invocation.auth.refreshToken &&
+    identity.authGeneration === invocation.auth.authGeneration
+}
+
+function queueableInvocationSession (invocation, candidate) {
+  // The invocation snapshot is the caller's original scope.  Its provenance
+  // may intentionally be stale by the time we reach this boundary, but it is
+  // still the only safe batch owner to retain locally.
+  if (isCompleteSession(invocation?.session) &&
+    invocation.session.patientRef === invocation.patientRef &&
+    invocation.session.deviceRef === invocation.deviceRef) return invocation.session
+  if (sessionBelongsToInvocation(candidate, invocation)) return candidate
+  return null
+}
+
+function invocationIsCurrent (invocation, candidate, operationGuard) {
+  if (!authIdentityIsCurrent(invocation?.auth)) return false
+  if (!operationGuardIsCurrent(operationGuard)) return false
+  return !candidate || isCurrentSessionSnapshot(candidate)
 }
 
 function beginSessionRequest (context, deviceRef) {
@@ -149,6 +252,7 @@ function beginSessionRequest (context, deviceRef) {
     identityId: text(context.identityId || context.principalId),
     accessToken: text(context.accessToken),
     refreshToken: text(context.refreshToken),
+    authGeneration: text(context.authGeneration || context.authRevision || context.authVersion || context.tokenVersion),
     deviceRef: text(deviceRef),
     sessionGeneration: sessionGeneration(patientRef || 'anonymous', deviceRef),
     initialDeviceRef: text(context.wearableDeviceRef || context.deviceRef),
@@ -168,6 +272,7 @@ function mayPublishSession (identity) {
   if (text(context.identityId || context.principalId) !== identity.identityId) return false
   if (text(context.accessToken) !== identity.accessToken) return false
   if (text(context.refreshToken) !== identity.refreshToken) return false
+  if (text(context.authGeneration || context.authRevision || context.authVersion || context.tokenVersion) !== identity.authGeneration) return false
   if (!latestRequest || latestRequest.generation !== identity.generation ||
     latestRequest.deviceRef !== identity.deviceRef) return false
   const currentDeviceRef = text(context.wearableDeviceRef || context.deviceRef)
@@ -262,9 +367,15 @@ async function renewPatientSession (deviceRef, expiredSessionId, expectedPatient
 }
 
 async function ensureIoTSession (deviceRef) {
-  const context = appContext()
+  let context = appContext()
   const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
   if (!targetDeviceRef) throw new Error('缺少设备标识，无法建立 IoT 会话')
+  const initialPatientRef = text(context.patientRef || context.patientId) || 'anonymous'
+  const scopeLock = pendingScopeOperation(sessionKey(initialPatientRef, targetDeviceRef))
+  if (scopeLock) await scopeLock.catch(() => undefined)
+  // The release may have cleared the old snapshot while we were waiting.  A
+  // fresh identity also prevents the old session generation from publishing.
+  context = appContext()
   const identity = beginSessionRequest(context, targetDeviceRef)
   const requestedPatientRef = identity.patientRef
   const patientRef = requestedPatientRef || 'anonymous'
@@ -313,14 +424,19 @@ async function ensureIoTSession (deviceRef) {
   return publishSessionIfCurrent(identity, session)
 }
 
-async function releaseWearableSession (deviceRef) {
+function releaseWearableSession (deviceRef) {
   const context = appContext()
   const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
   const shouldReleaseRemote = !!(targetDeviceRef && canRenewPatientSession(context))
-  // Invalidate and clear locally before the remote DELETE starts so pending
-  // ensure/renew responses cannot republish the session being released.
+  const patientRef = text(context.patientRef || context.patientId) || 'anonymous'
+  // Register the lock before clearing so an immediately following ensure
+  // waits, while invalidation itself still happens synchronously at release
+  // entry (before the DELETE request is started).
+  const lock = runScopeOperation(sessionKey(patientRef, targetDeviceRef), async () => {
+    if (shouldReleaseRemote) await api.releasePatientWearableSession(targetDeviceRef)
+  })
   clearWearableSession(targetDeviceRef)
-  if (shouldReleaseRemote) await api.releasePatientWearableSession(targetDeviceRef)
+  return lock
 }
 
 function sessionMatchesLiveContext (session) {
@@ -339,14 +455,15 @@ function isCurrentSessionSnapshot (session) {
 }
 
 function staleSessionError () {
-  const error = new Error('IoT 会话上下文已过期，已保留待当前作用域重试')
+  const error = new Error('IoT 会话上下文已切换或已过期，已保留待当前作用域重试')
   error.code = 'STALE_WEARABLE_CONTEXT'
   error.statusCode = 409
   return error
 }
 
-function enqueueStaleSnapshot (session, recordsByType, records) {
-  api.enqueue(createUploadBatch({
+function enqueueStaleInvocation (invocation, candidate, recordsByType, records) {
+  const session = queueableInvocationSession(invocation, candidate)
+  if (session) api.enqueue(createUploadBatch({
     sessionId: session.wearableSessionId,
     patientRef: session.patientRef,
     deviceRef: session.deviceRef,
@@ -356,13 +473,27 @@ function enqueueStaleSnapshot (session, recordsByType, records) {
   throw staleSessionError()
 }
 
-async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, session }) {
+async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, session, operationGuard, isOperationCurrent }) {
   const requestedDeviceRef = text(deviceRef || syncScope?.deviceRef)
   const providedSession = session && typeof session === 'object' ? session : null
+  const contextAtInvocation = appContext()
+  const invocation = captureInvocationProvenance(contextAtInvocation, requestedDeviceRef, providedSession)
+  const externalGuard = isOperationCurrent || operationGuard
+  if (!invocationIsCurrent(invocation, null, externalGuard)) {
+    enqueueStaleInvocation(invocation, null, recordsByType, records)
+  }
   const context = providedSession
     ? sessionSnapshot(providedSession)
     : await ensureIoTSession(requestedDeviceRef)
   if (!isCompleteSession(context)) throw new Error('IoT 会话范围不完整，无法上传健康数据')
+  const candidateSession = providedSession || context
+  // The bridge owns this boundary check as well as the caller.  ensure may
+  // have waited on the network long enough for auth/connection ownership to
+  // change, in which case these records must remain under the invocation's
+  // original snapshot and never be sent with the new context.
+  if (!invocationIsCurrent(invocation, candidateSession, externalGuard)) {
+    enqueueStaleInvocation(invocation, candidateSession, recordsByType, records)
+  }
   if (syncScope && (
     text(syncScope.patientRef) !== context.patientRef ||
     text(syncScope.deviceRef) !== context.deviceRef ||
@@ -373,9 +504,6 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, 
   if (requestedDeviceRef && requestedDeviceRef !== context.deviceRef) {
     throw new Error('上传设备作用域与 IoT 会话不一致')
   }
-  if (!isCurrentSessionSnapshot(providedSession || context)) {
-    enqueueStaleSnapshot(context, recordsByType, records)
-  }
   const batch = createUploadBatch({
     sessionId: context.wearableSessionId,
     patientRef: context.patientRef,
@@ -385,30 +513,32 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, 
   })
   api.enqueue(batch)
   const scope = { patientRef: context.patientRef, deviceRef: context.deviceRef, sessionId: context.wearableSessionId }
-  if (!isCurrentSessionSnapshot(providedSession || context)) {
+  if (!invocationIsCurrent(invocation, candidateSession, externalGuard)) {
     throw staleSessionError()
   }
   try {
     return await api.flushQueue({ baseUrl: context.iotBaseUrl, token: context.wearableToken, scope })
   } catch (error) {
-    if (!isCurrentSessionSnapshot(providedSession || context)) throw staleSessionError()
+    if (!invocationIsCurrent(invocation, candidateSession, externalGuard)) throw staleSessionError()
     const unauthorized = Number(error?.statusCode) === 401 ||
       Number(error?.code) === 401 || Number(error?.response?.code) === 401
     if (!unauthorized || !canRenewPatientSession(appContext())) throw error
+    // A 401 is the last point at which it is still safe to renew.  Both the
+    // app auth provenance and the caller's external ownership guard must be
+    // current; the bridge deliberately does not know about BLE manager state.
+    if (!invocationIsCurrent(invocation, candidateSession, externalGuard)) throw staleSessionError()
     const renewed = await renewPatientSession(context.deviceRef, context.wearableSessionId, context.patientRef)
-    const live = appContext()
-    const liveDeviceRef = text(live.wearableDeviceRef || live.deviceRef)
-    if (text(live.patientRef || live.patientId) !== context.patientRef ||
-      (liveDeviceRef && liveDeviceRef !== context.deviceRef) ||
-      (text(live.wearableSessionId) && text(live.wearableSessionId) !== renewed.wearableSessionId)) {
-      throw new Error('上传期间患者或设备上下文已切换，保留队列待当前作用域重试')
-    }
+    if (!authIdentityIsCurrent(invocation.auth) ||
+      !operationGuardIsCurrent(externalGuard) ||
+      !isCurrentSessionSnapshot(renewed)) throw staleSessionError()
+    if (!authIdentityIsCurrent(invocation.auth) || !operationGuardIsCurrent(externalGuard)) throw staleSessionError()
     api.rebindQueueSession({
       patientRef: context.patientRef,
       deviceRef: context.deviceRef,
       fromSessionId: context.wearableSessionId,
       toSessionId: renewed.wearableSessionId
     })
+    if (!authIdentityIsCurrent(invocation.auth) || !operationGuardIsCurrent(externalGuard)) throw staleSessionError()
     return api.flushQueue({
       baseUrl: renewed.iotBaseUrl,
       token: renewed.wearableToken,

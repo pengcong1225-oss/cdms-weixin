@@ -255,6 +255,7 @@ class BleManager {
       String(context.identityId || context.principalId || "").trim(),
       String(context.accessToken || "").trim(),
       String(context.refreshToken || "").trim(),
+      String(context.authGeneration || context.authRevision || context.authVersion || context.tokenVersion || "").trim(),
     ].join("\u0000");
   }
 
@@ -391,8 +392,15 @@ class BleManager {
     this.activeDeviceId = runtime.deviceId;
     this.sdk = runtime.sdk;
     this.deviceEventUnsubscribe = runtime.deviceEventUnsubscribe;
+    // The A health-sync continuation was invalidated when B became the
+    // attempted active connection.  Never resurrect its promise; restore the
+    // visible state through patch so subscribers receive the same A snapshot
+    // that the internal runtime now represents.
     this.healthSyncPromise = null;
-    this.state = Object.assign({}, runtime.state);
+    this.patch(Object.assign({}, runtime.state, {
+      healthSyncing: false,
+      healthSyncProgress: 0,
+    }));
     return true;
   }
 
@@ -420,22 +428,27 @@ class BleManager {
       return this.state.boundDevice;
     }
 
-    await this.stopScan();
-    if (!this.isConnectionAttemptCurrent(target, generation)) return this.abortStaleConnection(target);
     const previousDeviceId = this.activeDeviceId;
+    // Capture before the first await so a pending scan/stop cannot erase the
+    // only recoverable A runtime before a cancellable B attempt is recorded.
     const previousRuntime = previousDeviceId && previousDeviceId !== target.deviceId
       ? {
           deviceId: previousDeviceId,
           sdk: this.sdk,
           deviceEventUnsubscribe: this.deviceEventUnsubscribe,
-          state: this.snapshot(),
+          state: Object.assign({}, this.state),
         }
       : null;
+    await this.stopScan();
+    if (!this.isConnectionAttemptCurrent(target, generation)) return this.abortStaleConnection(target, undefined, previousRuntime);
     if (previousRuntime) {
       this.deviceEventUnsubscribe = null;
       this.sdk = null;
       this.healthSyncPromise = null;
       this.clearHealthMeasurementTimer();
+      // The old A continuation remains invalid but no longer owns the visible
+      // sync indicator once B becomes the attempted active device.
+      this.patch({ healthSyncing: false, healthSyncProgress: 0 });
     } else {
       this.disposeRuntime("开始新连接");
     }
@@ -483,16 +496,6 @@ class BleManager {
         },
       });
       if (!this.isConnectionCurrent(target, generation)) return this.abortStaleConnection(target, sdk, previousRuntime);
-      if (previousRuntime) {
-        if (previousRuntime.deviceEventUnsubscribe) previousRuntime.deviceEventUnsubscribe();
-        if (previousRuntime.sdk && typeof previousRuntime.sdk.disconnect === "function") {
-          this.markIntentionalDisconnect(previousRuntime.deviceId);
-          await previousRuntime.sdk.disconnect("切换连接设备").catch(() => undefined);
-        }
-        if (previousRuntime.sdk && typeof previousRuntime.sdk.dispose === "function") {
-          previousRuntime.sdk.dispose("切换连接设备");
-        }
-      }
       this.sdk = sdk;
       this.deviceEventUnsubscribe = this.sdk.onDeviceEvent((event) => this.handleDeviceEvent(event));
       const supportMenu = this.sdk.supportMenu;
@@ -540,6 +543,19 @@ class BleManager {
       if (!previousBoundDevice) connectedState.workoutReports = [];
       this.patch(connectedState);
       this.log("设备初始化完成");
+      // A remains recoverable until B has completed initialization.  Dispose
+      // the previous runtime only after the B state is committed, so a
+      // cancelled/failed B attempt can restore the live A SDK intact.
+      if (previousRuntime) {
+        if (previousRuntime.deviceEventUnsubscribe) previousRuntime.deviceEventUnsubscribe();
+        if (previousRuntime.sdk && typeof previousRuntime.sdk.disconnect === "function") {
+          this.markIntentionalDisconnect(previousRuntime.deviceId);
+          await previousRuntime.sdk.disconnect("切换连接设备").catch(() => undefined);
+        }
+        if (previousRuntime.sdk && typeof previousRuntime.sdk.dispose === "function") {
+          previousRuntime.sdk.dispose("切换连接设备");
+        }
+      }
       // 连接成功后重放已持久化的指环设置（失败静默，不影响连接）
       this.replayDeviceSettings(boundDevice.deviceId).catch((error) => {
         console.warn("[CDMS BLE] 设备设置重放失败", error && error.message ? error.message : error);
@@ -769,6 +785,7 @@ class BleManager {
     // An explicit non-active target must not disconnect the currently active
     // device: unbind is scoped to exactly the requested business binding.
     if (targetWasActive) await this.disconnect();
+    const cleanupGeneration = this.connectionGeneration;
     try {
       await cdmsBridge.releaseWearableSession(targetDeviceId);
     } catch (error) {
@@ -781,7 +798,10 @@ class BleManager {
     const patch = {
       error: "",
     };
-    if (targetWasActive) {
+    const activeNow = String(this.activeDeviceId || "").trim();
+    const targetStillOwnsConnection = targetWasActive && activeNow === targetDeviceId &&
+      this.connectionGeneration === cleanupGeneration;
+    if (targetStillOwnsConnection) {
       this.activeDeviceId = "";
       Object.assign(patch, {
         boundDevice: null,
@@ -793,9 +813,9 @@ class BleManager {
         workoutReports: [],
         workoutRevision: this.state.workoutRevision + 1,
       });
-    } else if (targetWasBound) {
-      const replacement = activeDeviceId && typeof storage.getScopedBoundDevice === "function"
-        ? storage.getScopedBoundDevice(activeDeviceId, this.getContextPatientRef())
+    } else if (targetWasBound && activeNow !== targetDeviceId) {
+      const replacement = activeNow && typeof storage.getScopedBoundDevice === "function"
+        ? storage.getScopedBoundDevice(activeNow, this.getContextPatientRef())
         : null;
       patch.boundDevice = replacement || null;
     }
@@ -942,23 +962,50 @@ class BleManager {
     if (!this.state.boundDevice) return Promise.reject(new Error("尚未绑定设备"));
 
     const deviceId = this.state.boundDevice.deviceId;
-    const syncGeneration = this.connectionGeneration;
     const sdk = this.sdk;
+    const connectionGuard = this.captureConnectionGuard();
     const syncAuthFingerprint = this.captureAuthFingerprint();
-    const isCurrent = () => this.connectionGeneration === syncGeneration &&
+    const isCurrent = () => this.isConnectionGuardCurrent(connectionGuard) &&
       this.activeDeviceId === deviceId && this.sdk === sdk &&
       this.state.boundDevice && this.state.boundDevice.deviceId === deviceId &&
       this.captureAuthFingerprint() === syncAuthFingerprint;
+    const staleResult = (result) => ({
+      recordCount: 0,
+      failedTypes: [],
+      uploadError: new Error("健康同步上下文已失效"),
+      result,
+      healthAlertText: ""
+    });
     this.patch({ healthSyncing: true, healthSyncProgress: 0, error: "" });
     this.log("开始同步全部健康数据");
-    this.healthSyncPromise = sdk.syncAllHealthData({
+    let operationPromise;
+    const sourcePromise = Promise.resolve().then(() => sdk.syncAllHealthData({
       onProgress: (progress) => {
         if (isCurrent()) this.patch({ healthSyncProgress: progress.percent });
       },
-    }).then(async (result) => {
-      if (!isCurrent()) return { recordCount: 0, failedTypes: [], uploadError: new Error("健康同步上下文已失效"), result, healthAlertText: "" };
+    })).then(async (result) => {
+      if (!isCurrent()) return staleResult(result);
+      const failedTypes = Object.keys(result.errors || {});
+      const totalRecordCount = Object.values(result.records || {}).reduce((total, values) =>
+        total + (Array.isArray(values) ? values.length : 0), 0);
+      let uploadError = null;
+      try {
+        await cdmsBridge.enqueueAndFlush({
+          deviceRef: deviceId,
+          recordsByType: result.records,
+          isOperationCurrent: isCurrent,
+          operationGuard: { isCurrent },
+        });
+        if (!isCurrent()) return staleResult(result);
+        this.log(`CDMS 数据上传完成，共 ${totalRecordCount} 条`);
+      } catch (error) {
+        if (!isCurrent()) return staleResult(result);
+        uploadError = error;
+        this.log(`CDMS 数据暂未上传：${error.message || error}`);
+      }
+      if (!isCurrent()) return staleResult(result);
       let recordCount = 0;
-      Object.keys(result.records).forEach((type) => {
+      Object.keys(result.records || {}).forEach((type) => {
         const records = result.records[type] || [];
         if (!records.length) return;
         storage.saveHealthRecords(deviceId, type, records);
@@ -971,40 +1018,31 @@ class BleManager {
         lastHealthSyncAt,
         healthSyncProgress: 100,
       });
-      const failedTypes = Object.keys(result.errors);
       this.log(
         failedTypes.length
           ? `健康数据同步完成，${failedTypes.length} 项失败`
           : `健康数据同步完成，共 ${recordCount} 条`,
       );
-      let uploadError = null;
-      try {
-        await cdmsBridge.enqueueAndFlush({
-          deviceRef: deviceId,
-          recordsByType: result.records,
-        });
-        if (!isCurrent()) return { recordCount: 0, failedTypes: [], uploadError: new Error("健康同步上下文已失效"), result, healthAlertText: "" };
-        this.log(`CDMS 数据上传完成，共 ${recordCount} 条`);
-      } catch (error) {
-        if (!isCurrent()) return { recordCount: 0, failedTypes: [], uploadError: new Error("健康同步上下文已失效"), result, healthAlertText: "" };
-        uploadError = error;
-        this.log(`CDMS 数据暂未上传：${error.message || error}`);
-      }
       // 本地预警提醒：基于本次同步最新心率/血氧记录与本地阈值判断，仅在确有超阈值时提醒
-      const alert = capabilities.evaluateHealthAlerts(result.records, deviceSettings.load(deviceId));
+      const alert = capabilities.evaluateHealthAlerts(result.records || {}, deviceSettings.load(deviceId));
       const healthAlertText = alert.text || "";
       this.patch({ healthAlertText });
       if (healthAlertText && wx.showToast) {
         wx.showToast({ title: healthAlertText, icon: "none", duration: 2500 });
       }
       return { recordCount, failedTypes, uploadError, result, healthAlertText };
-    }).finally(() => {
-      if (isCurrent()) {
+    });
+    operationPromise = sourcePromise.finally(() => {
+      // A stale operation must not leave the singleton permanently locked.
+      // Compare by identity so cleanup from an older operation cannot clear a
+      // newer one that a caller may have started after cancellation.
+      if (this.healthSyncPromise === operationPromise) {
         this.healthSyncPromise = null;
         this.patch({ healthSyncing: false });
       }
     });
-    return this.healthSyncPromise;
+    this.healthSyncPromise = operationPromise;
+    return operationPromise;
   }
 
   /** 健康解析模块得到业务数据后统一从这里写入，首页与历史页会立即刷新。 */
