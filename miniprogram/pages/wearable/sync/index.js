@@ -45,6 +45,7 @@ Page({
     let sdk
     const syncDeviceId = this.deviceId
     let syncConnectionGeneration
+    let connectionGuard
     try {
       const selectedDevice = (this.data.devices || []).find(device => device.deviceId === syncDeviceId)
         || { deviceId: syncDeviceId }
@@ -52,6 +53,9 @@ Page({
       syncConnectionGeneration = bleManager.connectionGeneration
       sdk = typeof bleManager.getSdk === 'function' ? bleManager.getSdk() : null
       if (!sdk) throw new Error('设备连接尚未就绪')
+      connectionGuard = typeof bleManager.captureConnectionGuard === 'function'
+        ? bleManager.captureConnectionGuard()
+        : null
       this.setData({ status: '设备已连接，正在申请安全采集会话…' })
       const session = await cdmsBridge.ensureIoTSession(syncDeviceId)
       this.baseUrl = session.iotBaseUrl
@@ -75,6 +79,18 @@ Page({
         errors = result.errors || {}
       }
       if (records.length) {
+        if (connectionGuard && typeof bleManager.isConnectionGuardCurrent === 'function' &&
+          !bleManager.isConnectionGuardCurrent(connectionGuard)) {
+          api.enqueue({
+            batchId: `wx-${Date.now()}`,
+            sessionId: syncScope.sessionId,
+            patientRef: syncScope.patientRef,
+            deviceRef: syncScope.deviceRef,
+            records,
+            sdkVersion: 'RW_SDK_V2.0.0_20260807'
+          })
+          throw new Error('同步连接上下文已失效，数据已保存在本机待重试')
+        }
         await cdmsBridge.enqueueAndFlush({
           deviceRef: syncScope.deviceRef,
           records,
@@ -87,11 +103,9 @@ Page({
     } catch (error) {
       this.setData({ status: error.message || '同步失败，数据已保存在本机待重试' })
     } finally {
-      const managerTracksDevice = typeof bleManager.activeDeviceId === 'string'
-      const stillCurrent = !managerTracksDevice || bleManager.activeDeviceId === syncDeviceId
-      const generationMatches = syncConnectionGeneration == null ||
-        bleManager.connectionGeneration === syncConnectionGeneration
-      if (sdk && typeof bleManager.disconnect === 'function' && stillCurrent && generationMatches) {
+      const hasGuardApi = connectionGuard && typeof bleManager.isConnectionGuardCurrent === 'function'
+      const stillCurrent = !hasGuardApi || bleManager.isConnectionGuardCurrent(connectionGuard)
+      if (sdk && typeof bleManager.disconnect === 'function' && stillCurrent) {
         try { await bleManager.disconnect(syncDeviceId, syncConnectionGeneration) } catch (_) {}
       }
       this.setData({ syncing: false, queued: api.readQueue().length })

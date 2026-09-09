@@ -834,6 +834,8 @@ async function c15SyncFinallyDoesNotDisconnectNewDevice () {
     connectionGeneration: 1,
     connect: async () => { manager.activeDeviceId = 'ring-a'; return { deviceId: 'ring-a' } },
     getSdk: () => sdk,
+    captureConnectionGuard: () => ({ deviceId: manager.activeDeviceId, generation: manager.connectionGeneration }),
+    isConnectionGuardCurrent: guard => guard.deviceId === manager.activeDeviceId && guard.generation === manager.connectionGeneration,
     disconnect: async () => { disconnectCalls += 1 }
   }
   const page = pageScenario({
@@ -858,6 +860,232 @@ async function c15SyncFinallyDoesNotDisconnectNewDevice () {
   resolveSync()
   await syncing
   assert.strictEqual(disconnectCalls, 0, 'A cleanup must not disconnect newly active B')
+}
+
+async function c16SyncPageGuardKeepsAQueueOnDeviceSwitch () {
+  let resolveSync
+  let uploadCalls = 0
+  let captureCalls = 0
+  const queue = []
+  const globalData = { patientRef: 'patient-1', wearableToken: '', wearableSessionId: '', wearableDeviceRef: '' }
+  const sdk = {
+    syncAllHealthData: async () => new Promise(resolve => {
+      resolveSync = () => resolve({ records: { heartRate: [{ measuredAt: 1, value: 70 }] }, errors: {} })
+    })
+  }
+  const manager = {
+    activeDeviceId: '',
+    connectionGeneration: 1,
+    connect: async () => { manager.activeDeviceId = 'ring-a'; return { deviceId: 'ring-a' } },
+    getSdk: () => sdk,
+    captureConnectionGuard: () => {
+      captureCalls += 1
+      return { deviceId: manager.activeDeviceId, generation: manager.connectionGeneration }
+    },
+    isConnectionGuardCurrent: guard => guard.deviceId === manager.activeDeviceId && guard.generation === manager.connectionGeneration,
+    disconnect: async () => {}
+  }
+  const page = pageScenario({
+    globalData,
+    bleManager: manager,
+    bridge: {
+      updateContext: values => Object.assign(globalData, values),
+      ensureIoTSession: async deviceRef => ({
+        iotBaseUrl: 'https://iot-a', wearableToken: 'token-a', wearableSessionId: 'session-a',
+        patientRef: 'patient-1', deviceRef
+      }),
+      enqueueAndFlush: async () => { uploadCalls += 1; return { accepted: 1, duplicates: 0, rejected: 0 } }
+    }
+  })
+  const api = require(apiPath)
+  api.enqueue = batch => { queue.push(batch); return true }
+  page.onLoad({})
+  page.selectDevice({ currentTarget: { dataset: { id: 'ring-a' } } })
+  const syncing = page.startSync()
+  for (let i = 0; i < 10 && typeof resolveSync !== 'function'; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof resolveSync, 'function')
+  manager.activeDeviceId = 'ring-b'
+  manager.connectionGeneration = 2
+  resolveSync()
+  await syncing
+  assert.ok(captureCalls > 0, 'sync must capture a public connection guard')
+  assert.strictEqual(uploadCalls, 0, 'stale A records must not reach bridge upload')
+  assert.deepStrictEqual(queue.map(batch => ({ patientRef: batch.patientRef, deviceRef: batch.deviceRef, sessionId: batch.sessionId })), [
+    { patientRef: 'patient-1', deviceRef: 'ring-a', sessionId: 'session-a' }
+  ])
+}
+
+async function c17HealthSyncInvalidatesAuthChanges () {
+  const mutations = [
+    globalData => { globalData.patientRef = 'patient-b' },
+    globalData => { globalData.accessToken = 'access-new' }
+  ]
+  for (const mutate of mutations) {
+    const values = new Map()
+    const globalData = {
+      activeRole: 'PATIENT', patientRef: 'patient-a', accessToken: 'access-a',
+      wearableToken: 'token-a', wearableSessionId: 'session-a', wearableDeviceRef: 'ring-a'
+    }
+    global.getApp = () => ({ globalData })
+    global.wx = {
+      getStorageSync: key => values.get(key),
+      setStorageSync: (key, value) => values.set(key, value),
+      removeStorageSync: key => values.delete(key)
+    }
+    clearModules()
+    let resolveHealth
+    const uploads = []
+    const sdk = {
+      dispose: () => {}, disconnect: async () => {}, onDeviceEvent: () => () => {}, setMonitoring: async () => {},
+      syncAllHealthData: async () => new Promise(resolve => { resolveHealth = () => resolve({
+        records: { heartRate: [{ measuredAt: 1, value: 70 }] }, errors: {}
+      }) })
+    }
+    mockModule(bridgePath, { enqueueAndFlush: async options => { uploads.push(options) } })
+    const storage = require(storagePath)
+    const manager = require(bleManagerPath)
+    manager.sdk = sdk
+    manager.activeDeviceId = 'ring-a'
+    manager.connectionGeneration = 1
+    manager.state = Object.assign({}, manager.state, {
+      connectionState: 'connected', boundDevice: { deviceId: 'ring-a' }, healthRevision: 0, lastHealthSyncAt: 0
+    })
+    const syncing = manager.syncAllHealthData()
+    for (let i = 0; i < 10 && typeof resolveHealth !== 'function'; i += 1) {
+      await new Promise(resolve => setImmediate(resolve))
+    }
+    assert.strictEqual(typeof resolveHealth, 'function')
+    const before = { healthRevision: manager.state.healthRevision, lastHealthSyncAt: manager.state.lastHealthSyncAt }
+    mutate(globalData)
+    resolveHealth()
+    await syncing
+    assert.strictEqual(manager.state.healthRevision, before.healthRevision)
+    assert.strictEqual(manager.state.lastHealthSyncAt, before.lastHealthSyncAt)
+    assert.strictEqual(uploads.length, 0, 'auth-stale health sync must not upload')
+    assert.deepStrictEqual(storage.listBoundDevices('patient-a'), [])
+  }
+}
+
+async function c18UnauthorizedDoesNotRenewAfterOperationTurnsStale () {
+  const uploads = []
+  const renewals = []
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-a', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: 'https://iot-a', wearableToken: 'token-a', wearableSessionId: 'session-a', wearableDeviceRef: 'ring-a'
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      if (options.url.endsWith('/wearable-session')) {
+        renewals.push(options)
+        options.success({ statusCode: 200, data: { data: {
+          sessionId: 'renewed-a', patientRef: 'patient-a', deviceRef: 'ring-a',
+          uploadToken: 'renewed-token-a', iotBaseUrl: 'https://iot-a'
+        } } })
+        return
+      }
+      uploads.push(options)
+      Object.assign(globalData, {
+        wearableDeviceRef: 'ring-b', deviceRef: 'ring-b', wearableSessionId: 'session-b', wearableToken: 'token-b', iotBaseUrl: 'https://iot-b'
+      })
+      options.success({ statusCode: 401, data: { code: 401, message: 'expired' } })
+    }
+  })
+  await assert.rejects(() => scenario.bridge.enqueueAndFlush({
+    deviceRef: 'ring-a', records: [{ type: 'heartRate', measuredAt: 1, value: 70 }]
+  }), /上下文已过期|上下文已切换|stale/i)
+  assert.strictEqual(uploads.length, 1)
+  assert.strictEqual(renewals.length, 0, 'stale upload must not renew with the current device/auth')
+  const api = require(apiPath)
+  assert.deepStrictEqual(api.readQueue({ patientRef: 'patient-a', deviceRef: 'ring-a', sessionId: 'session-a' }).map(batch => batch.deviceRef), ['ring-a'])
+}
+
+async function c19ReleaseInvalidatesPendingEnsureBeforeDelete () {
+  let pendingEnsure
+  let pendingRelease
+  let requestCount = 0
+  const globalData = {
+    cdmsBaseUrl: 'https://cdms', accessToken: 'access-a', activeRole: 'PATIENT', patientRef: 'patient-a',
+    iotBaseUrl: 'https://iot-a', wearableToken: '', wearableSessionId: '', wearableDeviceRef: 'ring-a'
+  }
+  const scenario = bridgeScenario({
+    globalData,
+    request: options => {
+      requestCount += 1
+      if (options.method === 'DELETE') pendingRelease = options
+      else if (requestCount === 1) pendingEnsure = options
+      else options.success({ statusCode: 200, data: { data: {
+        sessionId: 'session-fresh', patientRef: 'patient-a', deviceRef: 'ring-a',
+        uploadToken: 'token-fresh', iotBaseUrl: 'https://iot-fresh'
+      } } })
+    }
+  })
+  const firstEnsure = scenario.bridge.ensureIoTSession('ring-a')
+  const release = scenario.bridge.releaseWearableSession('ring-a')
+  for (let i = 0; i < 10 && (!pendingEnsure || !pendingRelease); i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  pendingEnsure.success({ statusCode: 200, data: { data: {
+    sessionId: 'session-stale', patientRef: 'patient-a', deviceRef: 'ring-a',
+    uploadToken: 'token-stale', iotBaseUrl: 'https://iot-stale'
+  } } })
+  await firstEnsure
+  assert.strictEqual(globalData.wearableToken, '', 'pending ensure must not republish while release is in flight')
+  pendingRelease.success({ statusCode: 200, data: {} })
+  await release
+  const fresh = await scenario.bridge.ensureIoTSession('ring-a')
+  assert.strictEqual(requestCount, 3, 'post-release ensure must issue a new session request')
+  assert.strictEqual(fresh.wearableSessionId, 'session-fresh')
+}
+
+async function c20CancelledBConnectRestoresActiveA () {
+  const values = new Map()
+  const globalData = { activeRole: 'PATIENT', patientRef: 'patient-a' }
+  global.getApp = () => ({ globalData })
+  global.wx = {
+    getStorageSync: key => values.get(key),
+    setStorageSync: (key, value) => values.set(key, value),
+    removeStorageSync: key => values.delete(key),
+    closeBLEConnection: ({ complete }) => complete && complete()
+  }
+  clearModules()
+  let connectCount = 0
+  let resolveB
+  const sdkA = {
+    dispose: () => {}, disconnect: async () => {}, onDeviceEvent: () => () => {}, setMonitoring: async () => {},
+    readPower: async () => ({ level: 80 }), readFirmwareVersion: async () => '1.0.0', readBleAddress: async () => 'AA:BB:CC:DD:EE:01'
+  }
+  const sdkB = {
+    dispose: () => {}, disconnect: async () => {}, onDeviceEvent: () => () => {}, setMonitoring: async () => {},
+    readPower: async () => ({ level: 90 }), readFirmwareVersion: async () => '1.0.1', readBleAddress: async () => 'AA:BB:CC:DD:EE:02'
+  }
+  mockModule(bridgePath, { releaseWearableSession: async () => {} })
+  mockModule(bleSdkPath, { RingSdk: {
+    prepareAutoPassword: () => {},
+    connect: async () => {
+      connectCount += 1
+      if (connectCount === 1) return sdkA
+      return new Promise(resolve => { resolveB = () => resolve(sdkB) })
+    }
+  } })
+  const storage = require(storagePath)
+  const manager = require(bleManagerPath)
+  await manager.connect({ deviceId: 'ring-a', name: 'A' })
+  const connectingB = manager.connect({ deviceId: 'ring-b', name: 'B' })
+  for (let i = 0; i < 10 && typeof resolveB !== 'function'; i += 1) {
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.strictEqual(typeof resolveB, 'function')
+  await manager.unbind('ring-b')
+  resolveB()
+  await assert.rejects(() => connectingB, /连接.*(取消|失效|过期)/)
+  assert.strictEqual(manager.activeDeviceId, 'ring-a')
+  assert.strictEqual(manager.state.boundDevice.deviceId, 'ring-a')
+  assert.strictEqual(manager.state.connectionState, 'connected')
+  assert.strictEqual(manager.getSdk(), sdkA)
+  assert.deepStrictEqual(storage.listBoundDevices('patient-a').map(device => device.deviceId), ['ring-a'])
 }
 
 async function run () {
@@ -889,7 +1117,12 @@ async function run () {
     ['C12 unbind invalidates pending connect', c12UnbindInvalidatesPendingConnect],
     ['C13 stale health sync cannot update new device', c13StaleHealthSyncCannotUpdateNewDevice],
     ['C14 refresh does not expose ownerless fallback', c14RefreshDoesNotExposeOwnerlessFallback],
-    ['C15 sync finally does not disconnect new device', c15SyncFinallyDoesNotDisconnectNewDevice]
+    ['C15 sync finally does not disconnect new device', c15SyncFinallyDoesNotDisconnectNewDevice],
+    ['C16 sync page guard keeps A queue on device switch', c16SyncPageGuardKeepsAQueueOnDeviceSwitch],
+    ['C17 health sync invalidates auth changes', c17HealthSyncInvalidatesAuthChanges],
+    ['C18 unauthorized does not renew after operation turns stale', c18UnauthorizedDoesNotRenewAfterOperationTurnsStale],
+    ['C19 release invalidates pending ensure before delete', c19ReleaseInvalidatesPendingEnsureBeforeDelete],
+    ['C20 cancelled B connect restores active A', c20CancelledBConnectRestoresActiveA]
   ]
   let failures = 0
   for (const [name, scenario] of cases) {

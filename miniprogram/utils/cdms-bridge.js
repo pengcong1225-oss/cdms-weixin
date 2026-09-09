@@ -316,13 +316,11 @@ async function ensureIoTSession (deviceRef) {
 async function releaseWearableSession (deviceRef) {
   const context = appContext()
   const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
-  try {
-    if (targetDeviceRef && canRenewPatientSession(context)) {
-      await api.releasePatientWearableSession(targetDeviceRef)
-    }
-  } finally {
-    clearWearableSession(targetDeviceRef)
-  }
+  const shouldReleaseRemote = !!(targetDeviceRef && canRenewPatientSession(context))
+  // Invalidate and clear locally before the remote DELETE starts so pending
+  // ensure/renew responses cannot republish the session being released.
+  clearWearableSession(targetDeviceRef)
+  if (shouldReleaseRemote) await api.releasePatientWearableSession(targetDeviceRef)
 }
 
 function sessionMatchesLiveContext (session) {
@@ -375,7 +373,7 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, 
   if (requestedDeviceRef && requestedDeviceRef !== context.deviceRef) {
     throw new Error('上传设备作用域与 IoT 会话不一致')
   }
-  if (providedSession && !isCurrentSessionSnapshot(providedSession)) {
+  if (!isCurrentSessionSnapshot(providedSession || context)) {
     enqueueStaleSnapshot(context, recordsByType, records)
   }
   const batch = createUploadBatch({
@@ -387,12 +385,13 @@ async function enqueueAndFlush ({ deviceRef, recordsByType, records, syncScope, 
   })
   api.enqueue(batch)
   const scope = { patientRef: context.patientRef, deviceRef: context.deviceRef, sessionId: context.wearableSessionId }
-  if (providedSession && !isCurrentSessionSnapshot(providedSession)) {
+  if (!isCurrentSessionSnapshot(providedSession || context)) {
     throw staleSessionError()
   }
   try {
     return await api.flushQueue({ baseUrl: context.iotBaseUrl, token: context.wearableToken, scope })
   } catch (error) {
+    if (!isCurrentSessionSnapshot(providedSession || context)) throw staleSessionError()
     const unauthorized = Number(error?.statusCode) === 401 ||
       Number(error?.code) === 401 || Number(error?.response?.code) === 401
     if (!unauthorized || !canRenewPatientSession(appContext())) throw error
