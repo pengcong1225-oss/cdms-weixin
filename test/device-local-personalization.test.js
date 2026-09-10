@@ -104,6 +104,21 @@ async function run () {
 
   console.log('(c) getHealthCards 超阈值打 isAlert 通过')
 
+  // ---- (e) 首页健康卡片屏蔽：睡眠/多运动不展示，历史页定义保留 ----
+  resetStore()
+  const deviceFull = {
+    deviceId: DEVICE_ID,
+    supportMenu: { hr: true, bloodOxy: true, step: true, sleep: true, newSport: true }
+  }
+  const cardsFull = capabilities.getHealthCards(deviceFull, {})
+  assert.ok(!cardsFull.some(c => c.type === 'sleep'), '睡眠卡片应被屏蔽')
+  assert.ok(!cardsFull.some(c => c.type === 'workout'), '多运动卡片应被屏蔽')
+  assert.ok(cardsFull.some(c => c.type === 'steps') && cardsFull.some(c => c.type === 'heartRate'), '其余卡片不受影响')
+  assert.ok(capabilities.findHealthType('sleep'), '历史页 sleep 定义应保留')
+  assert.ok(capabilities.findHealthType('workout'), '历史页 workout 定义应保留')
+
+  console.log('(e) 首页健康卡片屏蔽 sleep/workout 通过')
+
   // ---- (b) evaluateHealthAlerts / getSyncIntervalMinutes 纯函数 ----
   const alert = capabilities.evaluateHealthAlerts(
     { heartRate: [{ value: '150', measuredAt: Date.now() }], bloodOxygen: [{ value: '--', measuredAt: Date.now() }] },

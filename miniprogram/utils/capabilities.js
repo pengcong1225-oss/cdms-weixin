@@ -133,10 +133,15 @@ function evaluateHealthAlerts(records, settings) {
   return { heartRate, bloodOxygen, text };
 }
 
+// 首页健康数据卡片屏蔽的展示项：睡眠/多运动（数据采集与上传照旧，仅不在首页展示卡片）
+const HIDDEN_HEALTH_CARD_TYPES = ["sleep", "workout"];
+
 function getHealthCards(device, realtimeHealth = {}) {
   if (!device || !device.supportMenu) return [];
   const savedSettings = deviceSettings.load(device.deviceId);
-  return HEALTH_TYPES.filter((item) => item.support(device.supportMenu)).map((item) => {
+  return HEALTH_TYPES.filter(
+    (item) => !HIDDEN_HEALTH_CARD_TYPES.includes(item.type) && item.support(device.supportMenu),
+  ).map((item) => {
     const records = item.type === "workout" ? [] : storage.getHealthRecords(device.deviceId, item.type);
     const historical = item.type === "steps"
       ? records.find((record) => String(record.id || "").startsWith("steps-day-")) || records[0]
