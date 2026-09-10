@@ -1,6 +1,6 @@
 <view class="page mfa1-station-page">
   <app-header
-    title="MFA-1 血糖工作站"
+    title="MFA-1 测量工作站"
     subtitle="场次令牌只用于扫码签到，患者身份由服务端派生"
     showBack="{{true}}"
     bindback="backWorkspace"
@@ -17,7 +17,7 @@
       <view class="station-summary">
         <view wx:if="{{qrPayload}}" class="qr-panel">
           <canvas class="station-qr" canvas-id="mfa1Qr" style="width: 240px; height: 240px;"></canvas>
-          <view class="qr-hint">患者使用微信扫一扫加入血糖测量队列</view>
+          <view class="qr-hint">患者使用微信扫一扫加入测量队列</view>
         </view>
         <view class="station-main">
           <view class="station-title">场次 {{stationId || '未创建'}}</view>
@@ -51,7 +51,7 @@
       <view wx:else class="empty-inline">暂无当前患者</view>
     </form-section>
 
-    <form-section title="MFA-1 血糖仪" caption="Mfa1Ble 独立通道，结果帧 0x78 由设备主动推送">
+    <form-section title="MFA-1 检测仪" caption="Mfa1Ble 独立通道，结果帧 0x78 由设备主动推送">
       <view class="station-actions">
         <button class="secondary-button" loading="{{scanning}}" bindtap="scanDevice">扫描 MFA-1</button>
         <button class="secondary-button" loading="{{connecting}}" bindtap="connectDevice">连接并同步时间</button>

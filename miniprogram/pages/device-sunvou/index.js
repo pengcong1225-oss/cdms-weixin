@@ -102,6 +102,7 @@ Page({
   data: {
     activeRole: 'DOCTOR',
     patientId: '',
+    patientProfile: null,
     keyword: '',
     patients: [],
     patientNames: [],
@@ -330,10 +331,32 @@ Page({
       patientIndex: index,
       selectedPatient: patient,
       patientId: String(patient.id),
+      patientProfile: null,
       reports: [],
       selectedReport: null
     })
+    this.loadPatientProfile(patient.id)
     this.loadReports(true)
+  },
+
+  /** 选中后带出基本档案（防重名误选）：姓名/性别/年龄/手机号/身份证，失败静默。 */
+  async loadPatientProfile (patientId) {
+    try {
+      const response = await api.getDoctorPatient(patientId)
+      const detail = response?.data || response
+      const basic = detail?.data?.basicInfo || detail?.basicInfo || detail?.data || detail
+      if (!basic || !basic.name) return
+      if (String(this.data.selectedPatient?.id || '') !== String(patientId)) return // 已切换患者，丢弃过期响应
+      this.setData({
+        patientProfile: {
+          name: basic.name || '',
+          genderText: basic.genderText || (basic.gender === 1 ? '男' : basic.gender === 0 ? '女' : ''),
+          age: basic.age == null ? '' : String(basic.age),
+          phone: basic.phone || '',
+          idCard: basic.idCard || ''
+        }
+      })
+    } catch (_) { /* 详情拉取失败不阻塞主流程 */ }
   },
 
   async retry () {

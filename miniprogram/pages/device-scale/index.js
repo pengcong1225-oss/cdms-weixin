@@ -7,7 +7,7 @@ const labels = {
 }
 
 Page({
-  data: { patients: [], patientNames: [], patientIndex: -1, selectedPatient: null, keyword: '', searching: false, patientPage: 1, patientHasMore: true, devices: [], deviceNames: [], deviceIndex: -1, connected: false, scanning: false, connecting: false, measuring: false, metrics: [], gender: '', age: '', height: '', canConfirm: false, statusText: '待设备匹配', errorText: '' },
+  data: { patients: [], patientNames: [], patientIndex: -1, selectedPatient: null, patientProfile: null, keyword: '', searching: false, patientPage: 1, patientHasMore: true, devices: [], deviceNames: [], deviceIndex: -1, connected: false, scanning: false, connecting: false, measuring: false, metrics: [], gender: '', age: '', height: '', canConfirm: false, statusText: '待设备匹配', errorText: '' },
   onLoad (query) {
     this.initialPatientId = Number(query?.patientId || 0)
     this.scale = new ScaleBle({ onState: state => this.onScaleState(state), onResult: result => this.onScaleResult(result) })
@@ -55,12 +55,26 @@ Page({
     const index = typeof event === 'number' ? event : Number(event.detail.value)
     const patient = this.data.patients[index]
     if (!patient) return
-    this.setData({ patientIndex: index, selectedPatient: patient, gender: patient.gender == null ? '' : String(patient.gender), age: patient.age == null ? '' : String(patient.age), height: patient.height == null ? '' : String(patient.height), metrics: [], canConfirm: false })
+    this.setData({ patientIndex: index, selectedPatient: patient, patientProfile: null, gender: patient.gender == null ? '' : String(patient.gender), age: patient.age == null ? '' : String(patient.age), height: patient.height == null ? '' : String(patient.height), metrics: [], canConfirm: false })
     try {
       const detailResponse = await api.getDoctorPatient(patient.id)
       const detail = detailResponse?.data || detailResponse
       const basic = detail?.data?.basicInfo || detail?.basicInfo || detail?.data || detail
-      if (basic) this.setData({ gender: basic.gender == null ? this.data.gender : String(basic.gender), age: basic.age == null ? this.data.age : String(basic.age), height: basic.height == null ? this.data.height : String(basic.height) })
+      if (basic) {
+        this.setData({ gender: basic.gender == null ? this.data.gender : String(basic.gender), age: basic.age == null ? this.data.age : String(basic.age), height: basic.height == null ? this.data.height : String(basic.height) })
+        // 带出基本档案条（防重名误选）：姓名/性别/年龄/手机号/身份证；已切换患者则丢弃过期响应
+        if (basic.name && String(this.data.selectedPatient?.id || '') === String(patient.id)) {
+          this.setData({
+            patientProfile: {
+              name: basic.name || '',
+              genderText: basic.genderText || (basic.gender === 1 ? '男' : basic.gender === 0 ? '女' : ''),
+              age: basic.age == null ? '' : String(basic.age),
+              phone: basic.phone || '',
+              idCard: basic.idCard || ''
+            }
+          })
+        }
+      }
     } catch (_) { /* 列表数据足够时允许现场继续填写 */ }
   },
   async scan () {

@@ -24,6 +24,7 @@
         <view class="picker">{{selectedPatient ? selectedPatient.name : '请选择患者（共 ' + patientNames.length + ' 人）'}} <text>⌄</text></view>
       </picker>
       <view wx:if="{{patientHasMore}}" class="loadmore" bindtap="loadMorePatients">{{searching ? '加载中…' : '加载更多患者'}}</view>
+      <view wx:if="{{patientProfile}}" class="profile-card"><view class="profile-title">已选患者档案（请核对，防重名）</view><view class="profile-grid"><text>姓名：{{patientProfile.name}}</text><text>性别：{{patientProfile.genderText || '—'}}</text><text>年龄：{{patientProfile.age || '—'}}</text><text>手机：{{patientProfile.phone || '—'}}</text><text>身份证：{{patientProfile.idCard || '—'}}</text></view></view>
     </form-section>
 
     <form-section title="报告列表" caption="厂商推送的已同步报告，点选后再打开">

@@ -66,7 +66,8 @@ assert.ok(directJs.includes('syncTime') && directJs.includes('getBattery'), '连
 assert.ok(directJs.includes("require('../../../utils/mfa1-direct-api')"), '直测页必须走直测 API 模块')
 assert.ok(directJs.includes('createSession'), '必须创建直测会话')
 assert.ok(directJs.includes('measurementSessionId'), '确认落库必须携带 measurementSessionId')
-assert.ok(directWxml.includes('请患者采血'), '连接/开始测量后必须提示采血')
+assert.ok(directWxml.includes('请患者测量'), 'hint 必须保留患者测量指引（血糖/尿酸采血、血压免采血）')
+assert.ok(directWxml.includes('等待设备推送结果…'), '建会话后按钮文案必须为「等待设备推送结果…」（等待设备主动推送 0x78）')
 assert.ok(directJs.includes('showModal'), '落库前必须有二次确认弹窗')
 // partial 提示沿用
 assert.ok(directJs.includes('部分血脂结果'), 'partial 提示文案沿用轮测工作站')
@@ -191,7 +192,8 @@ const run = async () => {
   assert.strictEqual(String(sessionCalls[0].patientId), '9')
   assert.ok(sessionCalls[0].idempotencyKey, '建会话必须携带幂等 key')
   assert.strictEqual(page.measurementSessionId, 'sess-page-1', '页面保存服务端会话 ID')
-  assert.strictEqual(page.data.statusText, '请患者采血', '建会话后提示采血')
+  assert.strictEqual(page.data.statusText, '等待设备推送结果…', '建会话后统一提示等待设备推送')
+  assert.strictEqual(page.data.waitingPush, true, '建会话后进入等待推送态（按钮停转、防重复点击）')
   assert.ok(page.measurementIdempotencyKey, '确认动作 key 已生成（重试复用）')
 
   // 会话建立前的迟到帧丢弃
