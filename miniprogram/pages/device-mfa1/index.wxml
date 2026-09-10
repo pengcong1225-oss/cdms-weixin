@@ -21,8 +21,10 @@
         </view>
         <view class="station-main">
           <view class="station-title">场次 {{stationId || '未创建'}}</view>
-          <view class="station-meta">状态：{{stationStatus}}</view>
-          <view wx:if="{{tokenExpiresAt}}" class="station-meta">过期：{{tokenExpiresAt}}</view>
+          <view class="station-meta-row">
+            <view class="station-meta">状态：{{stationStatus}}</view>
+            <view wx:if="{{tokenExpiresAt}}" class="station-meta">过期：{{tokenExpiresAt}}</view>
+          </view>
         </view>
         <view class="station-side">
           <button class="secondary-button" bindtap="copyToken" wx:if="{{qrPayload}}">复制签到信息</button>
