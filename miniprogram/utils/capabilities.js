@@ -160,10 +160,13 @@ function getHealthCards(device, realtimeHealth = {}) {
   });
 }
 
+// 患者端设备功能页屏蔽的设置项：查找设备/遥控拍照/PPG 原始数据（底层指令保留，仅不展示入口）
+const HIDDEN_SETTING_IDS = ["findDevice", "takePhoto", "ppgMonitoring", "sensorRawPPG"];
+
 function getSettings(menu) {
   if (!menu) return [];
   return SETTING_TYPES.filter(
-    (item) => !["ppgMonitoring", "sensorRawPPG"].includes(item.id) && item.support(menu),
+    (item) => !HIDDEN_SETTING_IDS.includes(item.id) && item.support(menu),
   ).map((item) => Object.assign({}, item, {
     symbol: item.title.slice(0, 1),
     valueText: item.action ? "立即执行" : "点击设置"
