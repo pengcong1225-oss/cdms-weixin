@@ -1,4 +1,4 @@
-/* MFA-1 血糖仪单人直接测量（无场次直测，V58）：选患者 → 连设备 → 采血 → 设备推结果 → 确认落库。
+/* MFA-1 多参数检测仪单人直接测量（血糖/尿酸/血脂/血压，无场次直测，V58）：选患者 → 连设备 → 测量 → 设备推结果 → 确认落库。
    与体脂秤单人直测页（pages/device-scale/index）同构：患者 keyword 搜索 + picker 选择；
    与 MFA-1 扫码轮测工作站（pages/device-mfa1/index）共用 Mfa1Ble 通道与 v2 指标契约；
    差异：直测无场次/草稿——创建直测会话后设备结果直接进入本地确认，服务端以
@@ -95,6 +95,9 @@ function currentTimestamp () {
   return new Date().toISOString().slice(0, 19)
 }
 
+/** 会话建立后等待设备主动推送 0x78 的统一文案（协议无远程启动测量命令，只能等设备说话）。 */
+const WAITING_PUSH_TEXT = '等待设备推送结果…'
+
 // 纯函数导出供 node 测试驱动（与 device-mfa1/index.js 的 testables 同款机制）
 globalThis.__cdmsMfa1DirectTestables = {
   metricLabel, metricText, buildDirectMetrics, hasPartialLipid, LIPID_METRIC_NAMES,
@@ -132,7 +135,8 @@ Page({
     keyword: '', searching: false, patientPage: 1, patientHasMore: true,
     devices: [], deviceNames: [], deviceIndex: -1,
     scanning: false, connecting: false, connected: false, batteryText: '',
-    measuring: false, saving: false, metrics: [], partialLipidText: '', canConfirm: false,
+    measuring: false, waitingPush: false, saving: false, metrics: [], partialLipidText: '', canConfirm: false,
+    patientProfile: null,
     statusText: '待连接设备', errorText: ''
   },
 
@@ -207,12 +211,38 @@ Page({
     this.setData({
       patientIndex: index,
       selectedPatient: patient,
+      patientProfile: null,
       metrics: [],
       partialLipidText: '',
       canConfirm: false,
       measuring: false,
-      statusText: this.data.connected ? '已连接，开始测量后请患者采血' : '已选择患者，请连接 MFA-1'
+      waitingPush: false,
+      statusText: this.data.connected ? '已连接，开始测量后请患者测量' : '已选择患者，请连接 MFA-1'
     })
+    this.loadPatientProfile(patient.id)
+  },
+
+  /** 选中后带出基本档案（防重名误选）：姓名/性别/年龄/手机号/身份证，失败静默（列表信息仍可核对）。 */
+  async loadPatientProfile (patientId) {
+    try {
+      const response = await api.getDoctorPatient(patientId)
+      const detail = response?.data || response
+      const basic = detail?.data?.basicInfo || detail?.basicInfo || detail?.data || detail
+      if (!basic || String(basic.id || '') && basic.id != null && String(basic.id) !== String(patientId)) {
+        // 详情接口若未返回 basicInfo 结构则放弃展示，避免展示错档
+        if (!basic || !basic.name) return
+      }
+      if (String(this.data.selectedPatient?.id || '') !== String(patientId)) return // 已切换患者，丢弃过期响应
+      this.setData({
+        patientProfile: {
+          name: basic.name || '',
+          genderText: basic.genderText || (basic.gender === 1 ? '男' : basic.gender === 2 ? '女' : basic.gender === 0 ? '女' : ''),
+          age: basic.age == null ? '' : String(basic.age),
+          phone: basic.phone || '',
+          idCard: basic.idCard || ''
+        }
+      })
+    } catch (_) { /* 详情拉取失败不阻塞测量流程 */ }
   },
 
   // ---- 设备连接（Mfa1Ble：名称含 mfa 或服务 FFF0） ----
@@ -243,10 +273,15 @@ Page({
     this.setData({ connecting: true, errorText: '' })
     try {
       await this.mfa1.connect(device)
-      // 连接成功后同步设备时间并读取电量（电量经 onResult 展示）
-      await this.mfa1.syncTime()
-      await this.mfa1.getBattery()
-      this.setData({ connected: true, statusText: this.data.selectedPatient ? '已连接，开始测量后请患者采血' : '已连接 MFA-1' })
+      this.setData({ connected: true, statusText: this.data.selectedPatient ? '已连接，开始测量后请患者测量' : '已连接 MFA-1' })
+      // 连接成功后同步设备时间并读取电量（应答经 onResult 展示）。
+      // 尽力而为：失败只提示，不回滚「已连接」——否则时间帧被拒会把状态机打回未连接。
+      try {
+        await this.mfa1.syncTime()
+        await this.mfa1.getBattery()
+      } catch (syncError) {
+        this.setData({ errorText: '设备时间/电量读取失败，不影响测量：' + (syncError.message || '') })
+      }
     } catch (error) {
       this.setData({ errorText: error.message || 'MFA-1 连接失败', statusText: '待设备匹配' })
     } finally {
@@ -270,7 +305,7 @@ Page({
     }
     // 新测量 = 新会话：先消费旧会话的确认 key，再为本次创建动作生成 key（§14）
     this.settleAction('direct-confirm')
-    this.setData({ measuring: true, metrics: [], partialLipidText: '', canConfirm: false, errorText: '', statusText: '正在创建直测会话…' })
+    this.setData({ measuring: true, waitingPush: false, metrics: [], partialLipidText: '', canConfirm: false, errorText: '', statusText: '正在创建直测会话…' })
     try {
       const session = await mfa1DirectApi.createSession({
         patientId: patient.id,
@@ -285,13 +320,14 @@ Page({
       this.measurementSessionId = session.measurementSessionId
       this.measurementSessionStartedAt = Date.now()
       this.measurementIdempotencyKey = this.actionKey('direct-confirm')
-      this.setData({ measuring: true, statusText: '请患者采血' })
-      wx.showToast({ title: '请患者采血', icon: 'none' })
+      // 会话已建好，等待设备主动推送 0x78：按钮停止转圈，状态文案统一「等待设备推送结果…」
+      this.setData({ measuring: false, waitingPush: true, statusText: WAITING_PUSH_TEXT })
+      wx.showToast({ title: '请患者测量（采血或测血压）', icon: 'none' })
     } catch (error) {
       this.settleActionIfRejected('direct-session', error)
       this.measurementSessionId = ''
       this.measurementSessionStartedAt = 0
-      this.setData({ measuring: false, canConfirm: false, statusText: '待开始测量', errorText: error.message || '直测会话创建失败' })
+      this.setData({ measuring: false, waitingPush: false, canConfirm: false, statusText: '待开始测量', errorText: error.message || '直测会话创建失败' })
     }
   },
 
@@ -302,11 +338,13 @@ Page({
       return
     }
     if (result?.type === 'timeSyncAck' || result?.type === 'time') {
-      this.setData({ statusText: this.data.measuring ? '设备时间已同步，请患者采血' : '设备时间已同步' })
+      this.setData({ statusText: this.data.waitingPush ? '设备时间已同步，' + WAITING_PUSH_TEXT : '设备时间已同步' })
       return
     }
     if (result?.type === 'error') {
-      this.setData({ errorText: '设备返回错误应答，请重新测量' })
+      // 错误应答 = 设备对我们某条命令回 命令|0x80；透出命令号便于真机定位是哪条被拒
+      const rejected = result.command ? '0x' + (result.command | 0x80).toString(16).padStart(2, '0').toUpperCase() : ''
+      this.setData({ errorText: '设备返回错误应答' + (rejected ? '（命令 ' + rejected + ' 被拒）' : '') + '，请重新测量' })
       return
     }
     if (result?.type === 'lipidPending') {
@@ -318,7 +356,19 @@ Page({
     if (!acceptsFrameForSession(
       { measurementSessionId: this.measurementSessionId, startedAt: this.measurementSessionStartedAt },
       result
-    )) return
+    )) {
+      // 调试（真机定位「设备连上了但无数据」）：被会话归属闸门丢弃的帧此前没有任何痕迹。
+      try {
+        console.log('[MFA1-DIRECT][DROP-FRAME]', JSON.stringify({
+          currentSession: this.measurementSessionId || null,
+          startedAt: this.measurementSessionStartedAt || 0,
+          frameSession: result?.measurementSessionId || null,
+          receivedAt: result?.receivedAt || 0,
+          metrics: (result?.metrics || [result?.metric]).filter(Boolean).map(item => item.name)
+        }))
+      } catch (_) {}
+      return
+    }
     const incoming = Array.isArray(result.metrics) && result.metrics.length ? result.metrics : [result.metric]
     if (!incoming.length || !incoming[0]) return
     if (result.metric && result.metric.name === 'battery') {
@@ -332,6 +382,7 @@ Page({
     this.setData({
       metrics,
       measuring: false,
+      waitingPush: false,
       canConfirm: true,
       partialLipidText: partialLipid ? PARTIAL_RESULT_TEXT : '',
       statusText: `测量完成（${suffix}${metrics[0].state ? ' · ' + metrics[0].state : ''}${partialLipid ? ' · ' + PARTIAL_RESULT_TEXT : ''}），请确认落库`
@@ -402,6 +453,7 @@ Page({
       partialLipidText: '',
       canConfirm: false,
       measuring: false,
+      waitingPush: false,
       statusText: reasonText || '已落库，连接保持中，可继续下一位'
     })
   }

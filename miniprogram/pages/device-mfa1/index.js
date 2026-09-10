@@ -1,4 +1,4 @@
-/* MFA-1 血糖仪工作站：复用体脂秤场次机制（deviceType=MFA1），扫码签到 → 叫号 → 采血 → 0x78 结果 → 草稿 → 确认。 */
+/* MFA-1 多参数检测仪工作站（血糖/尿酸/血脂/血压）：复用体脂秤场次机制（deviceType=MFA1），扫码签到 → 叫号 → 测量 → 0x78 结果 → 草稿 → 确认。 */
 const stationApi = require('../../utils/station-api')
 const { ensureSession } = require('../../utils/auth-guard')
 const { Mfa1Ble } = require('../../services/mfa1Ble')
@@ -312,7 +312,7 @@ Page({
     this.setData({ creating: true, loading: true, errorText: '' })
     try {
       const station = await stationApi.createStation({
-        stationName: 'MFA-1 血糖轮测场次',
+        stationName: 'MFA-1 测量轮测场次',
         deviceType: 'MFA1',
         idempotencyKey: this.actionKey('station-create')
       })
@@ -361,7 +361,7 @@ Page({
     if (!isStationDeviceTypeAllowed('MFA1', station.deviceType)) {
       // 不匹配：先停 BLE/清态，再显式提示“请扫描正确的设备二维码”（设计 §11）
       this.resetMeasurementState('设备类型不匹配：请扫描正确的设备二维码')
-      this.setData({ deviceTypeMismatch: true, measuring: false, canConfirm: false, statusText: '请扫描正确的设备二维码（本页面仅支持 MFA-1 血糖场次）' })
+      this.setData({ deviceTypeMismatch: true, measuring: false, canConfirm: false, statusText: '请扫描正确的设备二维码（本页面仅支持 MFA-1 场次）' })
       return
     }
     if (this.data.deviceTypeMismatch) {
@@ -446,7 +446,7 @@ Page({
   },
 
   /**
-   * 丢弃 BLE 通知残留半帧与血脂挂起态（连同其降级定时器回调链），旧连接周期的数据不再进入新会话。
+   * 丢弃 BLE 通知残留半帧，旧连接周期的数据不再进入新会话。
    * 保留【同一个】FrameAssembler 实例：Mfa1Ble 的值监听器按 this.assembler 动态取用，
    * 替换实例字段会造成“页面清一个、监听器写另一个”的分裂缓冲；这里逐项复位即可。
    */
@@ -454,9 +454,7 @@ Page({
     this.stopActiveScan()
     const assembler = this.mfa1 && this.mfa1.assembler
     if (!assembler) return
-    if (assembler.lipid && assembler.lipid.timer && assembler.clearTimeoutFn) assembler.clearTimeoutFn(assembler.lipid.timer)
     assembler.buffer = new Uint8Array(0)
-    assembler.lipid = null
   },
 
   /**
@@ -501,7 +499,7 @@ Page({
     this.measurementTimer = setTimeout(() => {
       this.measurementTimer = null
       if (!this.data.measuring || this.data.currentDraft) return
-      this.setData({ measuring: false, canConfirm: false, statusText: '测量未完成或已超时：数据仅作现场提示，不能提交草稿，请让患者重新采血' })
+      this.setData({ measuring: false, canConfirm: false, statusText: '测量未完成或已超时：数据仅作现场提示，不能提交草稿，请重新测量' })
     }, 60000)
     return true
   },
@@ -579,7 +577,7 @@ Page({
       }
       this.applyStation(station)
       if (this.data.deviceTypeMismatch) return
-      // MFA-1 无需 configurePatient（设备侧只要求 0x01 时间同步）：叫号后直接提示采血
+      // MFA-1 无需 configurePatient（设备侧只要求 0x01 时间同步）：叫号后直接提示测量
       this.setData({
         measuring: !!sessionReady,
         canConfirm: false,
@@ -587,7 +585,7 @@ Page({
         currentDraft: null,
         statusText: station.currentQueueItem
           ? (sessionReady
-            ? `已叫号：${patientProfile(station.currentQueueItem || {}).maskedName}，请采血`
+            ? `已叫号：${patientProfile(station.currentQueueItem || {}).maskedName}，请开始测量`
             : '检测会话未就绪：服务端未下发会话标识，请重新叫号')
           : '暂无待测患者'
       })
@@ -687,7 +685,10 @@ Page({
       return
     }
     // 设备类型闸门：不匹配场次不得消费任何 BLE 结果（设计 §11）
-    if (this.data.deviceTypeMismatch) return
+    if (this.data.deviceTypeMismatch) {
+      try { console.log('[MFA1-STATION][DROP-FRAME]', 'deviceTypeMismatch', result?.type) } catch (_) {}
+      return
+    }
     // 挂起进度提示不涉及数据归属，任何会话下都只做文案展示
     if (result?.type === 'lipidPending') {
       // v2：血脂多帧聚合挂起中 —— 明确提示等待续帧，不产生可提交状态
@@ -699,7 +700,19 @@ Page({
     if (!acceptsFrameForSession(
       { measurementSessionId: this.measurementSessionId, startedAt: this.measurementSessionStartedAt },
       result
-    )) return
+    )) {
+      // 调试（真机定位「设备连上了但无数据」）：被会话归属闸门丢弃的帧此前没有任何痕迹。
+      try {
+        console.log('[MFA1-STATION][DROP-FRAME]', JSON.stringify({
+          currentSession: this.measurementSessionId || null,
+          startedAt: this.measurementSessionStartedAt || 0,
+          frameSession: result?.measurementSessionId || null,
+          receivedAt: result?.receivedAt || 0,
+          metrics: (result?.metrics || [result?.metric]).filter(Boolean).map(item => item.name)
+        }))
+      } catch (_) {}
+      return
+    }
     if (result?.type !== 'result') return
     // v2：血压/血脂完整结果带 metrics 数组；GLU/UA 单 metric 保持兼容
     const incoming = Array.isArray(result.metrics) && result.metrics.length ? result.metrics : [result.metric]
@@ -799,10 +812,14 @@ Page({
     this.setData({ connecting: true, errorText: '' })
     try {
       await this.mfa1.connect(device)
-      // 连接成功后：同步设备时间并读取电量
-      await this.mfa1.syncTime()
-      await this.mfa1.getBattery()
-      this.setData({ connected: true, statusText: '已连接 MFA-1，等待采血结果' })
+      this.setData({ connected: true, statusText: '已连接 MFA-1，等待设备推送结果…' })
+      // 连接成功后：同步设备时间并读取电量。尽力而为：失败只提示，不回滚「已连接」状态。
+      try {
+        await this.mfa1.syncTime()
+        await this.mfa1.getBattery()
+      } catch (syncError) {
+        this.setData({ errorText: '设备时间/电量读取失败，不影响测量：' + (syncError.message || '') })
+      }
     } catch (error) {
       this.setData({ errorText: error.message || 'MFA-1 连接失败', statusText: '待设备匹配' })
     } finally {
