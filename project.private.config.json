@@ -22,9 +22,9 @@
     "miniprogram": {
       "list": [
         {
-          "name": "mzf.jiaqiaokeji.com",
+          "name": "jq.mockr.com.cn",
           "pathName": "pages/auth/login",
-          "query": "cdmsBaseUrl=https://mzf.jiaqiaokeji.com/cdmsapi&managerBaseUrl=https://mzf.jiaqiaokeji.com/cdmsmanagerapi/api/v1&iotBaseUrl=https://mzf.jiaqiaokeji.com/cdmsiotapi",
+          "query": "cdmsBaseUrl=https://jq.mockr.com.cn/cdmsapi&managerBaseUrl=https://jq.mockr.com.cn/cdmsmanagerapi/api/v1&iotBaseUrl=https://jq.mockr.com.cn/cdmsiotapi",
           "scene": null,
           "launchMode": "default"
         },
