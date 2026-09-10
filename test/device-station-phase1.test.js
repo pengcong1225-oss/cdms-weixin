@@ -62,6 +62,13 @@ function mfa1Frame (head) {
   const crc = padded.reduce((sum, value) => (sum + value) & 0xff, 0)
   return Uint8Array.from(padded.concat([crc]))
 }
+// 变长结果帧（真机实证：0x78 结果帧为 20/31 字节，CRC=前面所有字节求和 & 0xFF）
+function mfa1ResultFrame (head, total) {
+  const padded = head.slice(0, total - 1)
+  while (padded.length < total - 1) padded.push(0)
+  const crc = padded.reduce((sum, value) => (sum + value) & 0xff, 0)
+  return Uint8Array.from(padded.concat([crc]))
+}
 
 // ---- Page/wx/app 模拟：真实注册页面模块，拿到带完整方法的页实例 ----
 
@@ -389,23 +396,25 @@ async function run () {
   const sessionReadyForParse = mfa1Page.beginMeasurementSession('q-10')
   if (!sessionReadyForParse) mfa1Page.adoptMeasurementSession('sess-parse-probe', 'q-10')
   assert.ok(mfa1Page.measurementSessionId, '解析层验证需活动检测会话（v1 本地标记或 v2 服务端 ID 探针）')
-  // 制造分包残留 + 血脂挂起态：走 Mfa1Ble.onResult 回调链（与真机监听器分发一致；
+  // 制造分包残留 + 完整血脂结果：走 Mfa1Ble.onResult 回调链（与真机监听器分发一致；
   // 直接调 assembler.push 只喂解析器、不触发页面消费，不能验证「到达页面」）
-  const gluHalf = mfa1Frame([0x78, 0x01].concat(f32be(5.5)).concat([0x01]))
   // 重新绑定实例：上方 connectDevice 失败会走 scheduleReconnect → connectInternal 重建 assembler，
   // 旧句柄已脱离 this.mfa1.assembler；断言前必须取当前活动解析器（真机同理：监听器始终读活实例）。
   const dispatch = bytes => { mfa1Page.mfa1.assembler.push(bytes).forEach(item => mfa1Page.onMfa1Result(Object.assign({}, item, { receivedAt: Date.now() }))) }
-  const lipidStartFrame = mfa1Frame([0x78, 0x03].concat(f32be(5.2)).concat([0x01]).concat(f32be(1.3)))
-  // 分包残留：先喂前半帧（应滞留 buffer），再补齐后 6 字节成帧（10+6=16 恰一整帧）
-  dispatch(lipidStartFrame.slice(0, 10))
-  dispatch(lipidStartFrame.slice(10))
+  // 血脂 31 字节单帧（D1..D17 全量）：TC=5.2、D5=1、HDL=1.3、TG=1.8、LDL=3.1
+  const lipidFrame = mfa1ResultFrame([0x78, 0x03].concat(f32be(5.2)).concat([0x01]).concat(f32be(1.3)).concat(f32be(1.8)).concat(f32be(3.1)), 31)
+  // 分包残留：先喂前 10 字节（应滞留 buffer），再补齐后 21 字节成帧
+  dispatch(lipidFrame.slice(0, 10))
   await flushPromises()
-  // 解析链路断言：半帧留在 buffer、血脂起始帧进入挂起态，且都经由 Mfa1Ble→页面回调链送达
-  assert.ok(mfa1Page.mfa1.assembler.buffer.length > 0 || mfa1Page.mfa1.assembler.lipid, '分包残留与血脂挂起态由解析层持有（收口不破坏解析）')
-  assert.ok(/血脂分段采集中|血脂项目即将开放/.test(mfa1Page.data.statusText), 'lipidPending 已到达页面并给出对应形态提示')
+  assert.ok(mfa1Page.mfa1.assembler.buffer.length > 0, '半帧滞留 buffer 由解析层持有（收口不破坏解析）')
+  dispatch(lipidFrame.slice(10))
+  await flushPromises()
+  // 31 字节凑满 → 单帧直出完整血脂：v2 出草稿指标，v1 回退整笔拒绝并提示
+  const lipidMetricsOnPage = mfa1Page.data.metrics || []
+  const lipidAccepted = lipidMetricsOnPage.length === 4 || /部分血脂|血脂/.test(mfa1Page.data.statusText + (mfa1Page.data.errorText || ''))
+  assert.ok(lipidAccepted, '完整血脂结果已到达页面（草稿 4 项或给出血脂提示）')
   mfa1Page.resetMeasurementState()
   assert.strictEqual(mfa1Page.mfa1.assembler.buffer.length, 0, '切换患者后 MFA1 解析缓冲清空')
-  assert.strictEqual(mfa1Page.mfa1.assembler.lipid, null, '血脂挂起态一并丢弃')
   assert.strictEqual(mfa1Page.measurementSessionId, '', '会话失效')
 
   // ---- 纯函数直测：累积器与完整性判定 ----

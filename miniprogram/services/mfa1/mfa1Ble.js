@@ -15,6 +15,23 @@ const RESULT_TYPE_URIC_ACID = 2
 const RESULT_TYPE_LIPID = 3
 const RESULT_TYPE_BLOOD_PRESSURE = 4
 
+/**
+ * 0x78 结果帧真实字节数（真机实证 2026-09-10 血压抓包 + 协议 §6 字面布局）：
+ * 命令/应答帧 = 16 字节；结果帧 = 变长 —— 非血脂 20 字节，血脂（D1..D17 全量）31 字节。
+ * 布局：0x78 T1 D1..D5 00 00 00 TT YY MM DD HH mm SS 00 [d6..d17] CRC（CRC=前面所有字节求和）。
+ * 旧「结果帧也是 16 字节」的假设是真机「设备连上了但数据不返回」的根因：20 字节被硬切
+ * 16+4，前 16 字节 CRC 必错整帧被丢，设备明明推了结果、页面永远收不到。
+ */
+const RESULT_FRAME_BYTES = 20
+const RESULT_FRAME_LIPID_BYTES = 31
+/** 血脂数据段 D1..D17 的字节数（0x78 T1=3 帧：字节 2..18）。 */
+const LIPID_DATA_BYTES = 17
+
+/** 调试辅助（真机定位帧格式用）：字节数组 → 空格分隔 hex。 */
+function hexOf (bytes) {
+  return Array.from(bytes || []).map(v => (v & 0xff).toString(16).padStart(2, '0')).join(' ')
+}
+
 function normalizeUuid (value) {
   const text = String(value || '').toLowerCase()
   if (/^[0-9a-f]{4}$/.test(text)) return `0000${text}-0000-1000-8000-00805f9b34fb`
@@ -22,9 +39,10 @@ function normalizeUuid (value) {
 }
 
 function crc (bytes) {
-  // CRC = 前 15 字节求和 & 0xFF（字节 15 为校验位）
+  // CRC = 前面所有字节求和 & 0xFF（最后一字节为校验位；16 字节命令帧=前 15 字节，
+  // 20/31 字节结果帧=前 19/30 字节 —— 真机抓包验证：BP 结果帧前 19 字节和=0x230→0x30 ✓）
   let sum = 0
-  for (let i = 0; i < FRAME_SIZE - 1; i++) sum = (sum + (bytes[i] & 0xff)) & 0xff
+  for (let i = 0; i < bytes.length - 1; i++) sum = (sum + (bytes[i] & 0xff)) & 0xff
   return sum
 }
 
@@ -47,14 +65,27 @@ function buildFrame (command, payload = []) {
   return bytes
 }
 
-/** 0x01 设置时间：载荷 AA(年BCD) BB(月) CC(日) DD(时) EE(分) FF(秒)，其余 00。 */
+/**
+ * 0x01 设置时间：载荷 AA(年) BB(月) CC(日) DD(时) EE(分) FF(秒)，其余 00。
+ * 协议 §3.1 原文：「AA年；BB月；CC日；DD小时；EE分钟；FF秒。格式为BCD格式，如12年，AA = 0x12」
+ * —— 六个字段全部 BCD，不是只有年。
+ * 真机实证（2026-09-10 抓包）：只把年转 BCD、时分秒用二进制时，设备对 CRC 正确的帧回
+ * 0x81（协议定义为「校验错误或执行 Fail」），即字段非法被拒。时 0x0C / 分 0x1D 都不是合法 BCD。
+ */
 function buildSetTimeFrame (date = new Date()) {
   const year = date.getFullYear() % 100
-  return buildFrame(CMD_SET_TIME, [toBcd(year), date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()])
+  return buildFrame(CMD_SET_TIME, [
+    toBcd(year), toBcd(date.getMonth() + 1), toBcd(date.getDate()),
+    toBcd(date.getHours()), toBcd(date.getMinutes()), toBcd(date.getSeconds())
+  ])
 }
 
 function buildReadTimeFrame () { return buildFrame(CMD_READ_TIME) }
-function buildReadBatteryFrame () { return buildFrame(CMD_READ_BATTERY) }
+/**
+ * 0x13 读取电量：协议 §4 要求载荷首字节 AA = 0x99（「现在进行一次电量检测」），
+ * 其余 14 字节 0。发 AA=0x00 时设备不返回电量包 —— 真机实测只回 0x01 的 0x81，电量包始终缺席。
+ */
+function buildReadBatteryFrame () { return buildFrame(CMD_READ_BATTERY, [0x99]) }
 function buildReadMacFrame () { return buildFrame(CMD_READ_MAC) }
 
 /** 大端 IEEE754 单精度浮点（D1..D4），DataView 保证小程序 ArrayBuffer 与 Node 双端兼容。 */
@@ -77,16 +108,8 @@ function readFloat32BE (bytes, offset) {
  *   两笔续帧后四指标齐备；凑不满则降级 partial:true。零值字节不覆盖已有数据。
  * - CRC 挤占 LDL 高字节正是文档歧义根源，槽位值允许被后续帧回显覆盖；真机抓包后收紧。
  */
+/** 血脂 D 域偏移（17 字节 D1..D17 数据段内）：TC@0(D1..D4)、HDL@5(D6..D9)、TG@9(D10..D13)、LDL@13(D14..D17)。 */
 const LIPID_FIELDS = [['tc', 0], ['hdl', 5], ['tg', 9], ['ldl', 13]]
-/** 凑满四指标所需的最小拼接流长度（LDL 尾字节流位置 +1）。 */
-const LIPID_DATA_BYTES = 17
-/** 续帧槽位：第 k 笔落在流偏移 SLOT_FIRST + SLOT_STEP*(k-1)。 */
-const LIPID_SLOT_FIRST = 5
-const LIPID_SLOT_STEP = 8
-/** 达到该续帧数即认为传输结束（LDL@13..16 已在第二笔内）。 */
-const LIPID_MAX_CHUNKS = 2
-/** 血脂续帧等待超时（毫秒）：超时后以已收到的前缀降级出结果（partial），防止挂起。 */
-const LIPID_ASSEMBLY_TIMEOUT_MS = 5000
 
 function fastStateText (code) {
   const n = code & 0xff
@@ -98,21 +121,29 @@ function fastStateText (code) {
 /** 解析 16 字节帧；Bit7 为应答错误位（设备错误应答 = 命令|0x80）。 */
 function parseMfa1Frame (input) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input || [])
-  if (bytes.length !== FRAME_SIZE) throw new Error('MFA1_FRAME_LENGTH')
-  if (bytes[FRAME_SIZE - 1] !== crc(bytes)) throw new Error('MFA1_FRAME_CHECKSUM')
+  if (bytes.length !== FRAME_SIZE && bytes.length !== RESULT_FRAME_BYTES && bytes.length !== RESULT_FRAME_LIPID_BYTES) throw new Error('MFA1_FRAME_LENGTH')
+  if (bytes[bytes.length - 1] !== crc(bytes)) throw new Error('MFA1_FRAME_CHECKSUM')
   const raw = bytes[0] & 0xff
   const command = raw & 0x7f
   if (raw & 0x80) return { command, type: 'error', error: true }
 
   if (command === CMD_SET_TIME) return { command, type: 'timeSyncAck' }
   if (command === CMD_READ_TIME) {
+    // 协议 §2：应答 AA BB CC DD EE FF 为年月日时分秒，格式与 0x01 同为 BCD。
     return {
       command, type: 'time',
-      year: 2000 + fromBcd(bytes[1]), month: bytes[2], day: bytes[3],
-      hour: bytes[4], minute: bytes[5], second: bytes[6]
+      year: 2000 + fromBcd(bytes[1]), month: fromBcd(bytes[2]), day: fromBcd(bytes[3]),
+      hour: fromBcd(bytes[4]), minute: fromBcd(bytes[5]), second: fromBcd(bytes[6])
     }
   }
-  if (command === CMD_READ_BATTERY) return { command, type: 'battery', level: bytes[1] & 0xff }
+  if (command === CMD_READ_BATTERY) {
+    // 真机实证（2026-09-10 两台次抓包）：应答 byte1 为 BCD 电量 —— 0x83→83%、0x94→94%。
+    // 直读字节会显示「131%/148%」这类 >100 的怪值；非 BCD 位（半字节 >9）时兜底直读原值。
+    const raw = bytes[1] & 0xff
+    const isBcd = ((raw >> 4) & 0x0f) <= 9 && (raw & 0x0f) <= 9
+    const level = isBcd ? fromBcd(raw) : raw
+    return { command, type: 'battery', level }
+  }
   if (command === CMD_READ_MAC) {
     const mac = Array.from(bytes.slice(1, 7)).map(value => value.toString(16).padStart(2, '0').toUpperCase()).join(':')
     return { command, type: 'mac', mac }
@@ -134,35 +165,27 @@ function parseTestResult (bytes) {
     }
   }
   if (kind === RESULT_TYPE_LIPID) {
-    // 协议原文血脂字段 D1..D4=TC、D6..D9=HDL、D10..D13=TG、D14..D17=LDL（FLOAT 大端），
-    // D14..D17 落在字节 14..17，超出 16 字节定长帧（字节 15=CRC）——文档歧义。
-    // 假设（详见 FrameAssembler 类注释与 LIPID_FIELDS 常量注释）：设备以 0x78 T1=3
-    // 起始帧 + 若干续帧传输，各帧 data 段按「D 域对齐」写入槽位流；起始帧承载 TC/D5/HDL，
-    // 续帧补齐 TG、LDL。FrameAssembler 挂起凑帧并广播 { type:'lipidPending' } 供 UI 提示；
-    // 无法凑满（超时/断线/新测量混入）时降级为仅上报完整解析出的指标并置 partial:true。
-    // 兼容一期行为：单帧同时给出 name:'tc' 的降级 metric（旧直调 parseMfa1Frame 的
-    // 消费者不变）；FrameAssembler 走多帧聚合路径时忽略该降级值、改用拼接流。
+    // 31 字节结果帧：D1..D17 完整落在字节 2..18，TC/HDL/TG/LDL 一次拿全（FLOAT 大端，
+    // D 域偏移见 LIPID_FIELDS）。旧「16 字节起始帧+续帧拼接、CRC 挤占 LDL」是错误假设 ——
+    // 那是拿 16 字节定长去套变长帧的产物，已随挂起聚合机制一并删除。
+    // 某字段 4 字节全 0 视为缺失（parseLipid 跳过），缺哪项整批标 partial:true 由页面提示。
     const fastCode = bytes[6] & 0xff
-    const data = bytes.slice(2, FRAME_SIZE - 1) // data 段 = 字节 2..14（13 字节）
-    let degraded = null
-    try {
-      degraded = { name: 'tc', value: readFloat32BE(bytes, 2), unit: 'mmol/L', state: fastStateText(fastCode), fastState: fastCode }
-    } catch (_) { /* TC 解析失败则无降级值 */ }
-    // parseMfa1Frame 是纯函数（无状态）：是否续帧由 FrameAssembler 依挂起态判定，
-    // 这里统一输出原始材料（data 全段 + fastState），聚合语义见 FrameAssembler.consume。
+    const data = bytes.slice(2, 2 + LIPID_DATA_BYTES)
+    const { metrics, complete } = parseLipid(data, fastCode)
     return {
       command: CMD_TEST_RESULT, type: 'result',
       lipidKind: true, kind, fastState: fastCode, data,
-      metric: degraded, metrics: degraded ? [degraded] : []
+      metric: metrics[0] || null, metrics, complete
     }
   }
   if (kind === RESULT_TYPE_BLOOD_PRESSURE) {
-    // 血压 T1=4：D2(byte2)=心率 bpm、D3(byte3)=舒张压 mmHg、D4(byte4)=收缩压 mmHg。
+    // 血压 T1=4（20 字节帧）：D1=byte2（恒 0），D2=byte3 心率 bpm、D3=byte4 舒张压 mmHg、
+    // D4=byte5 收缩压 mmHg。真机抓包 78 04 00 4E 3C 6C …：心率 78 / 舒张压 60 / 收缩压 108。
     // device-mfa1 页面与草稿提交按「简单数值 metric」消费（name/value/unit），
     // 故拆为 systolic/diastolic/heartRate 三个 metric 而非复合对象。
-    const heartRate = bytes[2] & 0xff
-    const diastolic = bytes[3] & 0xff
-    const systolic = bytes[4] & 0xff
+    const heartRate = bytes[3] & 0xff
+    const diastolic = bytes[4] & 0xff
+    const systolic = bytes[5] & 0xff
     const metrics = [
       { name: 'systolic', value: systolic, unit: 'mmHg' },
       { name: 'diastolic', value: diastolic, unit: 'mmHg' },
@@ -195,25 +218,22 @@ function parseLipid (data, fastCode) {
 }
 
 /**
- * BLE 通知可能粘包/分包：协议 16 字节定长，直接按 16 字节切帧，坏帧丢弃。
+ * BLE 通知切帧器（粘包/分包安全）。
  *
- * 血脂多帧聚合（二期新增）：
- * - 起始帧 = 0x78 且 T1(byte1)=3；只取其前缀 D1..D5（TC float + 餐前餐后标记）。
- * - 续帧格式协议未明确 —— 这是记录在案的歧义与假设：任何紧随其后、CRC 校验通过且
- *   data 段非空的 0x78 结果帧都按「纯增量」当作续帧，data 段依序拼接，只取到刚好
- *   凑满 16 字节浮点流；凑满即出完整结果，凑不满（超时/断线/新一笔起始帧）则以已收
- *   前缀降级出结果并置 partial:true。
- * - 超时（LIPID_ASSEMBLY_TIMEOUT_MS）或连接重建（新建 assembler）同样触发降级输出。
- * - 拼接流按 LIPID_FIELDS 偏移取 float32 大端（TC@0/HDL@5/TG@9/LDL@13，流偏移 4=D5），
- *   能完整解析几个就上报几个。
+ * 帧长按命令结构判定（真机实证 2026-09-10，详见 RESULT_FRAME_BYTES 常量注释）：
+ * - 0x78 结果帧：变长 —— T1=3 血脂 31 字节，其余（GLU/UA/血压）20 字节；
+ *   MTU 分包时先滞留 buffer，凑满整帧再 CRC 验证出帧。
+ * - 其余（0x01/0x13/0x22/0x41 等命令应答）：16 字节定长。
+ * CRC 校验失败的帧按「丢一字节重新对齐」重同步（粘包错位/脏数据自愈），
+ * 并打 [MFA1-BLE][DROP] 日志（真机定位帧格式用）。
+ *
+ * 历史：曾按 16 字节定长切帧 + 血脂「起始帧/续帧挂起聚合」——均是对变长结果帧的
+ * 错误假设（真机上 20 字节结果被硬切 16+4 后 CRC 必错，整帧被静默丢弃，表现为
+ * 「设备连上了但数据不返回」）。挂起聚合机制已随该假设一并删除，血脂为单帧直出。
  */
 class FrameAssembler {
-  constructor ({ now = () => Date.now(), setTimeoutFn = null, clearTimeoutFn = null } = {}) {
+  constructor () {
     this.buffer = new Uint8Array(0)
-    this.lipid = null // { kind:3, fastCode, data:Uint8Array, timer }
-    this.now = now
-    this.setTimeoutFn = setTimeoutFn || (typeof setTimeout === 'function' ? setTimeout : null)
-    this.clearTimeoutFn = clearTimeoutFn || (typeof clearTimeout === 'function' ? clearTimeout : null)
   }
   push (input) {
     const incoming = input instanceof Uint8Array ? input : new Uint8Array(input || [])
@@ -221,92 +241,32 @@ class FrameAssembler {
     combined.set(this.buffer); combined.set(incoming, this.buffer.length)
     const output = []
     let offset = 0
-    // 防脏数据无限堆积：丢弃无法成帧的残留（保留不足 16 字节尾部）。
-    while (combined.length - offset >= FRAME_SIZE) {
-      const candidate = combined.slice(offset, offset + FRAME_SIZE)
-      offset += FRAME_SIZE
+    for (;;) {
+      const remaining = combined.length - offset
+      if (remaining < FRAME_SIZE) break // 最短帧 16 字节，不足则等后续通知
+      // 按帧头判定本帧长度；0x78 结果帧需要比 16 更长时先滞留等凑满
+      let frameLength = FRAME_SIZE
+      if (combined[offset] === CMD_TEST_RESULT) {
+        const t1 = combined[offset + 1] & 0xff
+        frameLength = t1 === RESULT_TYPE_LIPID ? RESULT_FRAME_LIPID_BYTES : RESULT_FRAME_BYTES
+        if (remaining < frameLength) break
+      }
+      const candidate = combined.slice(offset, offset + frameLength)
       let parsed = null
-      try { parsed = parseMfa1Frame(candidate) } catch (_) { /* 丢弃坏帧，等待下一帧 */ }
-      if (parsed) output.push(...this.consume(parsed))
+      try { parsed = parseMfa1Frame(candidate) } catch (error) {
+        // 调试（真机定位帧格式用）：坏帧此前被静默丢弃，连「收到但校验失败」都不可见。
+        try { console.log('[MFA1-BLE][DROP]', hexOf(candidate), error && error.message) } catch (_) {}
+      }
+      if (parsed) {
+        output.push(parsed)
+        offset += frameLength
+      } else {
+        offset += 1 // 字节级重同步：丢一字节再试，直到对齐下一个真实帧头
+      }
     }
     this.buffer = offset < combined.length ? combined.slice(offset) : new Uint8Array(0)
     if (this.buffer.length > FRAME_SIZE * 8) this.buffer = new Uint8Array(0)
     return output
-  }
-  /** 血脂挂起帧的超时降级：由 Mfa1Ble 在断线/销毁时调用。 */
-  flush () {
-    if (!this.lipid) return []
-    return this.finishLipid(false)
-  }
-  consume (result) {
-    if (result.command !== CMD_TEST_RESULT) return [result]
-    // 挂起中任何 T1=3 结果帧都按序当作本笔续帧（协议未定义续帧格式；连续到达 +
-    // 类型一致即聚合 —— 稳妥策略，回显/空洞由 D 域对齐吸收）。非血脂帧或第二笔同型
-    // 但已被上一轮凑满出结果的帧走下方新起始分支。
-    if (result.lipidKind && this.lipid) return this.appendLipid(result)
-    if (result.lipidKind) {
-      // 新的起始帧到来：上一笔血脂仍未凑满 → 先降级输出旧前缀，再开新挂起。
-      const out = this.lipid ? this.finishLipid(false) : []
-      this.startLipid(result)
-      out.push({ command: CMD_TEST_RESULT, type: 'lipidPending', count: this.lipid.data.length })
-      return out
-    }
-    if (this.lipid) {
-      // 挂起中收到非血脂结果帧（GLU/UA/BP）：无法确定它是「混入的独立测量」还是新
-      // 一轮开始 —— 稳妥策略：先以已收前缀降级收尾血脂（partial 语义由 parseLipid 决定），
-      // 再原样放行该帧。错误应答等非结果帧透传，等待超时降级。
-      if (result.type === 'result' && result.metric) {
-        const out = this.finishLipid(false)
-        out.push(result)
-        return out
-      }
-      return [result]
-    }
-    // 无挂起时收到的其他 0x78 结果帧（含 unknownKind 等）：直接透传。
-    return [result]
-  }
-  startLipid (startResult) {
-    // 槽位流：起始帧写偏移 0（其 data 段原样铺入，含 TC/D5/HDL…），第 k 笔续帧写偏移
-    // 5+13(k-1) —— 每帧 data 段的偏移 4 都是 D5 槽（帧 byte6 ↔ D5），故续帧整段覆盖时
-    // HDL 恰落 @5、TG @9、LDL @13。未触及槽位保持 0，parseLipid 把全零 float 视为缺失。
-    const stream = new Uint8Array(LIPID_DATA_BYTES + FRAME_SIZE)
-    // 起始帧只取前缀 D1..D9（TC@0、D5@4、HDL@5）；TG/LDL 由续帧按槽位覆盖。
-    stream.set(startResult.data.subarray(0, Math.min(startResult.data.length, 9)))
-    this.lipid = { fastCode: startResult.fastState & 0xff, data: stream, chunks: 0 }
-    if (this.setTimeoutFn) {
-      this.lipid.timer = this.setTimeoutFn(() => {
-        if (!this.lipid) return
-        const drained = this.flush()
-        if (this.onDrain) { try { this.onDrain(drained) } catch (_) {} }
-      }, LIPID_ASSEMBLY_TIMEOUT_MS)
-      if (this.lipid.timer && typeof this.lipid.timer.unref === 'function') this.lipid.timer.unref()
-    }
-  }
-  appendLipid (result) {
-    const current = this.lipid
-    if (!current) return []
-    // 续帧 data 段 = 其字节 2..14（整段追加）；歧义假设见类注释。
-    const incoming = result.data instanceof Uint8Array && result.data.length
-      ? result.data
-      : (result.bytes && result.bytes.slice ? result.bytes.slice(2, FRAME_SIZE - 1) : new Uint8Array(0))
-    // D 域对齐槽位写入：cont1→@5、cont2→@13（见类注释）；0 字节视为空洞不覆盖。
-    // 防御：异常设备狂发续帧 → 超过 4 笔仍不齐就降级收尾，释放挂起。
-    if (current.chunks >= 4) return this.finishLipid(false)
-    const slot = LIPID_SLOT_FIRST + LIPID_SLOT_STEP * current.chunks
-    current.chunks += 1
-    incoming.forEach((value, index) => { if (value !== 0 && slot + index < current.data.length) current.data[slot + index] = value })
-    const { metrics } = parseLipid(current.data, current.fastCode)
-    if (metrics.length === LIPID_FIELDS.length) return this.finishLipid(true)
-    return [{ command: CMD_TEST_RESULT, type: 'lipidPending', count: current.chunks }]
-  }
-  finishLipid (complete) {
-    const current = this.lipid
-    this.lipid = null
-    if (!current) return []
-    if (current.timer && this.clearTimeoutFn) this.clearTimeoutFn(current.timer)
-    const { metrics } = parseLipid(current.data, current.fastCode)
-    if (!metrics.length) return []
-    return [{ command: CMD_TEST_RESULT, type: 'result', metric: metrics[0], metrics, complete: !!complete }]
   }
 }
 
@@ -315,6 +275,12 @@ function callWx (name, options) {
     if (typeof wx?.[name] !== 'function') return reject(new Error(`BLE_API_UNAVAILABLE:${name}`))
     wx[name]({ ...options, success: resolve, fail: reject })
   })
+}
+
+/** 尽力释放某设备的连接句柄（无句柄/已断开时失败属预期，静默吞掉）。 */
+async function closeQuietly (deviceId) {
+  if (!deviceId || typeof wx?.closeBLEConnection !== 'function') return
+  await new Promise(resolve => wx.closeBLEConnection({ deviceId, complete: resolve }))
 }
 
 /** 广播设备名形如 "MFA-1 M XXXX"（XXXX 为 MAC 后 4 位）：按名字 /mfa/i 或服务 UUID FFF0 匹配。 */
@@ -329,8 +295,6 @@ class Mfa1Ble {
     this.onResult = onResult || (() => {})
     this.devices = new Map(); this.deviceId = ''; this.writeId = ''; this.notifyId = ''
     this.assembler = new FrameAssembler(); this.manualClose = false; this.reconnectPromise = null; this.reconnectAttempts = 0
-    // 超时降级的血脂帧经此回调补发给 onResult（push 同步路径与定时器路径共用）。
-    this.assembler.onDrain = drained => drained.forEach(item => { try { this.onResult(Object.assign({}, item, { receivedAt: Date.now() })) } catch (_) {} })
     this.deviceFoundListener = null; this.connectionListener = null; this.valueListener = null
   }
   state (value, detail) { try { this.onState({ state: value, deviceId: this.deviceId, detail }) } catch (_) {} }
@@ -354,26 +318,38 @@ class Mfa1Ble {
   async connect (device) {
     const deviceId = typeof device === 'string' ? device : device?.deviceId
     if (!deviceId) throw new Error('请选择 MFA-1 血糖仪')
+    // 串行化：设备掉线触发的自动重连可能正在进行，此时手动 connect 若与之并发，
+    // 两次 createBLEConnection 会被微信以 10012/already-connect 拒绝 —— 表现为「怎么点都连不上」。
+    // 先等在途重连收敛（成功或 3 次耗尽，至多数秒），再走全新连接。
+    if (this.reconnectPromise) { try { await this.reconnectPromise } catch (_) {} }
     this.manualClose = false; this.reconnectAttempts = 0; this.lastDevice = typeof device === 'string' ? { deviceId } : device
     return this.connectInternal(deviceId)
   }
   async connectInternal (deviceId) {
     await this.stopScan(); this.state('connecting')
-    await callWx('createBLEConnection', { deviceId, timeout: 10000 })
-    const services = await callWx('getBLEDeviceServices', { deviceId })
-    const service = (services.services || []).find(item => normalizeUuid(item.uuid) === normalizeUuid(SERVICE_UUID))
-    if (!service) throw new Error('MFA-1 BLE 服务 FFF0 未找到')
-    const characteristics = await callWx('getBLEDeviceCharacteristics', { deviceId, serviceId: service.uuid })
-    const list = characteristics.characteristics || []
-    const write = list.find(item => normalizeUuid(item.uuid) === normalizeUuid(WRITE_UUID) && (item.properties?.write || item.properties?.writeNoResponse))
-    const notify = list.find(item => normalizeUuid(item.uuid) === normalizeUuid(NOTIFY_UUID) && (item.properties?.notify || item.properties?.indicate))
-    if (!write || !notify) throw new Error('MFA-1 BLE 特征 FFF6/FFF7 未找到')
-    if (this.assembler) this.assembler.flush().forEach(item => { try { this.onResult(item) } catch (_) {} })
-    this.deviceId = deviceId; this.serviceId = service.uuid; this.writeId = write.uuid; this.notifyId = notify.uuid; this.assembler = new FrameAssembler()
-    this.assembler.onDrain = drained => drained.forEach(item => { try { this.onResult(Object.assign({}, item, { receivedAt: Date.now() })) } catch (_) {} })
-    this.installListeners()
-    await callWx('notifyBLECharacteristicValueChange', { state: true, deviceId, serviceId: this.serviceId, characteristicId: this.notifyId })
-    this.state('connected'); return this.lastDevice
+    try {
+      // 先释放同设备的残留句柄：异常断线后微信/系统侧常留半开 GATT 连接，
+      // 不清理则 createBLEConnection 会持续 10012/already-connect 失败 —— 「掉了就连不上」的直接原因。
+      await closeQuietly(deviceId)
+      await callWx('createBLEConnection', { deviceId, timeout: 10000 })
+      const services = await callWx('getBLEDeviceServices', { deviceId })
+      const service = (services.services || []).find(item => normalizeUuid(item.uuid) === normalizeUuid(SERVICE_UUID))
+      if (!service) throw new Error('MFA-1 BLE 服务 FFF0 未找到')
+      const characteristics = await callWx('getBLEDeviceCharacteristics', { deviceId, serviceId: service.uuid })
+      const list = characteristics.characteristics || []
+      const write = list.find(item => normalizeUuid(item.uuid) === normalizeUuid(WRITE_UUID) && (item.properties?.write || item.properties?.writeNoResponse))
+      const notify = list.find(item => normalizeUuid(item.uuid) === normalizeUuid(NOTIFY_UUID) && (item.properties?.notify || item.properties?.indicate))
+      if (!write || !notify) throw new Error('MFA-1 BLE 特征 FFF6/FFF7 未找到')
+      this.deviceId = deviceId; this.serviceId = service.uuid; this.writeId = write.uuid; this.notifyId = notify.uuid; this.assembler = new FrameAssembler()
+      this.installListeners()
+      await callWx('notifyBLECharacteristicValueChange', { state: true, deviceId, serviceId: this.serviceId, characteristicId: this.notifyId })
+      this.state('connected'); return this.lastDevice
+    } catch (error) {
+      // 连接半途失败：释放句柄并清空活动连接字段，状态机不残留半开连接（lastDevice 保留供重试）
+      await closeQuietly(deviceId)
+      if (this.deviceId === deviceId) { this.deviceId = ''; this.serviceId = ''; this.writeId = ''; this.notifyId = '' }
+      throw error
+    }
   }
   installListeners () {
     if (!this.valueListener) {
@@ -382,7 +358,20 @@ class Mfa1Ble {
         // 与 scaleBle 对齐：为成帧结果盖 receivedAt（设备通知到达时刻），页面据此执行
         // 「只收晚于新会话启动时间的数据」窗口过滤（设计 §8 第 6 步）。不改解析语义。
         const receivedAt = Date.now()
+        // 调试（真机定位帧格式用）：原始通知 hex。定位完成后可移除或降级。
+        try {
+          console.log('[MFA1-BLE][RX]', hexOf(new Uint8Array(event.value || [])))
+        } catch (_) {}
         this.assembler.push(new Uint8Array(event.value || [])).forEach(result => {
+          // 调试（真机定位帧格式用）：成帧后的解析结论（命令/类型/指标），区分「没收到帧」与「收到了但解析不出」。
+          try {
+            console.log('[MFA1-BLE][PARSE]', JSON.stringify({
+              command: result.command,
+              type: result.type,
+              error: result.error === true,
+              metrics: (result.metrics || [result.metric]).filter(Boolean).map(item => item.name + '=' + item.value + (item.partial ? '(partial)' : ''))
+            }))
+          } catch (_) {}
           try { this.onResult(Object.assign({}, result, { receivedAt })) } catch (_) {}
         })
       }
@@ -396,6 +385,10 @@ class Mfa1Ble {
   async write (bytes) {
     if (!this.deviceId || !this.serviceId || !this.writeId) throw new Error('MFA-1 未连接')
     const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes || [])
+    // 调试（真机定位帧格式用）：下行帧 hex。定位完成后可移除或降级。
+    try {
+      console.log('[MFA1-BLE][TX]', hexOf(data))
+    } catch (_) {}
     // 协议规定 16 字节/包写入 TX 特征
     for (let offset = 0; offset < data.length; offset += FRAME_SIZE) {
       await callWx('writeBLECharacteristicValue', { deviceId: this.deviceId, serviceId: this.serviceId, characteristicId: this.writeId, value: data.slice(offset, offset + FRAME_SIZE).buffer })
@@ -412,25 +405,28 @@ class Mfa1Ble {
       for (let attempt = 1; attempt <= 3 && !this.manualClose; attempt++) {
         this.reconnectAttempts = attempt
         await new Promise(resolve => setTimeout(resolve, attempt * 700))
+        if (this.manualClose) break
         try { await this.connectInternal(this.lastDevice.deviceId); this.reconnectPromise = null; return } catch (_) {}
       }
-      this.reconnectPromise = null; this.state('error', 'MFA-1 断线，自动重连失败，请重新扫描')
+      this.reconnectPromise = null
+      // 重连耗尽：清空活动连接字段（保留 lastDevice 供手动重连），不留半开状态
+      this.deviceId = ''; this.serviceId = ''; this.writeId = ''; this.notifyId = ''
+      this.state('error', 'MFA-1 断线，自动重连失败，请重新连接')
     })()
   }
   async disconnect () {
     this.manualClose = true; this.reconnectPromise = null
-    if (this.assembler) this.assembler.flush().forEach(item => { try { this.onResult(item) } catch (_) {} })
     if (this.deviceId && typeof wx.closeBLEConnection === 'function') await new Promise(resolve => wx.closeBLEConnection({ deviceId: this.deviceId, complete: resolve }))
     this.deviceId = ''; this.serviceId = ''; this.writeId = ''; this.notifyId = ''; this.state('disconnected')
   }
-  destroy () { this.manualClose = true; if (this.assembler) this.assembler.flush().forEach(item => { try { this.onResult(item) } catch (_) {} }); this.stopScanListeners(); if (this.valueListener && wx.offBLECharacteristicValueChange) wx.offBLECharacteristicValueChange(this.valueListener); if (this.connectionListener && wx.offBLEConnectionStateChange) wx.offBLEConnectionStateChange(this.connectionListener); this.valueListener = null; this.connectionListener = null }
+  destroy () { this.manualClose = true; this.stopScanListeners(); if (this.valueListener && wx.offBLECharacteristicValueChange) wx.offBLECharacteristicValueChange(this.valueListener); if (this.connectionListener && wx.offBLEConnectionStateChange) wx.offBLEConnectionStateChange(this.connectionListener); this.valueListener = null; this.connectionListener = null }
 }
 
 module.exports = {
-  SERVICE_UUID, WRITE_UUID, NOTIFY_UUID, FRAME_SIZE,
+  SERVICE_UUID, WRITE_UUID, NOTIFY_UUID, FRAME_SIZE, RESULT_FRAME_BYTES, RESULT_FRAME_LIPID_BYTES,
   CMD_SET_TIME, CMD_READ_BATTERY, CMD_READ_MAC, CMD_READ_TIME, CMD_TEST_RESULT,
   FrameAssembler, Mfa1Ble, buildFrame, buildSetTimeFrame, buildReadTimeFrame,
   buildReadBatteryFrame, buildReadMacFrame, parseMfa1Frame, isMfa1Device, readFloat32BE,
-  parseLipid, LIPID_FIELDS, LIPID_DATA_BYTES, LIPID_ASSEMBLY_TIMEOUT_MS,
+  parseLipid, LIPID_FIELDS, LIPID_DATA_BYTES,
   RESULT_TYPE_GLUCOSE, RESULT_TYPE_URIC_ACID, RESULT_TYPE_LIPID, RESULT_TYPE_BLOOD_PRESSURE
 }

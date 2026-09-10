@@ -196,46 +196,37 @@ const run = async () => {
   await flushPromises()
   assert.strictEqual(draftCalls.length, 0, '早于会话启动时间的迟到结果被丢弃')
 
-  // ---- (c6) 解析层零改动复核：协议向量直测（阶段二未新增解析需求）----
+  // ---- (c6) 解析层协议向量直测（真机实证：0x78 结果帧为变长帧 20/31 字节）----
   function f32be (value) {
     const view = new DataView(new ArrayBuffer(4))
     view.setFloat32(0, value, false)
     return Array.from(new Uint8Array(view.buffer))
   }
-  function crcFrame (head) {
-    const padded = head.slice(0, 15)
-    while (padded.length < 15) padded.push(0)
+  // 变长帧构造：总长 total（血压/GLU=20、血脂=31），帧头 + 0 填充到 total-1 + CRC（求和 & 0xFF）
+  function crcFrame (head, total) {
+    const padded = head.slice(0, total - 1)
+    while (padded.length < total - 1) padded.push(0)
     const sum = padded.reduce((acc, value) => (acc + value) & 0xff, 0)
     return Uint8Array.from(padded.concat([sum]))
   }
-  const bpFrame = mfa1BleModule.parseMfa1Frame(crcFrame([0x78, 0x04, 76, 82, 128]))
-  assert.deepStrictEqual(bpFrame.metrics.map(mm => [mm.name, mm.value, mm.unit]), [['systolic', 128, 'mmHg'], ['diastolic', 82, 'mmHg'], ['heartRate', 76, 'bpm']], '血压帧 D2/D3/D4 → 契约三指标（协议依据：《MFA-1 BLE 蓝牙通讯协议》T1=4）')
-  const gluEcho = mfa1BleModule.parseMfa1Frame(crcFrame([0x78, 0x01].concat(f32be(5.5)).concat([0x01])))
+  const bpFrame = mfa1BleModule.parseMfa1Frame(crcFrame([0x78, 0x04, 0, 76, 82, 128], 20))
+  assert.deepStrictEqual(bpFrame.metrics.map(mm => [mm.name, mm.value, mm.unit]), [['systolic', 128, 'mmHg'], ['diastolic', 82, 'mmHg'], ['heartRate', 76, 'bpm']], '血压帧 D2/D3/D4（字节 3/4/5）→ 契约三指标（协议依据：《MFA-1 BLE 蓝牙通讯协议》T1=4，真机抓包验证）')
+  const gluEcho = mfa1BleModule.parseMfa1Frame(crcFrame([0x78, 0x01].concat(f32be(5.5)).concat([0x01]), 20))
   assert.strictEqual(gluEcho.metric.fastState, 1, '血糖 D5=1 空腹回显保留（context 映射的数据源）')
-  const lipidStart = crcFrame([0x78, 0x03].concat(f32be(5.2)).concat([0x01]).concat(f32be(1.3)))
-  const lipidCont1 = new Uint8Array(16)
-  lipidCont1[0] = 0x78; lipidCont1[1] = 0x03
-  const tgBytes = f32be(1.8)
-  for (let i = 0; i < 4; i++) lipidCont1[6 + i] = tgBytes[i]
-  lipidCont1[15] = (() => { let s = 0; for (let i = 0; i < 15; i++) s = (s + lipidCont1[i]) & 0xff; return s })()
-  const lipidCont2 = new Uint8Array(16)
-  lipidCont2[0] = 0x78; lipidCont2[1] = 0x03
-  const ldlBytes = f32be(3.1)
-  for (let i = 0; i < 4; i++) lipidCont2[2 + i] = ldlBytes[i]
-  lipidCont2[15] = (() => { let s = 0; for (let i = 0; i < 15; i++) s = (s + lipidCont2[i]) & 0xff; return s })()
-  const completeAssembler = new mfa1BleModule.FrameAssembler({ setTimeoutFn: null, clearTimeoutFn: null })
-  completeAssembler.push(lipidStart)
-  completeAssembler.push(lipidCont1)
-  const completeOut = completeAssembler.push(lipidCont2).find(item => item.type === 'result')
-  assert.ok(completeOut, '起始帧+两笔续帧凑满完整血脂（解析层既有能力，零改动）')
+  // 血脂 31 字节单帧：D1..D17 完整落在字节 2..18，四指标一次拿全
+  const lipidFull = crcFrame([0x78, 0x03].concat(f32be(5.2)).concat([0x01]).concat(f32be(1.3)).concat(f32be(1.8)).concat(f32be(3.1)), 31)
+  assert.strictEqual(lipidFull.length, 31)
+  const completeAssembler = new mfa1BleModule.FrameAssembler()
+  const completeOut = completeAssembler.push(lipidFull).find(item => item.type === 'result')
+  assert.ok(completeOut, '31 字节血脂单帧直出完整四指标')
   assert.deepStrictEqual(completeOut.metrics.map(mm => [mm.name, Math.round(mm.value * 100) / 100]), [['tc', 5.2], ['hdl', 1.3], ['tg', 1.8], ['ldl', 3.1]])
   assert.ok(completeOut.metrics.every(mm => !mm.partial), '完整血脂无 partial 标记')
-  const partialAssembler = new mfa1BleModule.FrameAssembler({ setTimeoutFn: null, clearTimeoutFn: null })
-  partialAssembler.push(lipidStart)
-  partialAssembler.push(lipidCont1)
-  const partialOut = partialAssembler.flush().find(item => item.type === 'result')
-  assert.ok(partialOut && partialOut.metrics.length === 3, 'LDL 未达时降级出前三项（超时/断线路径）')
-  assert.ok(partialOut.metrics.every(mm => mm.partial === true), '降级批次全量标 partial=true → 页面据此产出「部分血脂结果」草稿')
+  // 部分血脂：TG 4 字节全 0 视为缺失 → 当场透传前三项，全量标 partial=true → 页面据此产出「部分血脂结果」草稿
+  const lipidPartialFrame = crcFrame([0x78, 0x03].concat(f32be(5.2)).concat([0x01]).concat(f32be(1.3)).concat([0, 0, 0, 0]).concat(f32be(3.1)), 31)
+  const partialAssembler = new mfa1BleModule.FrameAssembler()
+  const partialOut = partialAssembler.push(lipidPartialFrame).find(item => item.type === 'result')
+  assert.ok(partialOut && partialOut.metrics.length === 3, 'TG 缺失时出前三项（单帧内缺失，无需超时降级）')
+  assert.ok(partialOut.metrics.every(mm => mm.partial === true), '不完整批次全量标 partial=true → 页面据此产出「部分血脂结果」草稿')
   // 该降级批次经页面消费后必须按 partial 入草稿且给出中文提示
   await resetToNewPatient()
   page.batteryLevel = undefined
