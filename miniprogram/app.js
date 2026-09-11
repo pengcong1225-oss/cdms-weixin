@@ -2,14 +2,6 @@ const bleManager = require('./services/bleManager')
 const runtimeConfig = require('./config/runtime')
 const sessionStore = require('./utils/session-store')
 
-let configuredCloudEnv = ''
-try {
-  const envConfig = require('./envList')
-  configuredCloudEnv = envConfig?.envList?.[0]?.envId || ''
-} catch (error) {
-  // Standalone builds may not include the CloudBase template helper.
-}
-
 App({
   globalData: {
     // 由部署环境注入；不要提交生产 token。
@@ -21,7 +13,6 @@ App({
     identityId: '',
     activeRole: '',
     roles: [],
-    cloudEnv: configuredCloudEnv,
     wearableToken: '',
     wearableSessionId: '',
     wearableDeviceRef: '',
@@ -34,32 +25,14 @@ App({
   onLaunch (options) {
     this.restoreAuth()
     this.applyBridgeQuery(options?.query)
-    this.initCloud()
     bleManager.init().catch(error => console.warn('[CDMS BLE] adapter init failed', error))
   },
 
-  // 云开发只服务于遗留 quickstart 模板；CDMS/IoT 链路走 HTTPS，不依赖云环境。
-  // 当前 appid 未绑定云环境或开发者工具身份上下文缺失时，静默跳过，不阻塞启动。
-  initCloud () {
-    if (typeof wx === 'undefined' || !wx.cloud) {
-      console.warn('[CDMS Cloud] wx.cloud unavailable; continuing with IoT API mode')
-      return
-    }
-    if (!this.globalData.cloudEnv) {
-      console.warn('[CDMS Cloud] cloudEnv not configured; skip cloud init')
-      return
-    }
-    try {
-      wx.cloud.init({ traceUser: true, env: this.globalData.cloudEnv })
-    } catch (error) {
-      console.warn('[CDMS Cloud] cloud init failed; continuing with IoT API mode', error)
-    }
-  },
   onShow (options) {
     this.applyBridgeQuery(options?.query)
   },
   applyBridgeQuery (query = {}) {
-    const keys = ['iotBaseUrl', 'managerBaseUrl', 'cdmsBaseUrl', 'cloudEnv', 'wearableToken', 'wearableSessionId', 'patientRef', 'handoffCode', 'mode', 'taskId']
+    const keys = ['iotBaseUrl', 'managerBaseUrl', 'cdmsBaseUrl', 'wearableToken', 'wearableSessionId', 'patientRef', 'handoffCode', 'mode', 'taskId']
     const decode = value => {
       try { return /%3A|%2F|%25/.test(value) ? decodeURIComponent(value) : value } catch (_) { return value }
     }

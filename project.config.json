@@ -1,6 +1,5 @@
 {
   "miniprogramRoot": "miniprogram/",
-  "cloudfunctionRoot": "cloudfunctions/",
   "setting": {
     "urlCheck": true,
     "es6": true,
@@ -44,10 +43,9 @@
     "swc": false,
     "disableSWC": true
   },
-  "appid": "wx0a1ac8be9b6fb0e4",
+  "appid": "wx113bffd260d50ace",
   "projectname": "cdms-weixin",
   "libVersion": "2.20.1",
-  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/",
   "condition": {
     "search": {
       "list": []

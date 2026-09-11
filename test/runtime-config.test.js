@@ -6,8 +6,8 @@ assert.strictEqual(config.cdmsBaseUrl, 'https://jq.mockr.com.cn/cdmsapi')
 assert.strictEqual(config.managerBaseUrl, 'https://jq.mockr.com.cn/cdmsmanagerapi/api/v1')
 assert.strictEqual(config.iotBaseUrl, 'https://jq.mockr.com.cn/cdmsiotapi')
 
-const launchProfiles = privateConfig.condition.miniprogram.list
-assert.ok(launchProfiles.length > 0)
+const launchProfiles = privateConfig.condition?.miniprogram?.list
+assert.ok(Array.isArray(launchProfiles) && launchProfiles.length > 0, 'project.private.config.json 缺少 condition.miniprogram.list（开发者工具重写会清空，请补回 jq.mockr.com.cn 编译模式）')
 launchProfiles.forEach(profile => {
   assert.ok(profile.name.includes('jq.mockr.com.cn'))
   assert.ok(profile.query.includes('cdmsBaseUrl=https://jq.mockr.com.cn/cdmsapi'))
