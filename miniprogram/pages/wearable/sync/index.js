@@ -51,7 +51,7 @@ Page({
     try {
       const selectedDevice = (this.data.devices || []).find(device => device.deviceId === syncDeviceId)
         || { deviceId: syncDeviceId }
-      await bleManager.connect(selectedDevice)
+      const connectedDevice = await bleManager.connect(selectedDevice)
       syncConnectionGeneration = bleManager.connectionGeneration
       sdk = typeof bleManager.getSdk === 'function' ? bleManager.getSdk() : null
       if (!sdk) throw new Error('设备连接尚未就绪')
@@ -69,7 +69,10 @@ Page({
         return connectionCurrent && authCurrent
       }
       this.setData({ status: '设备已连接，正在申请安全采集会话…' })
-      const session = await cdmsBridge.ensureIoTSession(syncDeviceId)
+      // IoT 绑定/会话统一使用设备上报的真实 MAC（与患者端绑定口径一致）。
+      const sessionDeviceRef = (connectedDevice && connectedDevice.macAddress) || syncDeviceId
+      this.sessionDeviceRef = sessionDeviceRef
+      const session = await cdmsBridge.ensureIoTSession(sessionDeviceRef)
       if (!isOperationCurrent()) throw new Error('同步上下文已失效')
       this.baseUrl = session.iotBaseUrl
       this.token = session.wearableToken
@@ -127,7 +130,7 @@ Page({
   },
   enqueue (records) {
     api.enqueue({ batchId: `wx-${Date.now()}`, sessionId: this.sessionId, patientRef: this.patientRef,
-      deviceRef: this.deviceId, records, sdkVersion: 'RW_SDK_V2.0.0_20260807' })
+      deviceRef: this.sessionDeviceRef || this.deviceId, records, sdkVersion: 'RW_SDK_V2.0.0_20260807' })
     this.setData({ queued: api.readQueue().length })
   },
   async retry () {
@@ -141,7 +144,7 @@ Page({
     const queuedDeviceRefs = Array.from(new Set(queued
       .map(batch => String(batch && batch.deviceRef || '').trim())
       .filter(Boolean)))
-    const deviceRef = String(this.deviceId || '').trim() || (
+    const deviceRef = String(this.sessionDeviceRef || this.deviceId || '').trim() || (
       queuedDeviceRefs.length === 1 ? queuedDeviceRefs[0] : ''
     )
     if (!deviceRef) {

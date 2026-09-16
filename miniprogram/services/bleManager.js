@@ -63,10 +63,10 @@ function createBleError(error, stage) {
   });
 }
 
-function normalizeMac(value) {
-  const text = String(value || "").trim().replace(/-/g, ":").toUpperCase();
-  return /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(text) ? text : "";
-}
+const {
+  normalizeMac,
+  resolveScanMacAddress,
+} = require("../utils/ble-mac");
 
 function callWx(method, options, stage) {
   return new Promise((resolve, reject) => {
@@ -278,9 +278,12 @@ class BleManager {
       const scanDeadline = Date.now() + SCAN_TIMEOUT_MS;
       const applyDevices = (devices, source) => {
         const next = devices.map((device) => {
-          const macAddress = device.macAddress
-            || storage.getDeviceAddress(device.deviceId)
-            || normalizeMac(device.deviceId);
+          // 广播 MAC 为小端序反序展示；deviceId（Android）与缓存过的设备上报 MAC 更权威。
+          const macAddress = resolveScanMacAddress({
+            deviceId: device.deviceId,
+            macAddress: device.macAddress,
+            cachedAddress: storage.getDeviceAddress(device.deviceId),
+          });
           if (macAddress) storage.saveDeviceAddress(device.deviceId, macAddress);
           return Object.assign({}, device, { macAddress });
         });
@@ -994,7 +997,9 @@ class BleManager {
       let uploadError = null;
       try {
         await cdmsBridge.enqueueAndFlush({
-          deviceRef: deviceId,
+          // 上传与绑定的 deviceRef 统一使用设备上报的真实 MAC（跨平台一致），
+          // iOS 的 deviceId 是 UUID，不能作为设备标识。
+          deviceRef: (this.state.boundDevice && this.state.boundDevice.macAddress) || deviceId,
           recordsByType: result.records,
           isOperationCurrent: isCurrent,
           operationGuard: { isCurrent },

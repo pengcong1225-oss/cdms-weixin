@@ -70,9 +70,10 @@ Page({
     this.setData({ connectingId: deviceId });
     wx.showLoading({ title: "连接并初始化", mask: true });
     try {
-      await bleManager.connect(device);
+      const bound = await bleManager.connect(device);
       try {
-        await cdmsBridge.ensureIoTSession(device.deviceId);
+        // IoT 绑定/会话统一使用设备上报的真实 MAC；iOS 的 deviceId 是 UUID，不能作为设备标识。
+        await cdmsBridge.ensureIoTSession((bound && bound.macAddress) || device.deviceId);
       } catch (sessionError) {
         await bleManager.unbind();
         throw sessionError;
