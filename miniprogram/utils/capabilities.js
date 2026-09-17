@@ -14,8 +14,7 @@ const HEALTH_TYPES = [
     support: (m) => m.newSport || m.workout,
   },
   { type: "bloodOxygen", title: "血氧", icon: "氧", unit: "%", measurementCode: 0x09, monitoringType: "bloodOxygen", support: (m) => m.bloodOxy },
-  { type: "hrv", title: "HRV", icon: "变", unit: "ms", measurementCode: 0x0a, monitoringType: "hrv", support: (m) => m.hrv },
-  { type: "stress", title: "压力", icon: "压", unit: "", measurementCode: 0x0d, monitoringType: "stress", support: (m) => m.pressure },
+  // HRV/压力 已按需求移除：患者端不展示卡片、不提供历史入口（底层采集与上传逻辑不在本清单内）
   {
     type: "bloodPressure",
     title: "血压",
@@ -41,8 +40,7 @@ const SETTING_TYPES = [
   { id: "takePhoto", title: "遥控拍照", subtitle: "接收戒指拍照事件", support: (m) => m.takePhoto },
   { id: "heartRateMonitoring", title: "全天心率", subtitle: "设置全天监测开关与间隔", support: (m) => m.hr },
   { id: "bloodOxygenMonitoring", title: "全天血氧", subtitle: "设置全天血氧监测", support: (m) => m.bloodOxy },
-  { id: "hrvMonitoring", title: "全天 HRV", subtitle: "设置全天 HRV 监测", support: (m) => m.hrv },
-  { id: "stressMonitoring", title: "全天压力", subtitle: "设置全天压力监测", support: (m) => m.pressure },
+  // HRV/压力 设置项已按需求移除（患者端不再提供全天 HRV/压力配置）
   { id: "bloodPressureMonitoring", title: "全天血压", subtitle: "设置全天血压监测", support: (m) => m.bloodPress },
   { id: "bloodSugarMonitoring", title: "全天血糖", subtitle: "设置全天血糖监测", support: (m) => m.bloodSugar },
   {

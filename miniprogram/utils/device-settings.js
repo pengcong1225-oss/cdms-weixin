@@ -14,8 +14,6 @@ const DEFAULT_SYNC_INTERVAL_MINUTES = 15
 const MONITORING_TYPE_MAP = {
   heartRateMonitoring: 'heartRate',
   bloodOxygenMonitoring: 'bloodOxygen',
-  hrvMonitoring: 'hrv',
-  stressMonitoring: 'stress',
   bloodPressureMonitoring: 'bloodPressure',
   bloodSugarMonitoring: 'bloodSugar',
   temperatureMonitoring: 'temperature',

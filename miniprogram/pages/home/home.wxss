@@ -302,6 +302,21 @@ page {
   font-size: 21rpx;
 }
 
+/* 首页“同步数据”按钮：与下拉刷新同一流程 */
+.sync-now-button {
+  padding: 8rpx 22rpx;
+  border: 1rpx solid #bfe3d3;
+  border-radius: 999rpx;
+  background: #eefaf4;
+  color: #0d9167;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.sync-now-button.busy {
+  opacity: 0.6;
+}
+
 .sync-progress {
   overflow: hidden;
   height: 8rpx;

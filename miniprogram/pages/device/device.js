@@ -380,8 +380,6 @@ Page({
     const monitoringTypes = {
       heartRateMonitoring: "heartRate",
       bloodOxygenMonitoring: "bloodOxygen",
-      hrvMonitoring: "hrv",
-      stressMonitoring: "stress",
       bloodPressureMonitoring: "bloodPressure",
       bloodSugarMonitoring: "bloodSugar",
       temperatureMonitoring: "temperature",

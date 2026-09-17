@@ -135,10 +135,10 @@ Page({
     }
   },
 
-  async onPullDownRefresh() {
+  // 首页“同步数据”按钮与下拉刷新共用同一套同步流程
+  async syncHealthData() {
     const state = bleManager.snapshot();
     if (!state.boundDevice) {
-      wx.stopPullDownRefresh();
       wx.showToast({ title: "请先绑定设备", icon: "none" });
       return;
     }
@@ -161,9 +161,21 @@ Page({
       });
     } catch (error) {
       wx.showToast({ title: error.message || "同步失败", icon: "none" });
+    }
+  },
+
+  async onPullDownRefresh() {
+    try {
+      await this.syncHealthData();
     } finally {
       wx.stopPullDownRefresh();
     }
+  },
+
+  // 首页“同步数据”按钮：同步进行中忽略重复点击
+  async syncNow() {
+    if (this.data.healthSyncing) return;
+    await this.syncHealthData();
   },
 
   openSearch() {

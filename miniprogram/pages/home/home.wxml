@@ -15,7 +15,7 @@
     <view class="section-heading workspace-heading">
       <view>
         <view class="section-title">业务入口</view>
-        <view class="section-caption">健康档案、自测与设备中心</view>
+        <view class="section-caption">健康档案与常用服务</view>
       </view>
     </view>
     <view
@@ -82,7 +82,11 @@
       <view class="section-title">健康数据</view>
       <view class="section-caption">{{boundDevice ? '设备最近同步数据' : '绑定设备后显示'}}</view>
     </view>
-    <view wx:if="{{boundDevice}}" class="refresh-hint">下拉同步</view>
+    <view
+      wx:if="{{boundDevice}}"
+      class="sync-now-button {{healthSyncing ? 'busy' : ''}}"
+      bindtap="syncNow"
+    >{{healthSyncing ? '同步中 ' + healthSyncProgress + '%' : '同步数据'}}</view>
   </view>
 
   <view wx:if="{{syncAlertText}}" class="sync-alert">
