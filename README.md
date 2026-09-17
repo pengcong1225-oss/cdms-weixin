@@ -22,7 +22,7 @@
 
 ## 开发与验收
 
-使用微信开发者工具导入本项目，确认 AppID 为 `wx113bffd260d50ace`。当前 `project.private.config.json` 已预置 `jq.mockr.com.cn` HTTPS 联调编译模式，并关闭开发阶段的合法域名校验：
+使用微信开发者工具导入本项目，确认 AppID 为 `wxbc29e546d93b386c`（应用名：慢阻肺监测管理）。当前 `project.private.config.json` 已预置 `jq.mockr.com.cn` HTTPS 联调编译模式，并关闭开发阶段的合法域名校验：
 
 ```text
 cdmsBaseUrl=https://jq.mockr.com.cn/cdmsapi&managerBaseUrl=https://jq.mockr.com.cn/cdmsmanagerapi/api/v1&iotBaseUrl=https://jq.mockr.com.cn/cdmsiotapi
