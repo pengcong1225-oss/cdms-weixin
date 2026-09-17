@@ -132,7 +132,7 @@ async function c1AlwaysScopesEveryUpload () {
     globalData,
     rwfitConnect: async () => sdk,
     bleManager: {
-      connect: async () => ({ deviceId: 'ring-b' }),
+      connect: async () => ({ deviceId: 'ring-b', macAddress: '34:20:00:00:00:0B' }),
       getSdk: () => sdk,
       disconnect: async () => {}
     },
@@ -154,9 +154,9 @@ async function c1AlwaysScopesEveryUpload () {
   page.onLoad({})
   page.selectDevice({ currentTarget: { dataset: { id: 'ring-b' } } })
   await page.startSync()
-  assert.deepStrictEqual(ensureCalls, ['ring-b'], 'upload must resolve a session for the selected device even when an old token exists')
+  assert.deepStrictEqual(ensureCalls, ['34:20:00:00:00:0B'], 'upload must resolve a session for the selected device even when an old token exists')
   assert.deepStrictEqual(uploadScopes[0], {
-    patientRef: 'patient-1', deviceRef: 'ring-b', sessionId: 'session-ring-b'
+    patientRef: 'patient-1', deviceRef: '34:20:00:00:00:0B', sessionId: 'session-ring-b'
   }, 'upload must use the immutable B scope captured before the global context changed')
 }
 
@@ -331,7 +331,7 @@ async function c3UsesTheSharedBleManager () {
     globalData,
     rwfitConnect: async () => { directConnectCalls += 1; return sdk },
     bleManager: {
-      connect: async target => { sharedConnectCalls += 1; assert.strictEqual(target.deviceId, 'ring-b'); return { deviceId: 'ring-b' } },
+      connect: async target => { sharedConnectCalls += 1; assert.strictEqual(target.deviceId, 'ring-b'); return { deviceId: 'ring-b', macAddress: '34:20:00:00:00:0B' } },
       getSdk: () => sdk,
       disconnect: async () => {}
     }
@@ -832,7 +832,7 @@ async function c15SyncFinallyDoesNotDisconnectNewDevice () {
   const manager = {
     activeDeviceId: '',
     connectionGeneration: 1,
-    connect: async () => { manager.activeDeviceId = 'ring-a'; return { deviceId: 'ring-a' } },
+    connect: async () => { manager.activeDeviceId = 'ring-a'; return { deviceId: 'ring-a', macAddress: '34:20:00:00:00:0A' } },
     getSdk: () => sdk,
     captureConnectionGuard: () => ({ deviceId: manager.activeDeviceId, generation: manager.connectionGeneration }),
     isConnectionGuardCurrent: guard => guard.deviceId === manager.activeDeviceId && guard.generation === manager.connectionGeneration,
@@ -876,7 +876,7 @@ async function c16SyncPageGuardKeepsAQueueOnDeviceSwitch () {
   const manager = {
     activeDeviceId: '',
     connectionGeneration: 1,
-    connect: async () => { manager.activeDeviceId = 'ring-a'; return { deviceId: 'ring-a' } },
+    connect: async () => { manager.activeDeviceId = 'ring-a'; return { deviceId: 'ring-a', macAddress: '34:20:00:00:00:0A' } },
     getSdk: () => sdk,
     captureConnectionGuard: () => {
       captureCalls += 1
@@ -913,7 +913,7 @@ async function c16SyncPageGuardKeepsAQueueOnDeviceSwitch () {
   assert.ok(captureCalls > 0, 'sync must capture a public connection guard')
   assert.strictEqual(uploadCalls, 0, 'stale A records must not reach bridge upload')
   assert.deepStrictEqual(queue.map(batch => ({ patientRef: batch.patientRef, deviceRef: batch.deviceRef, sessionId: batch.sessionId })), [
-    { patientRef: 'patient-1', deviceRef: 'ring-a', sessionId: 'session-a' }
+    { patientRef: 'patient-1', deviceRef: '34:20:00:00:00:0A', sessionId: 'session-a' }
   ])
 }
 

@@ -65,6 +65,7 @@ function createBleError(error, stage) {
 
 const {
   normalizeMac,
+  correctMacByteOrder,
   resolveScanMacAddress,
 } = require("../utils/ble-mac");
 
@@ -511,7 +512,8 @@ class BleManager {
       if (!this.isConnectionCurrent(target, generation)) return this.abortStaleConnection(target, this.sdk, previousRuntime);
       const power = results[0];
       const firmware = results[1];
-      const macAddress = results[2];
+      // 设备上报的 BLE 地址也可能是小端反序（戒指固件），统一做字节序校验。
+      const macAddress = correctMacByteOrder(results[2]);
       const previousBoundDevice = this.state.boundDevice
         && this.state.boundDevice.deviceId === target.deviceId
         ? this.state.boundDevice
@@ -519,9 +521,9 @@ class BleManager {
       const boundDevice = {
         deviceId: target.deviceId,
         macAddress: macAddress
-          || normalizeMac(target.macAddress)
-          || (previousBoundDevice && previousBoundDevice.macAddress)
-          || storage.getDeviceAddress(target.deviceId)
+          || correctMacByteOrder(target.macAddress)
+          || correctMacByteOrder(previousBoundDevice && previousBoundDevice.macAddress)
+          || correctMacByteOrder(storage.getDeviceAddress(target.deviceId))
           || normalizeMac(target.deviceId),
         name: target.name || target.localName || "RW 智能戒指",
         localName: target.localName || "",

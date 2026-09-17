@@ -71,9 +71,15 @@ Page({
     wx.showLoading({ title: "连接并初始化", mask: true });
     try {
       const bound = await bleManager.connect(device);
+      // 设备始终以 MAC 绑定：iOS 的 deviceId 是系统 UUID，绝不能用它当设备标识，
+      // 读不到 MAC 就中止绑定，避免落下无法与 Android 互认的绑定记录。
+      const boundMac = (bound && bound.macAddress) || "";
+      if (!boundMac) {
+        await bleManager.unbind();
+        throw new Error("未能读取设备 MAC 地址，请靠近设备重新搜索后重试");
+      }
       try {
-        // IoT 绑定/会话统一使用设备上报的真实 MAC；iOS 的 deviceId 是 UUID，不能作为设备标识。
-        await cdmsBridge.ensureIoTSession((bound && bound.macAddress) || device.deviceId);
+        await cdmsBridge.ensureIoTSession(boundMac);
       } catch (sessionError) {
         await bleManager.unbind();
         throw sessionError;

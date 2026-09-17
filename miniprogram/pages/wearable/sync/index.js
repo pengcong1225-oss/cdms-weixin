@@ -69,8 +69,10 @@ Page({
         return connectionCurrent && authCurrent
       }
       this.setData({ status: '设备已连接，正在申请安全采集会话…' })
-      // IoT 绑定/会话统一使用设备上报的真实 MAC（与患者端绑定口径一致）。
-      const sessionDeviceRef = (connectedDevice && connectedDevice.macAddress) || syncDeviceId
+      // IoT 绑定/会话统一使用真实 MAC（与患者端绑定口径一致）；设备始终以 MAC 绑定，
+      // 读不到 MAC（iOS 的 deviceId 是 UUID）时中止，避免产生 UUID 型绑定。
+      const sessionDeviceRef = (connectedDevice && connectedDevice.macAddress) || ''
+      if (!sessionDeviceRef) throw new Error('未能读取设备 MAC 地址，请重新搜索设备后重试')
       this.sessionDeviceRef = sessionDeviceRef
       const session = await cdmsBridge.ensureIoTSession(sessionDeviceRef)
       if (!isOperationCurrent()) throw new Error('同步上下文已失效')
