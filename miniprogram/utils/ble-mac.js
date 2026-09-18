@@ -1,13 +1,17 @@
 // 蓝牙 MAC 地址解析工具。
 //
-// 事实（2026-09-17 生产实测，nginx UA 佐证）：
-// - Android：wx 的 deviceId 就是系统可见的真实 MAC（如 34:20:00:01:7D:08），显示与绑定都正常。
-// - iOS：deviceId 是系统 UUID（13214DCA-…），只能从设备下发的广播/设备帧取 MAC，
-//   而固件按小端序（低字节在前）下发，按字节原序拼接得到的是反序值（如 25:30:01:00:20:34）。
+// 事实（2026-09-17/18 生产实测，nginx UA + 绑定表佐证）：
+// - Android：wx 的 deviceId 就是系统可见的真实 MAC（如 34:20:00:01:7D:08），可直接作为设备标识；
+// - iOS：deviceId 是系统 UUID（13214DCA-…），只能从设备下发的广播/设备帧取 MAC；
+//   而 RW 固件按**小端序**（低字节在前）下发 6 字节，按字节原序拼接得到的是反序值。
 //
-// 判定规则（IEEE 802 语义，不依赖任何厂商 OUI 白名单）：
-// 设备地址必须是单播；厂商设备还应是全球唯一地址，即首字节 bit0=0（非组播）且 bit1=0（非本地管理）。
-// 因此对任意来源的 MAC 候选，只有当"反转后"的地址质量更高时才反转，否则保持原样。
+// 判定规则（协议层面，单一规则，不依赖厂商 OUI 白名单）：
+// 凡是"来自设备下发字节"的 MAC（广播解析、readBleAddress 设备帧、以及据此写入的本地缓存），
+// 一律反转一次得到真实 MAC。平台自带的 deviceId（Android）是操作系统给出的真实 MAC，原样使用。
+//
+// 反例教训：曾用"IEEE 单播/全球唯一质量比较，哪种顺序更像设备地址就用哪种"，
+// 但小端值的首字节是真实 MAC 的末字节，经常同样是"单播+全球唯一"（如 60:A6:…、98:3D:…），
+// 两个方向打平 → 不反转 → 修复失效。故改为按协议无条件反转。
 
 function normalizeMac (value) {
   const text = String(value || '').trim().replace(/-/g, ':').toUpperCase()
@@ -21,45 +25,29 @@ function reverseMac (mac) {
 }
 
 /**
- * 地址质量：2 = 单播且全球唯一（厂商 MAC，最优）；1 = 单播但本地管理；0 = 组播（不可能是设备地址）。
+ * 设备下发的字节序是小端序：统一反转成真实 MAC。
+ * 空值/非 MAC 返回 ''。
  */
-function macQuality (mac) {
-  const normalized = normalizeMac(mac)
-  if (!normalized) return -1
-  const first = parseInt(normalized.slice(0, 2), 16)
-  if (first & 0x01) return 0
-  return (first & 0x02) ? 1 : 2
-}
-
-/**
- * 对任意来源的 MAC（广播解析、设备帧 readBleAddress、deviceId、本地缓存）做字节序校正：
- * 反转后地址质量更高才采用反转值，避免误伤本来正确的地址。
- */
-function correctMacByteOrder (mac) {
-  const normalized = normalizeMac(mac)
-  if (!normalized) return ''
-  const flipped = reverseMac(normalized)
-  if (!flipped || flipped === normalized) return normalized
-  return macQuality(flipped) > macQuality(normalized) ? flipped : normalized
+function payloadMac (mac) {
+  return reverseMac(mac)
 }
 
 /**
  * 从扫描结果解析真实 MAC。
- * 优先级：Android 的 deviceId（平台权威）> 本次广播解析（校正后）> 本地缓存（校正后）。
- * 注意：缓存可能是修复前写入的反序值，因此不能优先于本次扫描结果，且必须同样校正。
+ * 优先级：Android 的 deviceId（平台权威，原样）> 本次广播解析（反转）> 本地缓存（反转）。
+ * 缓存可能是修复前写入的反序值，因此不能优先于本次扫描结果，且同样需要反转。
  */
 function resolveScanMacAddress ({ deviceId, macAddress, cachedAddress } = {}) {
   const platformMac = normalizeMac(deviceId)
   if (platformMac) return platformMac
-  const advertised = correctMacByteOrder(macAddress)
+  const advertised = payloadMac(macAddress)
   if (advertised) return advertised
-  return correctMacByteOrder(cachedAddress)
+  return payloadMac(cachedAddress)
 }
 
 module.exports = {
   normalizeMac,
   reverseMac,
-  macQuality,
-  correctMacByteOrder,
+  payloadMac,
   resolveScanMacAddress
 }
