@@ -9,7 +9,6 @@ const deviceSettings = require("../../utils/device-settings");
 // 业务入口图标（与 workspace-entry.js 中 PATIENT/DOCTOR 的 key 对应）
 const WORKSPACE_ICONS = {
   healthRecord: "档",
-  assess: "测",
   checkin: "扫",
   messages: "信",
   emergency: "急",

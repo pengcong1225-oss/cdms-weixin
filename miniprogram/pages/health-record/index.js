@@ -7,7 +7,7 @@ const PAGE_SIZE = 10
 const GENDER_TEXT = { 0: '未知', 1: '男', 2: '女' }
 const VISIT_TYPE_TEXT = { 1: '门诊', 2: '电话', 3: '上门', 4: '视频' }
 const NEED_ADJUST_TEXT = { 0: '不需要', 1: '需要' }
-// 标准 CAT 八问维度顺序（与 utils/assess-rules.js 题目顺序一致）
+// 标准 CAT 八问维度顺序（与量表原文一致）
 const CAT_DIMENSIONS = ['咳嗽', '咳痰', '胸闷', '气促', '活动受限', '外出信心', '睡眠', '精力']
 
 function display (value) {

@@ -251,10 +251,6 @@ Page({
     wx.navigateTo({ url: "/pages/search/search" });
   },
 
-  openFirmwareUpgrade() {
-    wx.navigateTo({ url: "/pages/firmware-upgrade/firmware-upgrade" });
-  },
-
   async reconnect() {
     if (!this.isPatientDeviceScope()) return;
     if (this.data.busy) return;
