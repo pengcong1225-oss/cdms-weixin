@@ -6,8 +6,9 @@
 //   而 RW 固件按**小端序**（低字节在前）下发 6 字节，按字节原序拼接得到的是反序值。
 //
 // 判定规则（协议层面，单一规则，不依赖厂商 OUI 白名单）：
-// 凡是"来自设备下发字节"的 MAC（广播解析、readBleAddress 设备帧、以及据此写入的本地缓存），
-// 一律反转一次得到真实 MAC。平台自带的 deviceId（Android）是操作系统给出的真实 MAC，原样使用。
+// 只有"本次设备下发的原始字节"（广播解析、readBleAddress 设备帧）是小端序，需反转一次得到真实 MAC。
+// 平台自带的 deviceId（Android）是操作系统给出的真实 MAC，原样使用；
+// 本地缓存存的始终是此前解析出的真实 MAC（见 bleManager.saveDeviceAddress 写入点），读取时同样原样使用，不得再反转。
 //
 // 反例教训：曾用"IEEE 单播/全球唯一质量比较，哪种顺序更像设备地址就用哪种"，
 // 但小端值的首字节是真实 MAC 的末字节，经常同样是"单播+全球唯一"（如 60:A6:…、98:3D:…），
@@ -34,15 +35,15 @@ function payloadMac (mac) {
 
 /**
  * 从扫描结果解析真实 MAC。
- * 优先级：Android 的 deviceId（平台权威，原样）> 本次广播解析（反转）> 本地缓存（反转）。
- * 缓存可能是修复前写入的反序值，因此不能优先于本次扫描结果，且同样需要反转。
+ * 优先级：Android 的 deviceId（平台权威，原样）> 本次广播解析（反转）> 本地缓存（已存真实 MAC，原样）。
+ * 缓存写入的永远是解析后的真实 MAC，因此只作兜底、不覆盖本次广播结果，且不得再次反转。
  */
 function resolveScanMacAddress ({ deviceId, macAddress, cachedAddress } = {}) {
   const platformMac = normalizeMac(deviceId)
   if (platformMac) return platformMac
   const advertised = payloadMac(macAddress)
   if (advertised) return advertised
-  return payloadMac(cachedAddress)
+  return normalizeMac(cachedAddress)
 }
 
 module.exports = {

@@ -38,19 +38,20 @@ async function run () {
     cachedAddress: ''
   }), '34:20:00:00:A6:60', 'iOS 首扫应反转广播 MAC')
 
-  // iOS：修复前写入的缓存是反序值，不能覆盖本次扫描结果
+  // iOS：缓存不得覆盖本次扫描结果（广播仍是当次权威来源）
   assert.strictEqual(bleMac.resolveScanMacAddress({
     deviceId: '13214DCA-7F7C-4CE1-6B90-7F0C1F1C5F69',
     macAddress: '98:3D:01:00:20:34',
     cachedAddress: '60:A6:00:00:20:34'
-  }), '34:20:00:01:3D:98', '陈旧反序缓存不得覆盖本次扫描')
+  }), '34:20:00:01:3D:98', '缓存不得覆盖本次扫描')
 
-  // 广播缺失时才回退缓存，且缓存同样反转
+  // 广播缺失时才回退缓存；缓存存的是已解析的真实 MAC，必须原样返回。
+  // 回归锁：a44c77e 曾对缓存值再反转一次，导致无广播时绑定/展示反序 MAC。
   assert.strictEqual(bleMac.resolveScanMacAddress({
     deviceId: '13214DCA-7F7C-4CE1-6B90-7F0C1F1C5F69',
     macAddress: '',
-    cachedAddress: 'CE:06:02:00:20:34'
-  }), '34:20:00:02:06:CE', '无广播时回退缓存并反转')
+    cachedAddress: '34:20:00:02:06:CE'
+  }), '34:20:00:02:06:CE', '无广播时回退缓存且不得二次反转')
 
   // 广播缺失且无缓存：返回空（调用方必须拒绝绑定）
   assert.strictEqual(bleMac.resolveScanMacAddress({

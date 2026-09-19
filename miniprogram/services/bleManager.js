@@ -512,7 +512,8 @@ class BleManager {
       if (!this.isConnectionCurrent(target, generation)) return this.abortStaleConnection(target, this.sdk, previousRuntime);
       const power = results[0];
       const firmware = results[1];
-      // 设备帧里的 BLE 地址是小端序，统一反转成真实 MAC。
+      // 设备帧里的 BLE 地址是本次下发的原始字节（小端序），需反转成真实 MAC；
+      // 扫描结果 target.macAddress、previousBoundDevice 与本地缓存存的都是已解析的真实 MAC，原样使用。
       const macAddress = payloadMac(results[2]);
       const previousBoundDevice = this.state.boundDevice
         && this.state.boundDevice.deviceId === target.deviceId
@@ -521,9 +522,9 @@ class BleManager {
       const boundDevice = {
         deviceId: target.deviceId,
         macAddress: macAddress
-          || payloadMac(target.macAddress)
-          || payloadMac(previousBoundDevice && previousBoundDevice.macAddress)
-          || payloadMac(storage.getDeviceAddress(target.deviceId))
+          || normalizeMac(target.macAddress)
+          || normalizeMac(previousBoundDevice && previousBoundDevice.macAddress)
+          || normalizeMac(storage.getDeviceAddress(target.deviceId))
           || normalizeMac(target.deviceId),
         name: target.name || target.localName || "RW 智能戒指",
         localName: target.localName || "",
