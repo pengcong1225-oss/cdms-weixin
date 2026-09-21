@@ -324,10 +324,6 @@ function refreshAccessToken () {
   return refreshPromise
 }
 
-async function login (phone, password, wxCode) {
-  return cdmsRequest('/api/v1/miniapp/auth/login', 'POST', { phone, password, wxCode }, '')
-}
-
 function loginDoctor ({ baseUrl, username, password }) {
   const targetBaseUrl = baseUrl || cdmsBaseUrl()
   const account = String(username || '').trim()
@@ -340,31 +336,19 @@ function loginDoctor ({ baseUrl, username, password }) {
   }, '')
 }
 
-function loginWithWechat ({ baseUrl, phone }) {
-  return new Promise((resolve, reject) => {
-    const targetBaseUrl = baseUrl || cdmsBaseUrl()
-    if (!targetBaseUrl || !/^1\d{10}$/.test(String(phone || ''))) {
-      reject(new Error('请输入已建档的 11 位手机号'))
-      return
-    }
-    wx.login({
-      success: loginResult => {
-        if (!loginResult?.code) {
-          reject(new Error('微信授权凭证获取失败'))
-          return
-        }
-        request(`${targetBaseUrl}/api/v1/miniapp/auth/login`, 'POST', {
-          phone: String(phone).trim(),
-          wxCode: loginResult.code
-        }, '').then(resolve).catch(reject)
-      },
-      fail: err => {
-        const error = new Error('微信授权失败: ' + ((err && err.errMsg) || 'unknown'))
-        error.errMsg = (err && err.errMsg) || ''
-        reject(error)
-      }
-    })
-  })
+// 患者端改为「姓名 + 已建档手机号」直登：调用 /api/v1/miniapp/auth/login，
+// 不再获取或提交微信授权凭证（旧版微信授权登录已按需求整体下线）。
+function loginPatient ({ baseUrl, realName, phone }) {
+  const targetBaseUrl = baseUrl || cdmsBaseUrl()
+  const name = String(realName || '').trim()
+  const mobile = String(phone || '').trim()
+  if (!targetBaseUrl || name.length < 2 || !/^1\d{10}$/.test(mobile)) {
+    return Promise.reject(new Error('请输入患者姓名和已建档的 11 位手机号'))
+  }
+  return request(`${targetBaseUrl}/api/v1/miniapp/auth/login`, 'POST', {
+    realName: name,
+    phone: mobile
+  }, '')
 }
 
 async function logout () {
@@ -540,4 +524,4 @@ function enqueue (batch) {
   return appendQueueBatch(batch)
 }
 
-module.exports = { enqueue, flushQueue, rebindQueueSession, exchangeHandoff, readQueue, listQueueScopes, queueStorageKey, request, cdmsRequest, login, loginDoctor, loginWithWechat, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }
+module.exports = { enqueue, flushQueue, rebindQueueSession, exchangeHandoff, readQueue, listQueueScopes, queueStorageKey, request, cdmsRequest, loginDoctor, loginPatient, logout, switchRole, createHandoff, redeemHandoff, createPatientWearableSession, releasePatientWearableSession, listDoctorPatients, getDoctorPatient, submitScaleMeasurement, refreshAccessToken }

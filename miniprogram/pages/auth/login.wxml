@@ -18,10 +18,12 @@
       <view class="form-hint">使用现有 CDMS 账号密码登录，登录后进入医生随访工作台。</view>
     </block>
     <block wx:else>
+      <view class="field-label">患者姓名</view>
+      <input class="input" type="text" maxlength="32" placeholder="请输入患者姓名" value="{{realName}}" bindinput="onRealName" />
       <view class="field-label">患者手机号</view>
       <input class="input" type="number" maxlength="11" placeholder="请输入已建档手机号" value="{{phone}}" bindinput="onPhone" />
-      <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">微信授权登录</button>
-      <view class="form-hint">手机号用于匹配患者档案，微信授权凭证只在服务端兑换。</view>
+      <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">登录</button>
+      <view class="form-hint">请使用已在 CDMS 建档的患者姓名和 11 位手机号登录。</view>
     </block>
   </view>
   <view wx:if="{{roleSelectionRequired}}" class="roles">
