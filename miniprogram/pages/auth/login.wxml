@@ -31,4 +31,7 @@
     <button wx:for="{{roles}}" wx:key="roleType" data-role="{{item.roleType}}" bindtap="selectRole">{{item.displayName}}（{{item.roleType === 'DOCTOR' ? '医生' : '患者'}}）</button>
   </view>
   <view class="hint">登录遇到问题，请联系所属机构管理员。</view>
+  <view wx:if="{{restoring}}" class="restoring-mask">
+    <view class="restoring-box">登录中</view>
+  </view>
 </view>

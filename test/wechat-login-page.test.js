@@ -25,6 +25,8 @@ assert.ok(js.includes('onRealName'))
 assert.ok(js.includes('selectRole'))
 assert.ok(!js.includes('loginWithWechat'), '页面不得再调用 loginWithWechat')
 assert.ok(!js.includes('wx.login'), '页面不得再调用 wx.login')
+assert.ok(js.includes('tryRestoreSession'), '页面必须含冷启动会话恢复')
+assert.ok(wxml.includes('restoring') && wxml.includes('登录中'), '恢复期间必须显示「登录中」遮罩')
 assert.ok(!homeWxml.includes('切换身份'))
 assert.ok(!homeWxml.includes('bindtap="switchRole"'))
 assert.ok(!homeJs.includes('async switchRole'))
@@ -41,12 +43,18 @@ let toastCalls = []
 let relaunchCalls = []
 let redirectCalls = []
 let savedSession = null
+let appGlobal = {}
+let refreshImpl = async () => 'fresh-token'
 
 require.cache[apiPath] = {
   id: apiPath,
   filename: apiPath,
   loaded: true,
   exports: {
+    refreshAccessToken: async () => {
+      apiCalls.push({ fn: 'refreshAccessToken' })
+      return refreshImpl()
+    },
     loginDoctor: async payload => {
       apiCalls.push({ fn: 'loginDoctor', payload })
       return { data: { token: 'doctor-token', activeRole: 'DOCTOR' } }
@@ -75,7 +83,7 @@ global.wx = {
   reLaunch (options) { relaunchCalls.push(options && options.url) },
   redirectTo (options) { redirectCalls.push(options && options.url) }
 }
-global.getApp = () => ({ globalData: {}, saveAuth: session => { savedSession = session } })
+global.getApp = () => ({ globalData: appGlobal, saveAuth: session => { savedSession = session } })
 
 let pageConfig
 global.Page = config => { pageConfig = config }
@@ -95,6 +103,8 @@ function resetLogs () {
   relaunchCalls = []
   redirectCalls = []
   savedSession = null
+  appGlobal = {}
+  refreshImpl = async () => 'fresh-token'
 }
 
 async function run () {
@@ -159,6 +169,47 @@ async function run () {
   assert.strictEqual(apiCalls[1].payload, '/h5/patients')
   assert.deepStrictEqual(redirectCalls, ['/pages/h5/index?url=' + encodeURIComponent('https://h5.example.com/cdms/#/patients')])
   assert.strictEqual(wxLoginCalls, 0)
+
+  // 6) 冷启动带有效会话（杀微信重进落在登录页）→ 静默 refresh 并直接进入角色首页
+  page = loadPage()
+  resetLogs()
+  appGlobal = { refreshToken: 'refresh-1', accessToken: 'expired-access', activeRole: 'PATIENT' }
+  await page.tryRestoreSession()
+  assert.deepStrictEqual(apiCalls, [{ fn: 'refreshAccessToken' }], '有会话应静默刷新')
+  assert.deepStrictEqual(relaunchCalls, ['/pages/home/home'], '刷新成功应自动进入患者首页')
+  assert.strictEqual(apiCalls.some(c => c.fn === 'loginPatient'), false, '自动恢复不得触发账号密码登录')
+
+  // 7) refresh 401（refresh 过期/账号失效）→ 清除会话、停留登录页
+  page = loadPage()
+  resetLogs()
+  appGlobal = { refreshToken: 'stale-refresh', accessToken: 'expired-access', activeRole: 'PATIENT' }
+  refreshImpl = async () => { const error = new Error('Refresh Token 已失效'); error.statusCode = 401; throw error }
+  await page.tryRestoreSession()
+  assert.strictEqual(relaunchCalls.length, 0, '刷新失败不得跳转')
+  assert.strictEqual(page.data.restoring, false, '失败后应撤掉登录中遮罩')
+  assert.strictEqual(appGlobal.refreshToken, '', '401 后应清除本地会话')
+  assert.strictEqual(appGlobal.activeRole, '', '401 后应清除角色')
+
+  // 8) 网络失败（非 401）→ 保留会话，用户仍可手动登录
+  page = loadPage()
+  resetLogs()
+  appGlobal = { refreshToken: 'refresh-2', accessToken: 'access-2', activeRole: 'PATIENT' }
+  refreshImpl = async () => { throw new Error('网络请求失败: timeout') }
+  await page.tryRestoreSession()
+  assert.strictEqual(appGlobal.refreshToken, 'refresh-2', '网络失败不得清会话')
+  assert.strictEqual(relaunchCalls.length, 0)
+
+  // 9) 无会话 / 未知角色 → 不尝试恢复、不闪遮罩
+  page = loadPage()
+  resetLogs()
+  await page.tryRestoreSession()
+  assert.deepStrictEqual(apiCalls, [], '无会话不得调用 refresh')
+  assert.notStrictEqual(page.data.restoring, true)
+  page = loadPage()
+  resetLogs()
+  appGlobal = { refreshToken: 'refresh-3', activeRole: '' }
+  await page.tryRestoreSession()
+  assert.deepStrictEqual(apiCalls, [], '未知角色不得自动恢复（避免回跳循环）')
 
   console.log('wechat-login-page tests passed')
 }

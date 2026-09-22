@@ -15,3 +15,5 @@
 .role-title { color: #27332d; font-size: 30rpx; margin-bottom: 18rpx; }
 .roles button { margin: 14rpx 0; color: #267b56; background: #eff8f2; }
 .hint { color: #8a948f; font-size: 23rpx; margin-top: 36rpx; line-height: 1.6; text-align: center; }
+.restoring-mask { position: fixed; inset: 0; z-index: 99; background: rgba(246, 250, 248, .86); display: flex; align-items: center; justify-content: center; }
+.restoring-box { padding: 26rpx 48rpx; border-radius: 20rpx; background: #fff; color: #267b56; font-size: 28rpx; box-shadow: 0 12rpx 32rpx rgba(41, 92, 67, .14); }

@@ -2,10 +2,34 @@ const api = require('../../utils/api')
 const { getRoleEntry } = require('../../utils/role-entry')
 
 Page({
-  data: { mode: 'doctor', username: '', password: '', realName: '', phone: '', loading: false, roleSelectionRequired: false, roles: [] },
+  data: { mode: 'doctor', username: '', password: '', realName: '', phone: '', loading: false, restoring: false, roleSelectionRequired: false, roles: [] },
   onLoad (query) {
     const app = getApp()
     if (query?.cdmsBaseUrl) app.globalData.cdmsBaseUrl = query.cdmsBaseUrl
+  },
+  onShow () {
+    // 冷启动（如杀掉微信进程后重进）总是落在入口页=本页；
+    // 本地会话仍有效时静默重签并直接进入，避免"登录态失效"的假象。
+    this.tryRestoreSession()
+  },
+  async tryRestoreSession () {
+    if (this.restoreAttempted) return
+    const app = getApp()
+    const auth = app?.globalData || {}
+    if (!String(auth.refreshToken || '').trim()) return
+    if (auth.activeRole !== 'PATIENT' && auth.activeRole !== 'DOCTOR') return
+    this.restoreAttempted = true
+    this.setData({ restoring: true })
+    try {
+      await api.refreshAccessToken()
+      await this.enterRole({ activeRole: app.globalData.activeRole })
+    } catch (error) {
+      // 仅 401（refresh 过期/账号失效）清除会话；网络失败保留会话，用户仍可手动登录。
+      if (error && error.statusCode === 401) {
+        try { require('../../utils/auth-guard').purgeSession(app) } catch (_) { /* noop */ }
+      }
+      this.setData({ restoring: false })
+    }
   },
   selectMode (event) { this.setData({ mode: event.currentTarget.dataset.mode, roleSelectionRequired: false, roles: [] }) },
   onUsername (e) { this.setData({ username: e.detail.value }) },
