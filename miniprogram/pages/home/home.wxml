@@ -2,12 +2,22 @@
   <view class="topbar">
     <view class="greeting">
       <view class="eyebrow">COPD 健康管理</view>
-      <view class="hero-title">今天感觉怎么样？</view>
-      <view class="hero-subtitle">连接设备，查看你的健康趋势</view>
     </view>
-    <view class="profile-actions">
-      <view class="profile-mark">RW</view>
-      <view class="logout-button" bindtap="logout">退出登录</view>
+  </view>
+
+  <view class="patient-card">
+    <view class="patient-avatar">{{patientProfileReady ? patientInitial : '患'}}</view>
+    <view wx:if="{{patientProfileReady}}" class="patient-copy">
+      <view class="patient-name">{{patientName}}</view>
+      <view class="patient-phone">{{patientPhone}}</view>
+    </view>
+    <view wx:else class="patient-copy patient-copy-muted">
+      <view class="patient-name">患者信息</view>
+      <view class="patient-phone">{{patientProfileLoading ? '正在加载' : '暂时无法读取'}}</view>
+    </view>
+    <view class="patient-logout" bindtap="logout">
+      <text>退出登录</text>
+      <text class="patient-logout-arrow">›</text>
     </view>
   </view>
 

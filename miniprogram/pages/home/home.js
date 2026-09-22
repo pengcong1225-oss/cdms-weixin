@@ -41,7 +41,12 @@ Page({
     activeRole: "",
     workspaceEntries: [],
     messagesUnread: 0,
-    syncAlertText: ""
+    syncAlertText: "",
+    patientProfileLoading: false,
+    patientProfileReady: false,
+    patientName: "",
+    patientPhone: "",
+    patientInitial: ""
   },
 
   onLoad() {
@@ -61,6 +66,7 @@ Page({
       wx.reLaunch({ url: '/pages/auth/login' })
       return
     }
+    this.loadPatientProfile()
     this.unsubscribe = bleManager.subscribe((state) => {
       this.setData({
         boundDevice: state.boundDevice,
@@ -131,6 +137,54 @@ Page({
       this.setData({ messagesUnread: count > 0 ? count : 0 })
     } catch (error) {
       console.warn('[CDMS] 未读消息数获取失败', error)
+    }
+  },
+
+  async loadPatientProfile () {
+    const app = getApp()
+    const accessToken = String(app.globalData.accessToken || '')
+    this.setData({ patientProfileLoading: true })
+    try {
+      // patientId 必须以当前 access token 的 /me 为准；本地会话可能来自旧版本迁移，
+      // 直接使用缓存值会请求到其他档案并被后端 403 拒绝。
+      const meResponse = await api.cdmsRequest('/api/v1/miniapp/auth/me', 'GET', null, accessToken)
+      const me = unwrapData(meResponse)
+      const responseIdentityId = String((me && me.identityId) || '').trim()
+      const patientId = String((me && me.patientId) || '').trim()
+      if (!patientId) throw new Error('未取得患者档案标识')
+      // 首页只读取 /me 返回的本人窄字段，避免再用客户端 patientId 请求 360
+      // 触发第二次权限校验，也不会把身份证等无关档案信息带到首页。
+      const patientName = String((me && me.patientName) || '').trim()
+      const patientPhone = String((me && me.patientPhone) || '').trim()
+      if (!patientName || !patientPhone) throw new Error('患者档案信息不完整')
+
+      const currentIdentityId = String(app.globalData.identityId || '').trim()
+      if (!app.globalData.accessToken || app.globalData.activeRole !== 'PATIENT'
+        || (responseIdentityId && currentIdentityId && responseIdentityId !== currentIdentityId)) {
+        this.setData({ patientProfileLoading: false })
+        return
+      }
+      app.globalData.patientId = patientId
+      this.setData({
+        patientProfileLoading: false,
+        patientProfileReady: true,
+        patientName,
+        patientPhone,
+        patientInitial: patientName.charAt(0)
+      })
+    } catch (error) {
+      if (!app.globalData.accessToken || app.globalData.activeRole !== 'PATIENT') {
+        this.setData({ patientProfileLoading: false })
+        return
+      }
+      console.warn('[CDMS] 患者首页档案加载失败', error)
+      this.setData({
+        patientProfileLoading: false,
+        patientProfileReady: false,
+        patientName: '',
+        patientPhone: '',
+        patientInitial: ''
+      })
     }
   },
 

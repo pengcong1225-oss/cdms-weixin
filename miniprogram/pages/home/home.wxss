@@ -13,19 +13,11 @@ page {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 42rpx 4rpx 28rpx;
+  padding: 42rpx 4rpx 18rpx;
 }
 
 .greeting {
   min-width: 0;
-}
-
-.profile-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: none;
-  margin-left: 16rpx;
 }
 
 .eyebrow {
@@ -35,42 +27,75 @@ page {
   letter-spacing: 2rpx;
 }
 
-.hero-title {
-  margin-top: 9rpx;
-  color: #18352c;
-  font-size: 42rpx;
-  line-height: 58rpx;
-  font-weight: 750;
-  letter-spacing: -1rpx;
+.patient-card {
+  display: flex;
+  align-items: center;
+  min-height: 126rpx;
+  margin-bottom: 30rpx;
+  padding: 22rpx 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid #e0ece7;
+  border-radius: 28rpx;
+  background: #fff;
+  box-shadow: 0 12rpx 30rpx rgba(33, 75, 59, .06);
 }
 
-.hero-subtitle {
-  margin-top: 6rpx;
-  color: #84948d;
-  font-size: 24rpx;
-}
-
-.profile-mark {
+.patient-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 82rpx;
-  height: 82rpx;
+  width: 76rpx;
+  height: 76rpx;
   flex: none;
-  margin-top: 4rpx;
-  border: 8rpx solid #e1f2eb;
   border-radius: 50%;
-  background: #0c9b6c;
-  color: #fff;
-  font-size: 22rpx;
+  background: #e4f5ed;
+  color: #0c9568;
+  font-size: 30rpx;
   font-weight: 750;
-  box-shadow: 0 10rpx 24rpx rgba(12, 155, 108, .2);
 }
 
-.logout-button {
-  margin-top: 10rpx;
+.patient-copy {
+  min-width: 0;
+  flex: 1;
+  margin-left: 20rpx;
+}
+
+.patient-name {
+  overflow: hidden;
+  color: #203b32;
+  font-size: 31rpx;
+  font-weight: 720;
+  line-height: 42rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-phone {
+  margin-top: 3rpx;
+  color: #82938b;
+  font-size: 23rpx;
+  line-height: 34rpx;
+  letter-spacing: 1rpx;
+}
+
+.patient-copy-muted .patient-name {
+  color: #70837b;
+}
+
+.patient-logout {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: 18rpx;
+  padding: 12rpx 0 12rpx 14rpx;
   color: #6c887c;
-  font-size: 21rpx;
+  font-size: 22rpx;
+}
+
+.patient-logout-arrow {
+  margin-left: 8rpx;
+  color: #aec2b9;
+  font-size: 36rpx;
   line-height: 30rpx;
 }
 
