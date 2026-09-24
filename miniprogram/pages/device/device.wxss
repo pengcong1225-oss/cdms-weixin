@@ -233,3 +233,113 @@
   margin: 4rpx 8rpx 24rpx;
   text-align: center;
 }
+
+/* 采集间隔 / 预警值弹层 */
+.dialog-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.dialog {
+  width: 640rpx;
+  padding: 36rpx 32rpx 24rpx;
+  border-radius: 24rpx;
+  background: #fff;
+}
+
+.dialog-title {
+  margin-bottom: 24rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2d27;
+}
+
+.dialog-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx;
+  border: 1rpx solid #dfece6;
+  border-radius: 16rpx;
+  background: #f7fbf9;
+  color: #1f2d27;
+  font-size: 28rpx;
+}
+
+.dialog-picker-arrow {
+  color: #0d9167;
+}
+
+.dialog-hint {
+  margin-top: 16rpx;
+  color: #6b7c74;
+  font-size: 24rpx;
+}
+
+.dialog-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.dialog-label {
+  width: 90rpx;
+  color: #1f2d27;
+  font-size: 28rpx;
+}
+
+.dialog-input {
+  flex: 1;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid #dfece6;
+  border-radius: 14rpx;
+  background: #f7fbf9;
+  font-size: 28rpx;
+}
+
+.dialog-input.disabled {
+  background: #f1f3f2;
+  color: #9aa5a0;
+}
+
+.dialog-unit {
+  width: 70rpx;
+  padding-left: 16rpx;
+  color: #6b7c74;
+  font-size: 26rpx;
+}
+
+.dialog-error {
+  margin-bottom: 16rpx;
+  color: #d84b4b;
+  font-size: 24rpx;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24rpx;
+}
+
+.dialog-btn {
+  margin-left: 20rpx;
+  padding: 14rpx 32rpx;
+  border-radius: 999rpx;
+  background: #eef3f0;
+  color: #1f2d27;
+  font-size: 28rpx;
+}
+
+.dialog-btn.primary {
+  background: #0c9b6c;
+  color: #fff;
+}
+

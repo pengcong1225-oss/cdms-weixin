@@ -138,6 +138,8 @@ Page({
     doctorEntries: []
   },
 
+  noop() {},
+
   onLoad() {
     this.settingValues = {};
     // 回显已持久化的设备设置：已有保存值即显示“已保存”
@@ -147,6 +149,15 @@ Page({
       Object.keys(saved || {}).forEach((key) => {
         if (key === "syncIntervalMinutes") {
           this.settingValues[key] = `已保存·每 ${Number(saved[key]) || 15} 分钟`;
+        } else if (saved[key] && typeof saved[key] === "object" && "intervalMinutes" in saved[key]) {
+          this.settingValues[key] = saved[key].enabled
+            ? `已保存·每 ${saved[key].intervalMinutes || 60} 分钟`
+            : "已关闭";
+        } else if (key === "heartRateAlert" && saved[key] && typeof saved[key] === "object") {
+          const cfg = saved[key];
+          this.settingValues[key] = cfg.enabled
+            ? `已保存·上限 ${cfg.high || 0} / 下限 ${cfg.low === 0xff || !cfg.low ? "不限" : cfg.low}`
+            : "已关闭";
         } else {
           this.settingValues[key] = "已保存";
         }
@@ -381,23 +392,9 @@ Page({
       temperatureMonitoring: "temperature",
       ppgMonitoring: "ppg",
     };
+    // 监测采集间隔：下拉选择 1-60 分钟（保留「关闭」）
     if (monitoringTypes[id]) {
-      const values = [0, 1, 30, 60];
-      const index = await choose(["关闭", "每 1 分钟", "每 30 分钟", "每 60 分钟"]);
-      if (index === null) return;
-      const interval = values[index];
-      const schedule = {
-        enabled: interval > 0,
-        startHour: 0,
-        startMinute: 0,
-        endHour: 23,
-        endMinute: 59,
-        intervalMinutes: interval || 60,
-      };
-      await sdk.setMonitoring(monitoringTypes[id], schedule);
-      this.persistSetting(id, schedule);
-      wx.showToast({ title: "设置成功", icon: "success" });
-      return;
+      return this.openIntervalDialog(id, monitoringTypes[id], sdk);
     }
 
     if (id === "findDevice") {
@@ -457,16 +454,6 @@ Page({
         values: [1, 0],
         run: (value) => sdk.controlCamera(value),
       },
-      heartRateAlert: {
-        labels: ["关闭", "上限 50 bpm", "上限 120 bpm", "上限 140 bpm", "上限 160 bpm"],
-        values: [0, 50, 120, 140, 160],
-        run: (value) => sdk.setHeartRateAlert(value > 0, value || 140, 0xff),
-      },
-      bloodOxygenAlert: {
-        labels: ["关闭", "下限 50%", "下限 90%", "下限 92%", "下限 94%"],
-        values: [0, 50, 90, 92, 94],
-        run: (value) => sdk.setBloodOxygenAlert(value > 0, value || 94),
-      },
       vibrationCount: {
         labels: ["关闭", "低强度 · 1 次", "中强度 · 2 次", "高强度 · 3 次"],
         values: [[0, 0], [1, 1], [2, 2], [3, 3]],
@@ -503,21 +490,175 @@ Page({
         run: (value) => sdk.setMuslimTimeDisplayMode(value),
       },
     };
+    // 预警值：改为输入框弹层，可同时输入上限与下限
+    if (id === "heartRateAlert") {
+      return this.openAlertDialog(id, sdk, "心率报警", "bpm", true);
+    }
+    if (id === "bloodOxygenAlert") {
+      return this.openAlertDialog(id, sdk, "血氧报警", "%", false);
+    }
+
     const operation = operations[id];
     if (!operation) throw new Error("此功能暂未配置操作模型");
     const index = await choose(operation.labels);
     if (index === null) return;
     await operation.run(operation.values[index]);
-    if (id === "heartRateAlert") {
-      const value = operation.values[index];
-      this.persistSetting(id, { enabled: value > 0, high: value || 140, low: 0xff });
-    } else if (id === "bloodOxygenAlert") {
-      const value = operation.values[index];
-      this.persistSetting(id, { enabled: value > 0, low: value || 94 });
-    } else {
-      this.updateSettingValue(id, operation.labels[index]);
-    }
+    this.updateSettingValue(id, operation.labels[index]);
     wx.showToast({ title: "设置成功", icon: "success" });
+  },
+
+  // 采集间隔下拉：1-60 分钟（0=关闭）
+  openIntervalDialog(id, monitorType, sdk) {
+    const device = this.data.boundDevice;
+    const saved = device && device.deviceId ? deviceSettings.load(device.deviceId)[id] : null;
+    const options = ['关闭'];
+    for (let m = 1; m <= 60; m += 1) options.push(String(m) + ' 分钟');
+    const currentEnabled = !!(saved && saved.enabled);
+    const currentMinutes = saved && Number(saved.intervalMinutes) > 0 ? Number(saved.intervalMinutes) : 30;
+    this.setData({
+      dialog: {
+        kind: 'interval',
+        id,
+        title: '采集间隔',
+        options,
+        index: currentEnabled ? currentMinutes : (saved ? 0 : 30),
+        upperText: '',
+        lowerText: '',
+        errorText: '',
+      },
+    });
+    this._pendingDialog = { kind: 'interval', id, monitorType, sdk };
+    return Promise.resolve();
+  },
+
+  // 预警值输入弹层：心率可填上限+下限；血氧按 SDK 能力仅下限
+  openAlertDialog(id, sdk, title, unit, supportsUpper) {
+    const device = this.data.boundDevice;
+    const saved = device && device.deviceId ? deviceSettings.load(device.deviceId)[id] : null;
+    this.setData({
+      dialog: {
+        kind: 'alert',
+        id,
+        title,
+        unit,
+        supportsUpper,
+        options: [],
+        index: 0,
+        upperText: saved && saved.high ? String(saved.high) : '',
+        lowerText: saved && saved.low ? String(saved.low) : '',
+        errorText: '',
+      },
+    });
+    this._pendingDialog = { kind: 'alert', id, sdk };
+    return Promise.resolve();
+  },
+
+  onIntervalChange(event) {
+    const dialog = Object.assign({}, this.data.dialog, { index: Number(event.detail.value), errorText: '' });
+    this.setData({ dialog });
+  },
+
+  onUpperInput(event) {
+    const dialog = Object.assign({}, this.data.dialog, { upperText: event.detail.value, errorText: '' });
+    this.setData({ dialog });
+  },
+
+  onLowerInput(event) {
+    const dialog = Object.assign({}, this.data.dialog, { lowerText: event.detail.value, errorText: '' });
+    this.setData({ dialog });
+  },
+
+  async confirmDialog() {
+    const pending = this._pendingDialog;
+    const dialog = this.data.dialog || {};
+    if (!pending) return;
+    if (dialog.kind === 'interval') {
+      const minutes = Number(dialog.index);
+      const schedule = {
+        enabled: minutes > 0,
+        startHour: 0,
+        startMinute: 0,
+        endHour: 23,
+        endMinute: 59,
+        intervalMinutes: minutes > 0 ? minutes : 60,
+      };
+      await pending.sdk.setMonitoring(pending.monitorType, schedule);
+      this.persistSetting(pending.id, schedule);
+      this.closeDialog();
+      wx.showToast({ title: minutes > 0 ? '已保存·每 ' + minutes + ' 分钟' : '已关闭采集', icon: 'success' });
+      return;
+    }
+
+    const rawUpper = String(dialog.upperText || '').trim();
+    const rawLower = String(dialog.lowerText || '').trim();
+    const isHeart = pending.id === 'heartRateAlert';
+
+    if (!rawUpper && !rawLower) {
+      if (isHeart) {
+        await pending.sdk.setHeartRateAlert(false, 0, 0);
+        this.persistSetting(pending.id, { enabled: false, high: 0, low: 0 });
+      } else {
+        await pending.sdk.setBloodOxygenAlert(false, 0);
+        this.persistSetting(pending.id, { enabled: false, low: 0 });
+      }
+      this.closeDialog();
+      wx.showToast({ title: '已关闭预警', icon: 'success' });
+      return;
+    }
+
+    if (isHeart) {
+      const parse = (text, name) => {
+        if (!/^\d+$/.test(text)) {
+          wx.showToast({ title: name + '需为整数', icon: 'none' });
+          return null;
+        }
+        const num = Number(text);
+        if (num < 30 || num > 250) {
+          wx.showToast({ title: name + '范围 30-250', icon: 'none' });
+          return null;
+        }
+        return num;
+      };
+      const upper = rawUpper ? parse(rawUpper, '上限') : null;
+      if (rawUpper && upper === null) return;
+      const lower = rawLower ? parse(rawLower, '下限') : null;
+      if (rawLower && lower === null) return;
+      if (upper !== null && lower !== null && lower >= upper) {
+        wx.showToast({ title: '下限需小于上限', icon: 'none' });
+        return;
+      }
+      const upperValue = upper === null ? 0 : upper;
+      const lowerValue = lower === null ? 0xff : lower;
+      await pending.sdk.setHeartRateAlert(true, upperValue, lowerValue);
+      this.persistSetting(pending.id, { enabled: true, high: upperValue, low: lowerValue });
+      this.closeDialog();
+      wx.showToast({ title: '已保存', icon: 'success' });
+      return;
+    }
+
+    // 血氧：SDK 仅支持下限；上限若被填写则提示并不下发
+    if (rawUpper) {
+      wx.showToast({ title: '血氧仅支持下限', icon: 'none' });
+      return;
+    }
+    if (!/^\d+$/.test(rawLower)) {
+      wx.showToast({ title: '下限需为整数', icon: 'none' });
+      return;
+    }
+    const num = Number(rawLower);
+    if (num < 50 || num > 100) {
+      wx.showToast({ title: '血氧下限范围 50-100', icon: 'none' });
+      return;
+    }
+    await pending.sdk.setBloodOxygenAlert(true, num);
+    this.persistSetting(pending.id, { enabled: true, low: num });
+    this.closeDialog();
+    wx.showToast({ title: '已保存', icon: 'success' });
+  },
+
+  closeDialog() {
+    this.setData({ dialog: null });
+    this._pendingDialog = null;
   },
 
   async manageSensorRawPpg(sdk) {

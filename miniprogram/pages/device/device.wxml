@@ -104,4 +104,57 @@
     </view>
     <view class="iot-device-note">医生端只负责连接工作站并为当前患者测量，不管理患者个人设备。</view>
   </block>
+
+  <view wx:if="{{dialog}}" class="dialog-mask" bindtap="closeDialog">
+    <view class="dialog" catchtap="noop">
+      <view class="dialog-title">{{dialog.title}}</view>
+
+      <block wx:if="{{dialog.kind === 'interval'}}">
+        <picker
+          mode="selector"
+          range="{{dialog.options}}"
+          value="{{dialog.index}}"
+          bindchange="onIntervalChange"
+        >
+          <view class="dialog-picker">
+            <text>{{dialog.options[dialog.index]}}</text>
+            <text class="dialog-picker-arrow">▾</text>
+          </view>
+        </picker>
+        <view class="dialog-hint">可下拉选择 1-60 分钟；选择「关闭」停止该采集</view>
+      </block>
+
+      <block wx:else>
+        <view class="dialog-row">
+          <text class="dialog-label">上限</text>
+          <input
+            class="dialog-input {{dialog.supportsUpper ? '' : 'disabled'}}"
+            type="number"
+            disabled="{{!dialog.supportsUpper}}"
+            placeholder="{{dialog.supportsUpper ? '留空表示不限制' : '设备仅支持下限' }}"
+            value="{{dialog.upperText}}"
+            bindinput="onUpperInput"
+          />
+          <text class="dialog-unit">{{dialog.unit}}</text>
+        </view>
+        <view class="dialog-row">
+          <text class="dialog-label">下限</text>
+          <input
+            class="dialog-input"
+            type="number"
+            placeholder="留空表示不限制"
+            value="{{dialog.lowerText}}"
+            bindinput="onLowerInput"
+          />
+          <text class="dialog-unit">{{dialog.unit}}</text>
+        </view>
+        <view wx:if="{{dialog.errorText}}" class="dialog-error">{{dialog.errorText}}</view>
+      </block>
+
+      <view class="dialog-actions">
+        <view class="dialog-btn" bindtap="closeDialog">取消</view>
+        <view class="dialog-btn primary" bindtap="confirmDialog">保存</view>
+      </view>
+    </view>
+  </view>
 </view>
