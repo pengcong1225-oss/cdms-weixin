@@ -57,6 +57,41 @@ async function run () {
   assert.strictEqual(requests.length, 1)
   assert.deepStrictEqual(requests[0].data, { realName: '李四', phone: '13800000000' })
 
+  // 失败提示：后端中文文案优先；状态码兜底为可读中文（不再出现 HTTP 401/429 之类）。
+  requests.length = 0
+  global.wx.request = options => options.success({
+    statusCode: 401,
+    data: { code: 401, message: '姓名与手机号不匹配' }
+  })
+  await assert.rejects(() => api.loginPatient({ realName: '张三', phone: '13900000000' }),
+    error => {
+      assert.strictEqual(error.message, '姓名与手机号不匹配', '401 应透传后端中文文案')
+      assert.strictEqual(error.statusCode, 401)
+      return true
+    })
+
+  global.wx.request = options => options.success({ statusCode: 429, data: {} })
+  await assert.rejects(() => api.loginPatient({ realName: '张三', phone: '13900000000' }),
+    error => {
+      assert.strictEqual(error.message, '尝试过于频繁，请稍后再试', '429 应给出限流文案')
+      return true
+    })
+
+  global.wx.request = options => options.success({ statusCode: 500, data: {} })
+  await assert.rejects(() => api.loginPatient({ realName: '张三', phone: '13900000000' }),
+    error => {
+      assert.strictEqual(error.message, '服务器开小差了，请稍后重试', '500 应给出服务端文案')
+      return true
+    })
+
+  global.wx.request = options => options.fail({ errMsg: 'request:fail timeout' })
+  await assert.rejects(() => api.loginPatient({ realName: '张三', phone: '13900000000' }),
+    error => {
+      assert.strictEqual(error.message, '网络连接失败，请检查网络后重试', '网络失败应给出可读文案')
+      assert.strictEqual(error.errMsg, 'request:fail timeout', '原始 errMsg 仍保留供排查')
+      return true
+    })
+
   console.log('wechat-login tests passed')
 }
 

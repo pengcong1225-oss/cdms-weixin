@@ -247,6 +247,20 @@ function appendQueueBatch (batch) {
   return true
 }
 
+// 把 HTTP 状态码翻译成用户可读的中文文案；后端返回的业务文案（如「姓名与手机号不匹配」）优先。
+function friendlyHttpMessage (statusCode, body) {
+  const text = body && typeof body === 'object' ? String(body.message || '').trim() : ''
+  if (text) return text
+  switch (Number(statusCode)) {
+    case 400: return '请求参数有误，请检查后重试'
+    case 401: return '登录状态已失效，请重新登录'
+    case 403: return '没有权限执行该操作'
+    case 404: return '请求的内容不存在'
+    case 429: return '尝试过于频繁，请稍后再试'
+    default: return Number(statusCode) >= 500 ? '服务器开小差了，请稍后重试' : '请求失败，请稍后重试'
+  }
+}
+
 function request (url, method, data, token) {
   return new Promise((resolve, reject) => {
     const header = token ? { Authorization: `Bearer ${token}` } : {}
@@ -258,7 +272,7 @@ function request (url, method, data, token) {
           resolve(res.data)
           return
         }
-        const error = new Error(`HTTP ${res.statusCode}`)
+        const error = new Error(friendlyHttpMessage(res.statusCode, res.data))
         // Some gateways return HTTP 200 with a business-level 401. Keep one
         // error shape so callers do not accidentally skip session renewal.
         error.statusCode = unauthorized ? 401 : res.statusCode
@@ -267,9 +281,11 @@ function request (url, method, data, token) {
         reject(error)
       },
       fail: err => {
-        // 网络层失败（DNS/SSL/断连等）没有 message，只有 errMsg——透传给调用方，避免被笼统的「登录失败/同步失败」吞掉
-        const error = new Error('网络请求失败: ' + ((err && err.errMsg) || 'unknown'))
-        error.errMsg = (err && err.errMsg) || ''
+        // 网络层失败（DNS/SSL/断连等）：给用户可读文案，原始 errMsg 保留在 detail 供排查。
+        const errMsg = (err && err.errMsg) || 'unknown'
+        const error = new Error('网络连接失败，请检查网络后重试')
+        error.errMsg = errMsg
+        error.detail = errMsg
         reject(error)
       } })
   })

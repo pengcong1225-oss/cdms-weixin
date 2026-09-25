@@ -37,7 +37,7 @@ async function run () {
   await assert.rejects(
     () => api.request('https://iot/v1/wearable-upload-batches', 'POST', {}, 'expired-token'),
     error => {
-      assert.strictEqual(error.message, 'HTTP 401')
+      assert.strictEqual(error.message, '令牌已过期')
       assert.strictEqual(error.statusCode, 401)
       assert.strictEqual(error.code, 'IoT-1002')
       assert.deepStrictEqual(error.response, { code: 'IoT-1002', message: '令牌已过期' })
