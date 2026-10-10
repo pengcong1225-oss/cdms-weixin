@@ -465,6 +465,9 @@ class BleManager {
       const devicePassword = app?.globalData?.devicePassword;
       if (devicePassword) RingSdk.prepareAutoPassword(String(devicePassword));
       const sdk = await RingSdk.connect(target.deviceId, {
+        // 戒指无网络对时能力,内部时钟靠 App 下发;不校准则所有测量数据带设备时钟漂移
+        // (生产实测 ±2.5~5.5h)。连接初始化阶段即对时+对时区,先于任何数据读取。
+        initializeOptions: { syncTime: true, syncTimeZone: true },
         onConnectionStateChange: ({ deviceId, connected }) => {
           if (connected || deviceId !== this.activeDeviceId) return;
           if (this.intentionalDisconnectIds.has(deviceId)) {
