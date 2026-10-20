@@ -27,6 +27,9 @@ function unwrapData (response) {
 
 Page({
   workspaceOpening: false,
+  // 2026-10-20：记录本页实例是否已自动进过医生工作台。
+  // 自动进只发生在 onLoad 的首次进入；onShow 不再自动进（否则过期返回会被反复弹回 H5）。
+  workspaceAutoEntered: false,
   data: {
     boundDevice: null,
     foreignDevice: false,
@@ -49,7 +52,7 @@ Page({
     patientInitial: ""
   },
 
-  onLoad() {
+  onLoad(query) {
     const app = getApp()
     const activeRole = app.globalData.activeRole || ''
     this.setData({
@@ -59,6 +62,12 @@ Page({
       })),
     })
     if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
+      // 2026-10-20 用户报障（退出/过期后反复回到「登录会话已过期」）：H5 过期页 reLaunch 回首页时
+      // 会带 returnedFromExpired 标记，此时**不能**再自动进工作台，否则
+      // 「过期页 → 首页 → 自动进 H5 → 又过期」的循环会重现。
+      if (this.consumeReturnedFromExpired(query)) return
+      // 非返回场景：首次进入保持原有体验，自动进一次医生工作台（onShow 不再重复自动进）。
+      this.workspaceAutoEntered = true
       this.redirectDoctorWorkspace()
       return
     }
@@ -90,7 +99,11 @@ Page({
   onShow() {
     const app = getApp()
     if (getRoleEntry(app.globalData.activeRole).type === 'H5') {
-      this.redirectDoctorWorkspace()
+      // 2026-10-20：医生角色**不再**在 onShow 自动 redirectDoctorWorkspace()。
+      // 死循环根因：H5 会话过期 → 点「返回小程序」→ 回到本页 → onShow 自动再进 H5 → 又过期。
+      // 现在首页始终留给用户操作；要进工作台由用户点「进入工作台」走
+      // openCdmsWorkspace() → 重新 createHandoff（新会话）。
+      this.consumeReturnedFromExpired()
       return
     }
     if (app.globalData.cdmsBaseUrl && !app.globalData.accessToken) {
@@ -116,6 +129,16 @@ Page({
         bleManager.safeAutoSync().catch(() => {});
       }
     }
+  },
+
+  // 读取并清掉「从 H5 过期页返回」标记（query 优先，其次 globalData）。
+  // 命中时 onLoad/onShow 都不自动进工作台，避免把用户再次弹回已失效的 H5。
+  consumeReturnedFromExpired (query) {
+    const app = getApp()
+    const fromQuery = !!(query && query.returnedFromExpired)
+    const fromGlobal = !!(app && app.globalData && app.globalData.returnedFromExpired)
+    if (app && app.globalData) app.globalData.returnedFromExpired = false
+    return fromQuery || fromGlobal
   },
 
   onHide() {

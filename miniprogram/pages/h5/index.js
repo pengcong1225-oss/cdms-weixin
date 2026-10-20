@@ -12,6 +12,16 @@ const HANDOFF_FAIL_TYPES = [
 const FAIL_QUERY_KEYS = ['cdmsHandoffFailed', 'cdms_handoff_failed', 'handoffFailed']
 const LOGIN_URL = '/pages/auth/login'
 
+// 读取当前会话 token（用于 onShow 判断 H5 里那份 handoff 是否已随会话变化而失效）。
+function readAccessToken () {
+  try {
+    const app = typeof getApp === 'function' ? getApp() : null
+    return String((app && app.globalData && app.globalData.accessToken) || '')
+  } catch (_) {
+    return ''
+  }
+}
+
 function isFailType (value) {
   const type = String(value || '')
   return HANDOFF_FAIL_TYPES.indexOf(type) >= 0
@@ -44,6 +54,9 @@ Page({
 
   onLoad (query) {
     this._recovered = false
+    this._returning = false
+    // 进入 H5 时记下当时的 token，onShow 用它判断会话是否已变化（见 onShow）。
+    this._handoffToken = readAccessToken()
     if (!query?.url) { wx.showToast({ title: '缺少 H5 地址', icon: 'none' }); return }
     let decoded = ''
     try {
@@ -56,6 +69,39 @@ Page({
     // URL 约定兜底：进入即带失败标记时直接走恢复流程，不停在死路上。
     if (detectFailureUrl(decoded)) {
       this.recoverFromHandoffFailure()
+    }
+  },
+
+  // 2026-10-20：H5 侧会话/token 一旦变化，web-view 里那份 handoff 已失效，用户只会对着死页面。
+  // 约束不变：**不改 web-view src**（src 变化会整页重载、丢内存 token）。
+  // 这里在 onShow 检测 token 变化 → 退回宿主首页，由用户点「进入工作台」重新 createHandoff。
+  onShow () {
+    const current = readAccessToken()
+    if (!this._handoffToken) { this._handoffToken = current; return }
+    if (current === this._handoffToken) return
+    this.returnToHost()
+  },
+
+  // 退回宿主上一页（home）：置 returnedFromExpired 标记，home.onLoad/onShow 见标记不再自动进 H5，
+  // 避免「过期页 → 首页 → 自动进 H5」的死循环。navigateBack 不可用时降级 reLaunch 登录页。
+  returnToHost () {
+    if (this._returning) return
+    this._returning = true
+    try {
+      const app = typeof getApp === 'function' ? getApp() : null
+      if (app && app.globalData) app.globalData.returnedFromExpired = true
+    } catch (_) { /* best-effort */ }
+    try {
+      wx.navigateBack({
+        delta: 1,
+        fail: () => {
+          this._returning = false
+          try { wx.reLaunch({ url: LOGIN_URL }) } catch (_) { /* best-effort */ }
+        }
+      })
+    } catch (_) {
+      this._returning = false
+      try { wx.reLaunch({ url: LOGIN_URL }) } catch (_) { /* best-effort */ }
     }
   },
 
