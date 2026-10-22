@@ -22,6 +22,7 @@ let navigateToCalls
 let navigateBackCalls
 let relaunchCalls
 let pageConfig
+let selectorRects
 
 global.getApp = () => ({ globalData: { cdmsBaseUrl: '' }, saveAuth () {} })
 global.Page = config => { pageConfig = config }
@@ -36,7 +37,16 @@ global.wx = {
     if (options && typeof options.success === 'function') options.success()
   },
   reLaunch: options => { relaunchCalls.push(options && options.url) },
-  redirectTo: () => undefined
+  redirectTo: () => undefined,
+  // 用于隐私页「内容是否不足一屏」的边界判定（见隐私页 ensureReachability）
+  createSelectorQuery: () => {
+    const query = {
+      select: () => query,
+      boundingClientRect: () => query,
+      exec: callback => { if (typeof callback === 'function') callback(selectorRects) }
+    }
+    return query
+  }
 }
 
 require.cache[apiPath] = {
@@ -60,6 +70,7 @@ function reset () {
   navigateBackCalls = []
   relaunchCalls = []
   pageConfig = null
+  selectorRects = null
 }
 
 function loadPage (file) {
@@ -189,3 +200,91 @@ test('⑨ 原生 checkbox 必须走 bindchange（受控）：data 与 storage �
   assert.strictEqual(page.data.privacyAgreed, false, 'bindchange 取消后 data 必须为 false')
   assert.strictEqual(storage.has(STORAGE_KEY), false, '取消勾选不得保留同意记录（撤回）')
 })
+
+test('⑩ 未滑到底：reachedBottom=false 且按钮 disabled（静态契约 + 初始态）', () => {
+  reset()
+  const wxml = fs.readFileSync(path.resolve(__dirname, '../miniprogram/pages/privacy/index.wxml'), 'utf8')
+  assert.ok(/<scroll-view[^>]*bindscrolltolower="onReachBottom"/.test(wxml), 'scroll-view 必须绑定 bindscrolltolower')
+  assert.ok(/<scroll-view[^>]*lower-threshold="20"/.test(wxml), 'scroll-view 必须有 lower-threshold=20')
+  assert.ok(/disabled="\{\{!reachedBottom\}\}"/.test(wxml), '同意按钮必须绑定 disabled="{{!reachedBottom}}"')
+  assert.ok(wxml.includes('请滑动阅读至底部'), '未到底时必须提示先滑到底')
+  assert.ok(wxml.includes('我已阅读并同意'), '到底后文案为「我已阅读并同意」')
+
+  const page = loadPage(privacyPath)
+  page.onLoad()
+  assert.strictEqual(page.data.reachedBottom, false, '初始必须不可同意')
+})
+
+test('⑪ 滑到底部 onReachBottom → reachedBottom=true（幂等）', () => {
+  reset()
+  const page = loadPage(privacyPath)
+  page.onLoad()
+  page.onReachBottom()
+  assert.strictEqual(page.data.reachedBottom, true, '滑到底后必须可点同意')
+  page.onReachBottom()
+  assert.strictEqual(page.data.reachedBottom, true, '重复触发保持 true（幂等）')
+})
+
+test('⑫ 到底后同意 → 写记录并返回；navigateBack 失败降级 reLaunch 登录页', () => {
+  reset()
+  const page = loadPage(privacyPath)
+  page.onLoad()
+  page.onReachBottom()
+  page.agree()
+  assert.strictEqual(storage.get(STORAGE_KEY), CURRENT_VERSION, '同意必须写当前政策版本')
+  assert.strictEqual(navigateBackCalls.length, 1, '同意后必须关闭页面（navigateBack）')
+
+  reset()
+  global.wx.navigateBack = options => {
+    navigateBackCalls.push(options || {})
+    if (options && typeof options.fail === 'function') options.fail({ errMsg: 'navigateBack:fail no page' })
+  }
+  const fallbackPage = loadPage(privacyPath)
+  fallbackPage.onLoad()
+  fallbackPage.onReachBottom()
+  fallbackPage.agree()
+  assert.deepStrictEqual(relaunchCalls, ['/pages/auth/login'], '无上一页时降级回登录页')
+  // 还原成功态 mock，避免影响后续用例
+  global.wx.navigateBack = options => {
+    navigateBackCalls.push(options || {})
+    if (options && typeof options.success === 'function') options.success()
+  }
+})
+
+test('⑬ 内容不足一屏 → onReady 直接 reachedBottom=true（不会永远点不了）', () => {
+  reset()
+  selectorRects = [{ height: 800 }, { height: 600 }]
+  const page = loadPage(privacyPath)
+  page.onLoad()
+  page.onReady()
+  assert.strictEqual(page.data.reachedBottom, true, '内容 ≤ 容器时必须直接允许同意（边界处理）')
+})
+
+test('⑭ 内容超一屏 → onReady 仍不可点，滑到底后才可点', () => {
+  reset()
+  selectorRects = [{ height: 800 }, { height: 5000 }]
+  const page = loadPage(privacyPath)
+  page.onLoad()
+  page.onReady()
+  assert.strictEqual(page.data.reachedBottom, false, '内容超一屏时不得提前放行')
+  page.onReachBottom()
+  assert.strictEqual(page.data.reachedBottom, true, '真实滑动到底后才放行')
+})
+
+test('⑮ 回归：88 段仍全部渲染；撤回同意保留并把 reachedBottom 复位', () => {
+  reset()
+  selectorRects = [{ height: 800 }, { height: 5000 }]
+  const page = loadPage(privacyPath)
+  page.onLoad()
+  page.onReady()
+  page.onReachBottom()
+  assert.strictEqual(page.data.paragraphs.length, 88, '88 段正文必须仍全部渲染')
+  assert.strictEqual(page.data.reachedBottom, true)
+
+  storage.set(STORAGE_KEY, CURRENT_VERSION)
+  page.withdraw()
+  assert.strictEqual(page.data.agreed, false, '撤回后回到未同意')
+  assert.strictEqual(storage.has(STORAGE_KEY), false, '撤回必须清除同意记录')
+  assert.strictEqual(page.data.reachedBottom, false, '撤回后需重新滑到底（内容超一屏）')
+})
+
