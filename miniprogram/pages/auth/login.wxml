@@ -22,6 +22,15 @@
       <input class="input" type="text" maxlength="32" placeholder="请输入患者姓名" value="{{realName}}" bindinput="onRealName" />
       <view class="field-label">患者手机号</view>
       <input class="input" type="number" maxlength="11" placeholder="请输入已建档手机号" value="{{phone}}" bindinput="onPhone" />
+      <view class="agree-row">
+        <checkbox-group class="agree-group" bindchange="onPrivacyChange">
+          <label class="agree-label">
+            <checkbox class="agree-box" value="agree" checked="{{privacyAgreed}}" color="#0c9b6c" />
+            <text class="agree-text">我已阅读并同意</text>
+          </label>
+        </checkbox-group>
+        <text class="agree-link" bindtap="openPrivacy">《隐私政策》</text>
+      </view>
       <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">登录</button>
       <view class="form-hint">请使用已在 CDMS 建档的患者姓名和 11 位手机号登录。</view>
     </block>

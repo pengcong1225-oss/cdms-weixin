@@ -112,6 +112,8 @@ async function run () {
   let page = loadPage()
   resetLogs()
   page.data.mode = 'patient'
+  // 2026-10-22：患者登录前必须勾选《隐私政策》（本用例只验证姓名/手机号校验，故先置已同意）
+  page.data.privacyAgreed = true
   page.data.realName = ''
   page.data.phone = '13900000000'
   await page.login()
@@ -123,6 +125,7 @@ async function run () {
   page = loadPage()
   resetLogs()
   page.data.mode = 'patient'
+  page.data.privacyAgreed = true
   page.data.realName = '张'
   page.data.phone = '13900000000'
   await page.login()
@@ -133,6 +136,7 @@ async function run () {
   page = loadPage()
   resetLogs()
   page.data.mode = 'patient'
+  page.data.privacyAgreed = true
   page.data.realName = '张三'
   page.data.phone = '1234567890'
   await page.login()
@@ -143,6 +147,7 @@ async function run () {
   page = loadPage()
   resetLogs()
   page.data.mode = 'patient'
+  page.data.privacyAgreed = true
   page.data.realName = '  张三  '
   page.data.phone = '13900000000'
   await page.login()

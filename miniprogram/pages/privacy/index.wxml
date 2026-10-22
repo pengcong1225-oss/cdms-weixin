@@ -1,0 +1,10 @@
+<view class="page">
+  <scroll-view class="content" scroll-y enhanced show-scrollbar="{{false}}">
+    <view wx:for="{{paragraphs}}" wx:key="index" class="para {{index === 0 ? 'para-title' : ''}}">{{item}}</view>
+    <view class="bottom-space"></view>
+  </scroll-view>
+  <view class="footer">
+    <button class="primary" bindtap="agree">我已阅读并同意</button>
+    <view wx:if="{{agreed}}" class="withdraw" bindtap="withdraw">撤回同意</view>
+  </view>
+</view>
