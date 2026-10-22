@@ -7,4 +7,3 @@
 .footer { padding: 12px 20px 18px; border-top: 1px solid #e2ece6; background: #fff; }
 .primary { color: #fff; background: #3f9870; border-radius: 8px; font-size: 15px; }
 .primary[disabled] { color: #fff; background: #b7cdc2; }
-.withdraw { margin-top: 10px; text-align: center; color: #8a948f; font-size: 13px; }

@@ -1,5 +1,6 @@
 const paragraphs = require('./content')
-const { PRIVACY_VERSION, isPrivacyAgreed, rememberPrivacyAgreed, forgetPrivacyAgreed } = require('../../utils/privacy')
+// 2026-10-22：页面不再提供「撤回同意」，故只引用同意/查询相关函数（utils 里的撤回函数保留给其它入口）。
+const { PRIVACY_VERSION, isPrivacyAgreed, rememberPrivacyAgreed } = require('../../utils/privacy')
 
 const LOGIN_URL = '/pages/auth/login'
 
@@ -47,15 +48,6 @@ Page({
     this.setData({ agreed: true })
     wx.showToast({ title: '已同意隐私政策', icon: 'none' })
     this.goBack()
-  },
-
-  // 已同意过时可撤回：清记录，登录页返回后不再自动勾选，登录前需重新同意。
-  // 撤回后 reachedBottom 复位为 false（需重新读到底）；内容不足一屏时立即重新判定，避免卡死。
-  withdraw () {
-    forgetPrivacyAgreed()
-    this.setData({ agreed: false, reachedBottom: false })
-    wx.showToast({ title: '已撤回同意', icon: 'none' })
-    this.ensureReachability()
   },
 
   goBack () {

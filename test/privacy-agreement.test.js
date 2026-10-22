@@ -148,7 +148,7 @@ test('⑥ 点击《隐私政策》→ 打开隐私政策页', () => {
   assert.deepStrictEqual(navigateToCalls, ['/pages/privacy/index'])
 })
 
-test('⑦ 隐私页：88 段全部渲染；同意写记录并返回；可撤回', () => {
+test('⑦ 隐私页：88 段全部渲染；同意写记录并返回', () => {
   reset()
   const page = loadPage(privacyPath)
   page.onLoad()
@@ -162,10 +162,6 @@ test('⑦ 隐私页：88 段全部渲染；同意写记录并返回；可撤回'
   page.agree()
   assert.strictEqual(storage.get(STORAGE_KEY), CURRENT_VERSION, '同意后必须写入当前政策版本')
   assert.strictEqual(navigateBackCalls.length, 1, '同意后必须返回登录页')
-
-  page.withdraw()
-  assert.strictEqual(storage.has(STORAGE_KEY), false, '撤回同意必须清除记录')
-  assert.strictEqual(page.data.agreed, false)
 })
 
 test('⑧ 同意页返回后登录页 onShow 自动勾选；取消勾选即撤回记录', () => {
@@ -271,20 +267,44 @@ test('⑭ 内容超一屏 → onReady 仍不可点，滑到底后才可点', () 
   assert.strictEqual(page.data.reachedBottom, true, '真实滑动到底后才放行')
 })
 
-test('⑮ 回归：88 段仍全部渲染；撤回同意保留并把 reachedBottom 复位', () => {
+test('⑮ 回归：88 段仍全渲染；滑到底→同意→写记录+返回 全链路不变', () => {
   reset()
   selectorRects = [{ height: 800 }, { height: 5000 }]
   const page = loadPage(privacyPath)
   page.onLoad()
-  page.onReady()
-  page.onReachBottom()
   assert.strictEqual(page.data.paragraphs.length, 88, '88 段正文必须仍全部渲染')
-  assert.strictEqual(page.data.reachedBottom, true)
+  assert.strictEqual(page.data.reachedBottom, false)
 
-  storage.set(STORAGE_KEY, CURRENT_VERSION)
-  page.withdraw()
-  assert.strictEqual(page.data.agreed, false, '撤回后回到未同意')
-  assert.strictEqual(storage.has(STORAGE_KEY), false, '撤回必须清除同意记录')
-  assert.strictEqual(page.data.reachedBottom, false, '撤回后需重新滑到底（内容超一屏）')
+  page.onReady()
+  assert.strictEqual(page.data.reachedBottom, false, '内容超一屏时 onReady 不得提前放行')
+  page.onReachBottom()
+  assert.strictEqual(page.data.reachedBottom, true, '滑到底后才可同意')
+
+  page.agree()
+  assert.strictEqual(storage.get(STORAGE_KEY), CURRENT_VERSION, '同意必须写当前政策版本')
+  assert.strictEqual(navigateBackCalls.length, 1, '同意后必须关闭页面返回登录页')
+})
+
+test('⑯ 页面已去掉「撤回同意」按钮（加回应必红）', () => {
+  reset()
+  const wxml = fs.readFileSync(path.resolve(__dirname, '../miniprogram/pages/privacy/index.wxml'), 'utf8')
+  // 用户 2026-10-22 截图要求：底部「撤回同意」不要了
+  assert.ok(!wxml.includes('撤回同意'), '页面不得再出现「撤回同意」按钮')
+  assert.ok(!/bindtap=\"withdraw\"/.test(wxml), '页面不得再有 withdraw 绑定')
+  const page = loadPage(privacyPath)
+  assert.strictEqual(typeof page.withdraw, 'undefined', '页面实例不得再提供 withdraw 方法')
+})
+
+test('⑰ 隐私页 js 不再引用 forgetPrivacyAgreed；utils/privacy.js 仍保留该函数', () => {
+  reset()
+  const source = fs.readFileSync(privacyPath, 'utf8')
+  assert.ok(!source.includes('forgetPrivacyAgreed'), '隐私页不得再引用 forgetPrivacyAgreed（撤回入口已移除）')
+  assert.ok(!/withdraw|onRevoke/.test(source), '隐私页不得再有撤回方法')
+
+  // 只删页面入口，不动 utils：其它入口仍可用该函数（Lead 明确要求保留）
+  const utilPath = path.resolve(__dirname, '../miniprogram/utils/privacy.js')
+  const utilSource = fs.readFileSync(utilPath, 'utf8')
+  assert.ok(utilSource.includes('function forgetPrivacyAgreed'), 'utils/privacy.js 的 forgetPrivacyAgreed 必须保留')
+  assert.strictEqual(typeof require(utilPath).forgetPrivacyAgreed, 'function', 'utils 导出仍必须可用')
 })
 

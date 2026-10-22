@@ -7,6 +7,5 @@
   </scroll-view>
   <view class="footer">
     <button class="primary" disabled="{{!reachedBottom}}" bindtap="agree">{{reachedBottom ? '我已阅读并同意' : '请滑动阅读至底部'}}</button>
-    <view wx:if="{{agreed}}" class="withdraw" bindtap="withdraw">撤回同意</view>
   </view>
 </view>
