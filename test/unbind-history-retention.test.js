@@ -32,7 +32,8 @@ async function run () {
   })
   bleManager.state.boundDevice = { deviceId: 'device-1', name: 'SY02' }
 
-  await bleManager.unbind()
+  // 本用例只验证本地解绑不删除历史；服务端释放语义由 device-unbind-remote.test.js 覆盖。
+  await bleManager.unbind({ localOnly: true })
 
   assert.deepStrictEqual(
     storage.getHealthRecords('device-1', 'heartRate').map(record => record.id),

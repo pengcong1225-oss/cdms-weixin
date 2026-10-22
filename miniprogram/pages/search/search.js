@@ -75,13 +75,15 @@ Page({
       // 读不到 MAC 就中止绑定，避免落下无法与 Android 互认的绑定记录。
       const boundMac = (bound && bound.macAddress) || "";
       if (!boundMac) {
-        await bleManager.unbind();
+        // 绑定失败后的本地回滚：只清本地绑定，不能误调服务端释放。
+        await bleManager.unbind({ localOnly: true });
         throw new Error("未能读取设备 MAC 地址，请靠近设备重新搜索后重试");
       }
       try {
         await cdmsBridge.ensureIoTSession(boundMac);
       } catch (sessionError) {
-        await bleManager.unbind();
+        // 会话初始化失败同样是本地回滚，只清本地绑定。
+        await bleManager.unbind({ localOnly: true });
         throw sessionError;
       }
       wx.hideLoading();

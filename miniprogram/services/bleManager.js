@@ -779,8 +779,12 @@ class BleManager {
     await this.disconnect();
   }
 
-  async unbind(deviceRef) {
-    const requestedDeviceId = String(deviceRef || "").trim();
+  // options 兼容旧调用（传字符串等价于 { deviceRef }）。
+  // localOnly: true 只做本地解绑（页面在绑定失败回滚时使用），绝不调用服务端释放。
+  async unbind(options) {
+    const settings = options && typeof options === "object" ? options : { deviceRef: options };
+    const localOnly = !!settings.localOnly;
+    const requestedDeviceId = String(settings.deviceRef || "").trim();
     const previous = this.state.boundDevice;
     const activeDeviceId = String(this.activeDeviceId || "").trim();
     const connectingDeviceId = String(this.connectingDeviceId || "").trim();
@@ -798,11 +802,15 @@ class BleManager {
     // device: unbind is scoped to exactly the requested business binding.
     if (targetWasActive) await this.disconnect();
     const cleanupGeneration = this.connectionGeneration;
-    try {
-      await cdmsBridge.releaseWearableSession(targetDeviceId);
-    } catch (error) {
-      // 本地解绑必须完成；服务端释放失败会被记录，后续重新绑定时由会话校验再次修复。
-      this.log(`服务端设备解绑未完成：${error && error.message ? error.message : "请求失败"}`);
+    // 先服务端、后本地：服务端释放失败时不清本地绑定、不改 boundDevice，
+    // 把错误抛给页面，避免「假解绑」（界面提示成功但服务端仍保持绑定）。
+    if (!localOnly) {
+      try {
+        await cdmsBridge.releaseWearableSession(targetDeviceId);
+      } catch (error) {
+        this.log(`服务端设备解绑失败：${error && error.message ? error.message : "请求失败"}`);
+        throw error;
+      }
     }
     if (typeof storage.clearBoundDevice === "function") {
       storage.clearBoundDevice(targetDeviceId, this.getContextPatientRef());

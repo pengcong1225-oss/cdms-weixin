@@ -467,7 +467,11 @@ function ensureIoTSession (deviceRef) {
 function releaseWearableSession (deviceRef) {
   const context = appContext()
   const targetDeviceRef = text(deviceRef || context.wearableDeviceRef || context.deviceRef)
-  const shouldReleaseRemote = !!(targetDeviceRef && canRenewPatientSession(context))
+  // 上下文不完整时绝不能静默跳过：本地绑定会被清除而服务端仍保留，形成
+  // “假解绑”。这里直接拒绝，让页面提示用户重新登录后重试。
+  if (!targetDeviceRef || !canRenewPatientSession(context)) {
+    return Promise.reject(new Error('患者登录状态不完整，无法释放设备绑定，请重新登录后重试'))
+  }
   const patientRef = text(context.patientRef || context.patientId) || 'anonymous'
   const key = sessionKey(patientRef, targetDeviceRef)
   // A release invalidates every in-flight ensure for this scope. The old
@@ -477,9 +481,7 @@ function releaseWearableSession (deviceRef) {
   // Register the lock before clearing so an immediately following ensure
   // waits, while invalidation itself still happens synchronously at release
   // entry (before the DELETE request is started).
-  const lock = runScopeOperation(key, async () => {
-    if (shouldReleaseRemote) await api.releasePatientWearableSession(targetDeviceRef)
-  })
+  const lock = runScopeOperation(key, async () => await api.releasePatientWearableSession(targetDeviceRef))
   clearWearableSession(targetDeviceRef)
   return lock
 }

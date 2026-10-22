@@ -23,7 +23,8 @@ async function run () {
   storage.saveBoundDevice({ deviceId: 'ring-b', name: 'B' })
   bleManager.state.boundDevice = storage.getBoundDevice('ring-a', 'patient-1')
 
-  await bleManager.unbind()
+  // 多设备绑定隔离只验证本地解绑范围；服务端释放由 device-unbind-remote.test.js 覆盖。
+  await bleManager.unbind({ localOnly: true })
 
   assert.deepStrictEqual(storage.listBoundDevices('patient-1').map(item => item.deviceId), ['ring-b'])
   assert.strictEqual(storage.getBoundDevice('ring-a', 'patient-1'), null)

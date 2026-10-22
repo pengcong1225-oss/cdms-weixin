@@ -297,7 +297,7 @@ Page({
           if (isIos()) promptIosUnpair();
           else wx.showToast({ title: "已解除绑定", icon: "success" });
         } catch (error) {
-          bleManager.presentError(error, "解除绑定失败");
+          bleManager.presentError(error, "解除绑定失败，请检查网络后重试（设备仍保持绑定）");
         }
       }
     });
