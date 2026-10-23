@@ -199,24 +199,44 @@ Page({
     return Object.keys(errors)
   },
 
+  buildPayload () {
+    const form = this.data.form
+    return {
+      screeningToken: this.screeningToken,
+      name: text(form.name),
+      gender: Number(form.gender),
+      birthday: text(form.birthday) || null,
+      idCard: normalizeIdCard(form.idCard),
+      phone: text(form.phone),
+      address: text(form.address) || null,
+      heightCm: numberOrNull(form.heightCm),
+      weightKg: numberOrNull(form.weightKg),
+      answers: Object.assign({}, this.data.answers)
+    }
+  },
+
+  // 先调服务端预览实时计分，再让用户确认，确认后才真正入库（避免填完直接建档）。
   async submit () {
     if (this.data.submitting || this.data.result) return
     if (this.validate().length) return
-    const form = this.data.form
+    const payload = this.buildPayload()
     this.setData({ submitting: true, errorSummary: '' })
+    let preview
     try {
-      const response = await screeningApi.submit({
-        screeningToken: this.screeningToken,
-        name: text(form.name),
-        gender: Number(form.gender),
-        birthday: text(form.birthday) || null,
-        idCard: normalizeIdCard(form.idCard),
-        phone: text(form.phone),
-        address: text(form.address) || null,
-        heightCm: numberOrNull(form.heightCm),
-        weightKg: numberOrNull(form.weightKg),
-        answers: Object.assign({}, this.data.answers)
-      })
+      const response = await screeningApi.preview(payload)
+      preview = (response && response.data) || {}
+    } catch (error) {
+      this.setData({ submitting: false, errorSummary: (error && error.message) || '结果计算失败，请稍后重试' })
+      this.refreshTokenAfterFailure()
+      return
+    }
+    const confirmed = await this.confirmResult(preview)
+    if (!confirmed) {
+      this.setData({ submitting: false })
+      return
+    }
+    try {
+      const response = await screeningApi.submit(payload)
       const result = (response && response.data) || {}
       this.setData({ submitting: false, result })
     } catch (error) {
@@ -224,6 +244,25 @@ Page({
       this.setData({ submitting: false, errorSummary: (error && error.message) || '提交失败，请稍后重试' })
       this.refreshTokenAfterFailure()
     }
+  },
+
+  confirmResult (preview) {
+    const score = Number(preview && preview.totalScore)
+    const isHigh = Number(preview && preview.isHighRisk) === 1
+    const content = '本次筛查总分 ' + (Number.isFinite(score) ? score : '--') + ' 分，'
+      + (isHigh ? '提示慢阻肺高危人群。' : '暂未提示高危。')
+      + '\n确认后将提交并完成建档。'
+    return new Promise(resolve => {
+      wx.showModal({
+        title: '请确认筛查结果',
+        content,
+        confirmText: '确认提交',
+        cancelText: '再改改',
+        confirmColor: '#0c9b6c',
+        success: result => resolve(!!result.confirm),
+        fail: () => resolve(false)
+      })
+    })
   },
 
   async refreshTokenAfterFailure () {

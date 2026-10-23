@@ -41,8 +41,13 @@ function issueToken (orgId) {
   return call('/screening/h5/token?orgId=' + encodeURIComponent(String(orgId == null ? '' : orgId)), 'POST', null)
 }
 
+// 结果预览：与正式提交同一套服务端计分，但不落库、不消费 token。
+function preview (payload) {
+  return call('/screening/h5/preview', 'POST', payload)
+}
+
 function submit (payload) {
   return call('/screening/h5/submit', 'POST', payload)
 }
 
-module.exports = { listOrganizations, listQuestions, issueToken, submit }
+module.exports = { listOrganizations, listQuestions, issueToken, preview, submit }

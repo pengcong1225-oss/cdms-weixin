@@ -77,6 +77,14 @@ global.wx = {
       options.success({ statusCode: 200, data: { code: 200, data: { token: 'tok-1', orgId: '1930474026568847360', orgName: '沌阳街社区卫生服务中心' } } })
       return
     }
+    if (url.includes('/preview')) {
+      if (global.__previewBusinessError) {
+        options.success({ statusCode: 200, data: { code: 400, message: '问卷答案不完整或选项不合法', data: null } })
+        return
+      }
+      options.success({ statusCode: 200, data: { code: 200, data: { totalScore: 21, isHighRisk: 1 } } })
+      return
+    }
     if (url.includes('/submit')) {
       if (global.__submitBusinessError) {
         // cdmsManager 业务错误是 HTTP 200 + body.code（锁真实口径）
@@ -89,7 +97,14 @@ global.wx = {
     options.success({ statusCode: 200, data: { code: 200, data: null } })
   },
   navigateBack () {},
-  reLaunch () {}
+  reLaunch () {},
+  // 确认弹窗：默认确认；global.__modalConfirm=false 模拟「再改改」
+  showModal (options) {
+    global.__modalCalls = (global.__modalCalls || 0) + 1
+    global.__lastModal = options
+    const confirm = global.__modalConfirm !== false
+    if (options.success) options.success({ confirm, cancel: !confirm })
+  }
 }
 global.Page = config => { pageConfig = config }
 require('../miniprogram/pages/archive/index.js')
@@ -150,7 +165,16 @@ async function run () {
     },
     answers: { q_age: '60_69' }
   })
+  global.__modalCalls = 0
   await page.submit()
+  // 提交前必须先预览并弹窗确认，确认后才入库
+  const previewCall = requests.filter(r => r.url.includes('/preview')).pop()
+  assert.ok(previewCall, '提交前必须先调用结果预览接口')
+  assert.strictEqual(previewCall.method, 'POST')
+  assert.strictEqual(previewCall.data.screeningToken, 'tok-1', '预览也必须带一次性 token')
+  assert.strictEqual(global.__modalCalls, 1, '预览后必须弹一次确认弹窗')
+  assert.ok(global.__lastModal.content.includes('21'), '弹窗需展示实时计分结果: ' + global.__lastModal.content)
+  assert.ok(global.__lastModal.content.includes('高危'), '弹窗需给出高危提示')
   const submitCall = requests.filter(r => r.url.includes('/submit')).pop()
   assert.ok(submitCall, '应发出提交请求')
   assert.ok(submitCall.url.endsWith('/screening/h5/submit'), '提交地址应为 h5 匿名端点: ' + submitCall.url)
@@ -171,6 +195,48 @@ async function run () {
   // 结果展示
   assert.strictEqual(page.data.result.totalScore, 21)
   assert.strictEqual(page.data.result.isHighRisk, 1)
+
+  // 弹窗点「再改改」：不得入库
+  const cancelPage = makePage()
+  cancelPage.onLoad()
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  cancelPage.setData({
+    form: {
+      name: '李四', gender: 1, birthday: '1964-06-14', heightCm: '170', weightKg: '65',
+      idCard: '420124196406147515', phone: '13900000000', address: ''
+    },
+    answers: { q_age: '60_69' }
+  })
+  const beforeCancelSubmit = requests.filter(r => r.url.includes('/submit')).length
+  global.__modalConfirm = false
+  await cancelPage.submit()
+  global.__modalConfirm = true
+  assert.strictEqual(requests.filter(r => r.url.includes('/submit')).length, beforeCancelSubmit,
+    '取消确认后不得提交入库')
+  assert.strictEqual(cancelPage.data.result, null, '取消后不得进入结果页')
+  assert.strictEqual(cancelPage.data.submitting, false, '取消后按钮要恢复可点')
+
+  // 预览业务错误：直接提示，不入库、不进结果页
+  global.__previewBusinessError = true
+  const previewFail = makePage()
+  previewFail.onLoad()
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  previewFail.setData({
+    form: {
+      name: '王五', gender: 1, birthday: '1964-06-14', heightCm: '170', weightKg: '65',
+      idCard: '420124196406147515', phone: '13900000000', address: ''
+    },
+    answers: { q_age: '60_69' }
+  })
+  const beforePreviewFail = requests.filter(r => r.url.includes('/submit')).length
+  await previewFail.submit()
+  global.__previewBusinessError = false
+  assert.strictEqual(requests.filter(r => r.url.includes('/submit')).length, beforePreviewFail,
+    '预览失败不得继续提交')
+  assert.strictEqual(previewFail.data.result, null)
+  assert.ok(String(previewFail.data.errorSummary).includes('问卷答案'), '应透出预览错误')
 
   // 业务错误（HTTP 200 + body.code）：必须按失败处理，不能进结果页
   global.__submitBusinessError = true
