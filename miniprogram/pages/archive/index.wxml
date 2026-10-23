@@ -1,6 +1,130 @@
-<web-view wx:if="{{src}}" src="{{src}}"></web-view>
-<view wx:elif="{{error}}" class="error-box">
-  <view class="error-title">无法打开建档问卷</view>
-  <view class="error-text">{{error}}</view>
-  <view class="error-text">请联系所属机构管理员，或稍后重试。</view>
+<view class="page">
+  <view wx:if="{{loading}}" class="state-box">建档问卷加载中…</view>
+
+  <view wx:elif="{{loadError}}" class="state-box">
+    <view class="state-title">建档问卷加载失败</view>
+    <view class="state-text">{{loadError}}</view>
+    <button class="ghost-btn" bindtap="retryLoad">重新加载</button>
+  </view>
+
+  <!-- 提交结果：服务端已 matchOrCreate 建档 -->
+  <block wx:elif="{{result}}">
+    <view class="result-card">
+      <view class="result-icon">{{result.isHighRisk === 1 ? '⚠️' : '✅'}}</view>
+      <view class="result-score {{result.isHighRisk === 1 ? 'is-high' : 'is-ok'}}">{{result.totalScore}}<text class="result-unit"> 分</text></view>
+      <view class="result-tag {{result.isHighRisk === 1 ? 'is-high' : 'is-ok'}}">{{result.isHighRisk === 1 ? '慢阻肺高危人群' : '风险正常'}}</view>
+      <view class="result-desc" wx:if="{{result.isHighRisk === 1}}">
+        您的筛查总分 ≥16 分，提示属于慢阻肺高危人群。建议尽快到医疗机构进行肺功能检查以明确诊断，并戒烟、减少有害粉尘与烟雾暴露。本结果仅用于风险初筛，不代表确诊。
+      </view>
+      <view class="result-desc" wx:else>
+        您的筛查总分低于 16 分，暂未提示慢阻肺高危。请继续保持健康生活方式，定期关注呼吸道症状。
+      </view>
+      <view class="result-note">档案已提交。返回登录页后，用上面的姓名和手机号即可登录。</view>
+      <button class="primary" bindtap="backToLogin">返回登录</button>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="intro">
+      <view class="intro-title">慢阻肺建档问卷</view>
+      <view class="intro-desc">填写基本信息与 7 道筛查题即可完成建档。总分 ≥16 分提示高危，需到医院做肺功能检查明确诊断。</view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">所属机构</view>
+      <picker mode="selector" range="{{organizations}}" range-key="name" value="{{organizationIndex}}" bindchange="onOrganizationChange">
+        <view class="field-like">
+          <text class="{{organizationName ? 'field-value' : 'field-placeholder'}}">{{organizationName || '请选择所属机构'}}</text>
+          <text class="chevron">›</text>
+        </view>
+      </picker>
+      <view wx:if="{{errors.organization}}" class="field-error">{{errors.organization}}</view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">基本信息</view>
+
+      <view class="field">
+        <view class="field-label">姓名 <text class="required">*</text></view>
+        <input class="input" type="text" maxlength="32" placeholder="请输入姓名" value="{{form.name}}" bindinput="onNameInput" />
+        <view wx:if="{{errors.name}}" class="field-error">{{errors.name}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">身份证号 <text class="required">*</text></view>
+        <input class="input" type="idcard" maxlength="18" placeholder="18 位身份证号" value="{{form.idCard}}" bindinput="onIdCardInput" bindblur="onBlurIdCard" />
+        <view wx:if="{{errors.idCard}}" class="field-error">{{errors.idCard}}</view>
+        <view wx:else class="field-hint">填写后会自动带出性别和出生日期</view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">手机号 <text class="required">*</text></view>
+        <input class="input" type="number" maxlength="11" placeholder="11 位手机号" value="{{form.phone}}" bindinput="onPhoneInput" />
+        <view wx:if="{{errors.phone}}" class="field-error">{{errors.phone}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">性别 <text class="required">*</text></view>
+        <radio-group class="choice-row" bindchange="onGenderChange">
+          <label class="choice {{form.gender === 1 ? 'selected' : ''}}"><radio value="1" checked="{{form.gender === 1}}" color="#0c9b6c" />男</label>
+          <label class="choice {{form.gender === 2 ? 'selected' : ''}}"><radio value="2" checked="{{form.gender === 2}}" color="#0c9b6c" />女</label>
+        </radio-group>
+        <view wx:if="{{errors.gender}}" class="field-error">{{errors.gender}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">出生日期 <text class="required">*</text></view>
+        <picker mode="date" value="{{form.birthday}}" start="1900-01-01" end="{{today}}" bindchange="onBirthdayChange">
+          <view class="field-like">
+            <text class="{{form.birthday ? 'field-value' : 'field-placeholder'}}">{{form.birthday || '请选择出生日期'}}</text>
+            <text class="chevron">›</text>
+          </view>
+        </picker>
+        <view wx:if="{{errors.birthday}}" class="field-error">{{errors.birthday}}</view>
+      </view>
+
+      <view class="field-row">
+        <view class="field half">
+          <view class="field-label">身高(cm) <text class="required">*</text></view>
+          <input class="input" type="digit" maxlength="5" placeholder="如 170" value="{{form.heightCm}}" bindinput="onHeightInput" />
+          <view wx:if="{{errors.heightCm}}" class="field-error">{{errors.heightCm}}</view>
+        </view>
+        <view class="field half">
+          <view class="field-label">体重(kg) <text class="required">*</text></view>
+          <input class="input" type="digit" maxlength="5" placeholder="如 65" value="{{form.weightKg}}" bindinput="onWeightInput" />
+          <view wx:if="{{errors.weightKg}}" class="field-error">{{errors.weightKg}}</view>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field-label">常驻地址</view>
+        <input class="input" type="text" maxlength="120" placeholder="选填" value="{{form.address}}" bindinput="onAddressInput" />
+      </view>
+    </view>
+
+    <view class="card" wx:for="{{questions}}" wx:key="code">
+      <view class="card-title">{{item.title}} <text wx:if="{{item.options.length}}" class="required">*</text></view>
+      <view wx:if="{{item.note}}" class="question-note">{{item.note}}</view>
+      <block wx:if="{{item.options.length}}">
+        <view
+          wx:for="{{item.options}}"
+          wx:for-item="option"
+          wx:key="code"
+          class="option {{answers[item.code] === option.code ? 'selected' : ''}}"
+          data-code="{{item.code}}"
+          data-option="{{option.code}}"
+          bindtap="selectAnswer"
+        >
+          <view class="option-radio"></view>
+          <text class="option-label">{{option.label}}</text>
+        </view>
+        <view wx:if="{{errors['question:' + item.code]}}" class="field-error">{{errors['question:' + item.code]}}</view>
+      </block>
+    </view>
+
+    <view wx:if="{{errorSummary}}" class="form-error">{{errorSummary}}</view>
+
+    <button class="primary submit-btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">{{submitting ? '提交中…' : '提交问卷并建档'}}</button>
+    <view class="foot-note">提交后即完成建档；本问卷仅用于风险初筛，不作诊断依据。</view>
+  </block>
 </view>

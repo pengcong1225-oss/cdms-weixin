@@ -1,3 +1,47 @@
-.error-box { margin: 120rpx 44rpx; padding: 40rpx 32rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 12rpx 32rpx rgba(41, 92, 67, .08); }
-.error-title { color: #b0463a; font-size: 30rpx; font-weight: 700; margin-bottom: 18rpx; }
-.error-text { color: #71877c; font-size: 25rpx; line-height: 1.7; }
+.page { min-height: 100vh; padding: 32rpx 28rpx 64rpx; box-sizing: border-box; background: #f4f7f5; }
+.state-box { margin-top: 160rpx; text-align: center; color: #71877c; font-size: 27rpx; }
+.state-title { color: #b0463a; font-size: 30rpx; font-weight: 700; margin-bottom: 16rpx; }
+.state-text { line-height: 1.7; margin-bottom: 26rpx; }
+.ghost-btn { display: inline-block; width: 320rpx; color: #267b56; background: #eff8f2; border-radius: 16rpx; font-size: 27rpx; }
+.intro { padding: 4rpx 8rpx 22rpx; }
+.intro-title { color: #183b2c; font-size: 38rpx; font-weight: 700; }
+.intro-desc { color: #71877c; font-size: 24rpx; line-height: 1.7; margin-top: 12rpx; }
+.card { background: #fff; border-radius: 24rpx; padding: 26rpx 26rpx 30rpx; margin-bottom: 22rpx; box-shadow: 0 10rpx 30rpx rgba(41, 92, 67, .06); }
+.card-title { color: #183b2c; font-size: 29rpx; font-weight: 700; margin-bottom: 18rpx; }
+.field { margin-bottom: 20rpx; }
+.field:last-child { margin-bottom: 0; }
+.field-row { display: flex; gap: 20rpx; }
+.field.half { flex: 1; min-width: 0; }
+.field-label { color: #294238; font-size: 25rpx; margin-bottom: 12rpx; }
+.required { color: #d84b4b; }
+.input { width: 100%; height: 84rpx; background: #f7faf8; border: 1rpx solid #e2ece6; border-radius: 14rpx; padding: 0 22rpx; box-sizing: border-box; font-size: 28rpx; }
+.field-like { display: flex; align-items: center; justify-content: space-between; height: 84rpx; padding: 0 22rpx; background: #f7faf8; border: 1rpx solid #e2ece6; border-radius: 14rpx; }
+.field-value { color: #27332d; font-size: 28rpx; }
+.field-placeholder { color: #a8b6ae; font-size: 28rpx; }
+.chevron { color: #a8b6ae; font-size: 30rpx; }
+.field-hint { color: #8a9c92; font-size: 22rpx; margin-top: 8rpx; }
+.field-error { color: #d84b4b; font-size: 23rpx; margin-top: 8rpx; }
+.choice-row { display: flex; gap: 18rpx; }
+.choice { display: flex; align-items: center; gap: 8rpx; padding: 16rpx 28rpx; border: 1rpx solid #e2ece6; border-radius: 14rpx; background: #f7faf8; color: #294238; font-size: 27rpx; }
+.choice.selected { border-color: #3f9870; background: #eff8f2; color: #267b56; }
+.question-note { color: #8a9c92; font-size: 23rpx; line-height: 1.6; margin: -6rpx 0 14rpx; }
+.option { display: flex; align-items: center; gap: 16rpx; padding: 22rpx 20rpx; margin-bottom: 14rpx; border: 1rpx solid #e8f0eb; border-radius: 14rpx; background: #fbfdfc; }
+.option.selected { border-color: #3f9870; background: #eff8f2; }
+.option-radio { flex: none; width: 30rpx; height: 30rpx; border-radius: 50%; border: 2rpx solid #c4d5cb; box-sizing: border-box; }
+.option.selected .option-radio { border: 8rpx solid #3f9870; }
+.option-label { color: #27332d; font-size: 27rpx; line-height: 1.5; }
+.form-error { color: #b0463a; background: #fdeeea; border-radius: 14rpx; padding: 18rpx 22rpx; font-size: 25rpx; margin-bottom: 20rpx; }
+.primary { width: 100%; color: #fff; background: #3f9870; border-radius: 16rpx; font-size: 29rpx; }
+.submit-btn { margin-top: 8rpx; }
+.foot-note { color: #8a9c92; font-size: 22rpx; line-height: 1.7; margin-top: 22rpx; text-align: center; }
+.result-card { margin-top: 60rpx; background: #fff; border-radius: 26rpx; padding: 44rpx 32rpx; text-align: center; box-shadow: 0 14rpx 40rpx rgba(41, 92, 67, .1); }
+.result-icon { font-size: 56rpx; }
+.result-score { font-size: 76rpx; font-weight: 700; line-height: 1.2; margin-top: 10rpx; }
+.result-score.is-high { color: #d84b4b; }
+.result-score.is-ok { color: #3f9870; }
+.result-unit { font-size: 26rpx; font-weight: 400; color: #71877c; }
+.result-tag { display: inline-block; margin-top: 14rpx; padding: 8rpx 24rpx; border-radius: 999rpx; font-size: 25rpx; }
+.result-tag.is-high { color: #d84b4b; background: #fdeeea; }
+.result-tag.is-ok { color: #267b56; background: #eff8f2; }
+.result-desc { color: #5d7268; font-size: 25rpx; line-height: 1.8; margin-top: 26rpx; text-align: left; }
+.result-note { color: #8a9c92; font-size: 23rpx; line-height: 1.7; margin: 24rpx 0 26rpx; }
