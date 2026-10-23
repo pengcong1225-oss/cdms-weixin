@@ -1,0 +1,6 @@
+<web-view wx:if="{{src}}" src="{{src}}"></web-view>
+<view wx:elif="{{error}}" class="error-box">
+  <view class="error-title">无法打开建档问卷</view>
+  <view class="error-text">{{error}}</view>
+  <view class="error-text">请联系所属机构管理员，或稍后重试。</view>
+</view>

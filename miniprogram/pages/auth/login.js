@@ -42,6 +42,15 @@ Page({
   openPrivacy () {
     wx.navigateTo({ url: '/pages/privacy/index' })
   },
+  // 未建档患者入口：复用 cdmsManager 既有 H5 建档问卷（提交即创建患者档案）。
+  // 未登录也可进入 —— 问卷侧按机构签发一次性 token，不依赖小程序会话。
+  openArchive () {
+    if (this.data.loading) return
+    wx.navigateTo({
+      url: '/pages/archive/index',
+      fail: () => { wx.showToast({ title: '打开建档问卷失败，请稍后重试', icon: 'none' }) }
+    })
+  },
   async tryRestoreSession () {
     if (this.restoreAttempted) return
     const app = getApp()

@@ -2,6 +2,7 @@
   "pages": [
     "pages/auth/login",
     "pages/privacy/index",
+    "pages/archive/index",
     "pages/h5/index",
     "pages/home/home",
     "pages/health-record/index",

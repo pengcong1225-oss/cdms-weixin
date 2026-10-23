@@ -32,6 +32,10 @@
         <text class="agree-link" bindtap="openPrivacy">《隐私政策》</text>
       </view>
       <button class="primary" loading="{{loading}}" disabled="{{loading}}" bindtap="login">登录</button>
+      <view class="archive-row">
+        <text class="archive-text">还没有档案？</text>
+        <text class="archive-link" bindtap="openArchive">填写建档问卷 ›</text>
+      </view>
       <view class="form-hint">请使用已在 CDMS 建档的患者姓名和 11 位手机号登录。</view>
     </block>
   </view>
